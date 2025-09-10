@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server';
 import { createServer } from '@/lib/supabase';
+import { supabaseServer } from '@/lib/supabaseServer';
 
+const supabase = supabaseServer();
 export async function GET() {
 const supabase = createServer();
 const season = new Date().getFullYear();

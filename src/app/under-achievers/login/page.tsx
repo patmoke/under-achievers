@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase';
+import { supabase } from '@/lib/supabaseClient';
 
 export default function Login() {
 const supabase = createClient();
