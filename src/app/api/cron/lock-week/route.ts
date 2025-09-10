@@ -1,2 +1,2 @@
 import { NextResponse } from 'next/server';
-import { createServer } from '@/lib/
+import { supabaseServer } from '@/lib/supabaseServer';

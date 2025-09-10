@@ -43,6 +43,20 @@ odds_last_fetched: new Date().toISOString()
 });
 }
 
+// lock all unlocked games for the current week
+ const { data, error } = await supabase
+   .from('games')
+   .update({ locked: true })
+   .eq('locked', false)
+   .select();
+
+   if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    return NextResponse.json({ lockedGames: data });
+  }
+
 // batch upsert via RPC to reduce RLS friction (requires service role on server)
 const { error } = await supabase.from('games').upsert(upserts, { onConflict: 'season,week,home_team,away_team' });
 if (error) return NextResponse.json({ ok:false, error }, { status:500 });
