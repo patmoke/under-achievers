@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { createServer } from '@/lib/supabase';
 import { supabaseServer } from '@/lib/supabaseServer';
 
 const supabase = supabaseServer();
