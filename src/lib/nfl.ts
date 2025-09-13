@@ -1,24 +1,26 @@
-import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
+import { toZonedTime } from 'date-fns-tz';
+
 const NYC = 'America/New_York';
 
-export function currentSeason() {
-const now = utcToZonedTime(new Date(), NYC);
-const year = now.getFullYear();
-return year; // simple: NFL season named by calendar year
+export function currentSeason(): number {
+  // Get current date in NYC timezone
+  const now = toZonedTime(new Date(), NYC);
+
+  // NFL season starts in September, adjust if needed
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1; // 0-based
+
+  // If before September, consider previous year as current season
+  return month < 9 ? year - 1 : year;
 }
 
-export function currentWeekBySundayAnchor(date = new Date()) {
-// week number: use ESPN style – we’ll persist week with data from the odds API fetcher
-// placeholder: compute ISO week of season start if you want; our fetcher sets week explicitly.
-return undefined;
-}
+export function currentWeek(startDate: string, weeksIntoSeason: number): number {
+  // startDate: ISO string for season start (e.g., first Thursday game)
+  const seasonStart = toZonedTime(new Date(startDate), NYC);
+  const now = toZonedTime(new Date(), NYC);
 
-export function isLockWindow(now = new Date()) {
-const ny = utcToZonedTime(now, NYC);
-const day = ny.getDay(); // 0=Sun
-const hours = ny.getHours();
-// Lock Sunday 23:30 local; fallback Monday 10:00 local
-const lockSunday = day === 0 && (hours >= 23); // 23:00-23:59
-const fallbackMonday = day === 1 && hours >= 10;
-return lockSunday || fallbackMonday;
+  const diffMs = now.getTime() - seasonStart.getTime();
+  const diffWeeks = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000));
+
+  return diffWeeks + 1 + weeksIntoSeason; // adjust if needed
 }
