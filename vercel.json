@@ -1,0 +1,6 @@
+{
+  "crons": [
+    { "path": "/api/cron/fetch-week", "schedule": "30 3 * * 1" },
+    { "path": "/api/cron/lock-week",  "schedule": "0 14 * * 1" }
+  ]
+}

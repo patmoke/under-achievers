@@ -1,15 +1,13 @@
-import { createServerClient } from '@supabase/ssr';
+// src/lib/supabaseServer.ts
+import { createClient } from '@supabase/supabase-js';
 
-// dummy cookie methods (not actually used in cron jobs)
-const serverCookies = {
-  get: (_name: string) => undefined,
-  set: (_name: string, _value: string) => {},
-  delete: (_name: string) => {},
-};
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  // Throwing here makes missing env-vars obvious during build/runtime
+  throw new Error('Missing SUPABASE env vars: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+}
 
 export const supabaseServer = () =>
-  createServerClient(
+  createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { cookies: serverCookies }
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
   );

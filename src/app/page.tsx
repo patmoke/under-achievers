@@ -4,39 +4,24 @@ import Link from 'next/link';
 
 export default async function Home() {
   const supabase = supabaseServer();
-
-  const {
-    data: { user },
-    error,
-  } = await supabase.auth.getUser();
-
-  if (error) {
-    console.error('Error fetching user:', error.message);
-  }
+  const { data } = await supabase.auth.getUser();
+  const user = data.user ?? null;
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center p-12">
+    <main className="flex flex-col items-center gap-6">
       {user ? (
         <>
-          <h1 className="text-2xl font-bold mb-4">Welcome, {user.email}!</h1>
+          <p>Welcome, {user.email}</p>
           <form action="/auth/signout" method="post">
-            <button
-              type="submit"
-              className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600"
-            >
-              Sign out
-            </button>
+            <button className="px-4 py-2 bg-red-500 text-white rounded">Sign out</button>
           </form>
+          <Link href="/play" className="underline">Play</Link>
+          <Link href="/leaderboard" className="underline">Leaderboard</Link>
         </>
       ) : (
         <>
-          <h1 className="text-2xl font-bold mb-4">You are not signed in</h1>
-          <Link
-            href="/under-achievers/login"
-            className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-          >
-            Sign in
-          </Link>
+          <p>You are not signed in</p>
+          <Link href="/under-achievers/login" className="px-4 py-2 bg-blue-600 text-white rounded">Sign in</Link>
         </>
       )}
     </main>
