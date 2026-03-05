@@ -68,15 +68,13 @@ export default function LandingPage() {
           <div className="badge badge-lime" style={{ marginBottom: 20 }}>
             🏈 2025-26 NFL Season · Playoffs Complete
           </div>
-          <h1 style={{ fontSize: 'clamp(52px, 10vw, 96px)', lineHeight: 0.9, marginBottom: 24, color: 'var(--white)' }}>
-            CAN YOU BEAT VEGAS?
-            <br />
-            <span style={{ fontSize: 'clamp(22px, 4vw, 42px)', color: 'var(--slate)', fontWeight: 500 }}>or are you an</span>
-            <br />
-            <span className="gradient-hero-text">UNDER ACHIEVER?</span>
+          <h1 style={{ lineHeight: 0.9, marginBottom: 24, color: 'var(--white)' }}>
+            <span style={{ fontSize: 'clamp(42px, 7vw, 96px)', whiteSpace: 'nowrap', display: 'block' }}>CAN YOU BEAT VEGAS?</span>
+            <span style={{ fontSize: 'clamp(20px, 3.5vw, 42px)', color: 'var(--slate)', fontWeight: 500, display: 'block', marginTop: 12 }}>or are you an</span>
+            <span className="gradient-hero-text" style={{ fontSize: 'clamp(42px, 7vw, 96px)', display: 'block' }}>UNDER ACHIEVER?</span>
           </h1>
           <p style={{ fontSize: 19, color: 'var(--slate)', maxWidth: 540, margin: '0 auto 40px', lineHeight: 1.6 }}>
-            Predict NFL point spreads each week, just like Bill Simmons and Cousin Sal. Compete against friends and the entire community. Prove you know football.
+            Predict NFL point spreads each week, compete against friends and the entire community. Prove you know ball. Are you an Over/Under Achiever?
           </p>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-primary" style={{ fontSize: 18, padding: '16px 40px' }} onClick={() => setAuthMode('signup')}>
