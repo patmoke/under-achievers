@@ -33,7 +33,7 @@ export default function Navigation() {
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '0 20px', height: 60, display: 'flex', alignItems: 'center', gap: 24 }}>
         {/* Logo */}
         <button onClick={() => navigate('/games')} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-          <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 22, color: 'var(--lime)', letterSpacing: '0.05em' }}>
+          <span className="gradient-hero-text" style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 22, letterSpacing: '0.05em' }}>
             UNDER ACHIEVERS
           </span>
         </button>

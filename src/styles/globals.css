@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700;800;900&family=DM+Sans:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
 
 :root {
   --navy: #0a1128;
@@ -15,6 +15,14 @@
   --green: #10b981;
   --red: #ef4444;
   --amber: #f59e0b;
+
+  /* Gradient tokens */
+  --gradient-hero: linear-gradient(135deg, #c0ff00, #f59e0b);
+  --gradient-card: linear-gradient(180deg, hsl(222 44% 12%), hsl(222 44% 9%));
+  --gradient-win: linear-gradient(135deg, rgba(192, 255, 0, 0.2), rgba(245, 158, 11, 0.1));
+  --gradient-loss: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(239, 68, 68, 0.05));
+  --shadow-glow: 0 0 30px rgba(192, 255, 0, 0.15);
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -36,6 +44,32 @@ h1, h2, h3, h4, h5 {
 
 a { color: inherit; text-decoration: none; }
 
+/* Gradient utilities */
+.gradient-hero-text {
+  background: var(--gradient-hero);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-hero-bg {
+  background: var(--gradient-hero);
+}
+
+.gradient-win {
+  background: var(--gradient-win);
+  border: 1px solid rgba(192, 255, 0, 0.2);
+}
+
+.gradient-loss {
+  background: var(--gradient-loss);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.shadow-glow {
+  box-shadow: var(--shadow-glow);
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: var(--navy); }
@@ -55,11 +89,12 @@ a { color: inherit; text-decoration: none; }
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   transition: all 0.2s ease;
+  box-shadow: var(--shadow-card);
 }
 
 .card:hover {
   border-color: rgba(192, 255, 0, 0.2);
-  box-shadow: 0 0 20px rgba(192, 255, 0, 0.05);
+  box-shadow: var(--shadow-glow);
 }
 
 /* Buttons */
@@ -79,13 +114,14 @@ a { color: inherit; text-decoration: none; }
 }
 
 .btn-primary {
-  background: var(--lime);
+  background: var(--gradient-hero);
   color: var(--navy);
 }
 
 .btn-primary:hover {
-  box-shadow: 0 0 25px rgba(192, 255, 0, 0.4);
+  box-shadow: 0 0 30px rgba(192, 255, 0, 0.4);
   transform: translateY(-1px);
+  filter: brightness(1.05);
 }
 
 .btn-secondary {

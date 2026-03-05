@@ -285,8 +285,8 @@ function LockedGame({ game, saved }) {
         )}
       </div>
       {pts !== null && (
-        <div style={{ marginTop: 12, padding: '8px 12px', background: 'var(--lime-dim)', display: 'inline-block' }}>
-          <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)' }}>+{pts} pts</span>
+        <div className="gradient-win" style={{ marginTop: 12, padding: '8px 12px', display: 'inline-block' }}>
+          <span className="gradient-hero-text" style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18 }}>+{pts} pts</span>
         </div>
       )}
     </div>

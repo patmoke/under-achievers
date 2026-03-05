@@ -69,12 +69,14 @@ export default function LandingPage() {
             🏈 2025-26 NFL Season · Playoffs Complete
           </div>
           <h1 style={{ fontSize: 'clamp(52px, 10vw, 96px)', lineHeight: 0.9, marginBottom: 24, color: 'var(--white)' }}>
-            THINK YOU CAN
+            CAN YOU BEAT VEGAS?
             <br />
-            <span style={{ color: 'var(--lime)' }}>BEAT VEGAS?</span>
+            <span style={{ fontSize: 'clamp(22px, 4vw, 42px)', color: 'var(--slate)', fontWeight: 500 }}>or are you an</span>
+            <br />
+            <span className="gradient-hero-text">UNDER ACHIEVER?</span>
           </h1>
           <p style={{ fontSize: 19, color: 'var(--slate)', maxWidth: 540, margin: '0 auto 40px', lineHeight: 1.6 }}>
-            Predict NFL point spreads each week. Compete against friends and the entire community. Prove you know football.
+            Predict NFL point spreads each week, just like Bill Simmons and Cousin Sal. Compete against friends and the entire community. Prove you know football.
           </p>
           <div style={{ display: 'flex', gap: 16, justifyContent: 'center', flexWrap: 'wrap' }}>
             <button className="btn btn-primary" style={{ fontSize: 18, padding: '16px 40px' }} onClick={() => setAuthMode('signup')}>
@@ -148,7 +150,7 @@ export default function LandingPage() {
                 <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{user.weeks} week{user.weeks !== 1 ? 's' : ''} won</div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 20, color: 'var(--lime)' }}>{user.points} pts</div>
+                <div className="gradient-hero-text" style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 20 }}>{user.points} pts</div>
                 <div style={{ fontSize: 12, color: 'var(--slate)' }}>{user.accuracy} accuracy</div>
               </div>
             </div>
@@ -191,7 +193,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA Banner */}
-      <section style={{ padding: '64px 24px', background: 'var(--lime)', textAlign: 'center' }}>
+      <section style={{ padding: '64px 24px', background: 'var(--gradient-hero)', textAlign: 'center' }}>
         <h2 style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 'clamp(36px, 6vw, 64px)', color: 'var(--navy)', marginBottom: 16 }}>
           PROVE YOU KNOW FOOTBALL
         </h2>
@@ -204,12 +206,22 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer style={{ padding: '32px 24px', borderTop: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-        <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 20, color: 'var(--lime)' }}>UNDER ACHIEVERS</span>
-        <span style={{ color: 'var(--slate)', fontSize: 13 }}>Inspired by Guess the Lines · For entertainment only</span>
-        <div style={{ display: 'flex', gap: 24 }}>
-          <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }} onClick={() => setAuthMode('signup')}>Sign Up</button>
-          <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }} onClick={() => setAuthMode('login')}>Log In</button>
+      <footer style={{ borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '32px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
+          <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 20, color: 'var(--lime)' }}>UNDER ACHIEVERS</span>
+          <span style={{ color: 'var(--slate)', fontSize: 13 }}>Inspired by Guess the Lines · For entertainment only</span>
+          <div style={{ display: 'flex', gap: 24 }}>
+            <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }} onClick={() => setAuthMode('signup')}>Sign Up</button>
+            <button className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: 13 }} onClick={() => setAuthMode('login')}>Log In</button>
+          </div>
+        </div>
+        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+          <p style={{ color: 'var(--slate)', fontSize: 12, lineHeight: 1.6, maxWidth: 800, margin: '0 auto' }}>
+            Under Achievers is an unofficial fan game not affiliated with or endorsed by the NFL, its teams, or any related entities.
+            Team names and logos are the property of their respective owners.
+            This site is for entertainment purposes only. No real money is wagered or can be won.
+            Point spread data is sourced from public oddsmakers for entertainment use only.
+          </p>
         </div>
       </footer>
 

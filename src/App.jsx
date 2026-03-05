@@ -7,6 +7,7 @@ import GamesPage from './components/GamesPage';
 import LeaderboardPage from './components/LeaderboardPage';
 import ProfilePage from './components/ProfilePage';
 import HistoryPage from './components/HistoryPage';
+import Footer from './components/Footer';
 import './styles/globals.css';
 
 function ProtectedLayout({ children }) {
@@ -17,6 +18,7 @@ function ProtectedLayout({ children }) {
     <div style={{ minHeight: '100vh', background: 'var(--navy)' }} className="bg-grid">
       <Navigation />
       {children}
+      <Footer />
     </div>
   );
 }
