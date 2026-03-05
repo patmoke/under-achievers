@@ -292,16 +292,23 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
           {label}
         </div>
         <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-          {isLocked ? (
-            <span>Vegas line: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.line}</span></span>
-          ) : (
-            <span style={{ fontStyle: 'italic' }}>Vegas line hidden until locked 🔒</span>
-          )}
-          {saved && !isLocked && (
-            <span style={{ marginLeft: 10, color: 'var(--green)' }}>
-              <CheckCircle size={10} style={{ display: 'inline', marginRight: 3 }} />
-              Your pick: {saved.predicted_value}
+          {saved ? (
+            <span>
+              Vegas line: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.line}</span>
+              <span style={{ margin: '0 8px', opacity: 0.4 }}>·</span>
+              Your pick: <span style={{ color: 'var(--green)', fontWeight: 600 }}>{saved.predicted_value}</span>
+              <span style={{ margin: '0 8px', opacity: 0.4 }}>·</span>
+              Diff: <span style={{
+                fontWeight: 600,
+                color: Math.abs(saved.predicted_value - prop.line) <= 0.5 ? 'var(--green)'
+                  : Math.abs(saved.predicted_value - prop.line) <= 1.5 ? 'var(--amber)'
+                  : 'var(--red)'
+              }}>
+                Δ{Math.abs(saved.predicted_value - prop.line).toFixed(1)}
+              </span>
             </span>
+          ) : (
+            <span style={{ fontStyle: 'italic', opacity: 0.6 }}>Vegas line revealed after you lock in your pick 🔒</span>
           )}
         </div>
       </div>
@@ -312,12 +319,12 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
           <div className="badge badge-red" style={{ marginBottom: 6 }}>
             <Lock size={10} style={{ marginRight: 4 }} /> LOCKED
           </div>
-          {hasResult && saved && (
+          {hasResult && saved ? (
             <div style={{ fontSize: 13 }}>
               <span style={{ color: 'var(--slate)' }}>Your pick: </span>
               <span style={{ fontWeight: 600 }}>{saved.predicted_value}</span>
               <span style={{ color: 'var(--slate)', margin: '0 6px' }}>·</span>
-              <span style={{ color: 'var(--slate)' }}>Actual: </span>
+              <span style={{ color: 'var(--slate)' }}>Actual result: </span>
               <span style={{ fontWeight: 600 }}>{prop.actual_result}</span>
               {diff !== null && (
                 <span style={{ marginLeft: 8, color: diff <= 1 ? 'var(--green)' : diff <= 3 ? 'var(--amber)' : 'var(--red)', fontWeight: 600 }}>
@@ -325,7 +332,9 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
                 </span>
               )}
             </div>
-          )}
+          ) : !saved ? (
+            <div style={{ fontSize: 12, color: 'var(--slate)' }}>No pick submitted</div>
+          ) : null}
         </div>
       ) : (
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
