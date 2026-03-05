@@ -292,11 +292,15 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
           {label}
         </div>
         <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-          Line: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.line}</span>
+          {isLocked ? (
+            <span>Vegas line: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.line}</span></span>
+          ) : (
+            <span style={{ fontStyle: 'italic' }}>Vegas line hidden until locked 🔒</span>
+          )}
           {saved && !isLocked && (
             <span style={{ marginLeft: 10, color: 'var(--green)' }}>
               <CheckCircle size={10} style={{ display: 'inline', marginRight: 3 }} />
-              Saved: {saved.predicted_value}
+              Your pick: {saved.predicted_value}
             </span>
           )}
         </div>
@@ -328,20 +332,20 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
           <input
             type="number"
             step="0.5"
-            placeholder={String(prop.line)}
+            placeholder="e.g. 9.5"
             value={value || ''}
             onChange={e => onChange(e.target.value)}
             style={{ width: 90, padding: '8px 12px', fontSize: 17, fontFamily: 'Barlow Condensed', fontWeight: 700, textAlign: 'center' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <button
-              onClick={() => onChange(String((parseFloat(value || prop.line) + 0.5).toFixed(1)))}
+              onClick={() => onChange(String((parseFloat(value || 0) + 0.5).toFixed(1)))}
               style={{ background: 'var(--border)', border: 'none', color: 'var(--white)', cursor: 'pointer', padding: '3px 7px' }}
             >
               <ChevronUp size={12} />
             </button>
             <button
-              onClick={() => onChange(String((parseFloat(value || prop.line) - 0.5).toFixed(1)))}
+              onClick={() => onChange(String((parseFloat(value || 0) - 0.5).toFixed(1)))}
               style={{ background: 'var(--border)', border: 'none', color: 'var(--white)', cursor: 'pointer', padding: '3px 7px' }}
             >
               <ChevronDown size={12} />
