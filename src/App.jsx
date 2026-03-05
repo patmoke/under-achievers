@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './components/LandingPage';
 import Navigation from './components/Navigation';
 import GamesPage from './components/GamesPage';
+import OffseasonPage from './components/OffseasonPage';
 import LeaderboardPage from './components/LeaderboardPage';
 import ProfilePage from './components/ProfilePage';
 import HistoryPage from './components/HistoryPage';
@@ -43,6 +44,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={user ? <Navigate to="/games" replace /> : <LandingPage />} />
       <Route path="/games" element={<ProtectedLayout><GamesPage /></ProtectedLayout>} />
+      <Route path="/offseason" element={<ProtectedLayout><OffseasonPage /></ProtectedLayout>} />
       <Route path="/leaderboard" element={<ProtectedLayout><LeaderboardPage /></ProtectedLayout>} />
       <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />
       <Route path="/history" element={<ProtectedLayout><HistoryPage /></ProtectedLayout>} />

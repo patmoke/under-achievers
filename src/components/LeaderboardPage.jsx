@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, TrendingUp, Award } from 'lucide-react';
+import { Trophy, TrendingUp, Award, Sunset } from 'lucide-react';
 
 const CURRENT_WEEK = 20;
 const CURRENT_SEASON = 2025;
@@ -11,12 +11,50 @@ export default function LeaderboardPage() {
   const [tab, setTab] = useState('weekly');
   const [weeklyData, setWeeklyData] = useState([]);
   const [seasonData, setSeasonData] = useState([]);
+  const [offseasonData, setOffseasonData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState(CURRENT_WEEK);
 
   useEffect(() => {
     fetchLeaderboards();
   }, [tab, selectedWeek]);
+
+  async function fetchOffseasonLeaderboard() {
+    setLoading(true);
+    // Build from offseason_predictions directly
+    const { data } = await supabase
+      .from('offseason_predictions')
+      .select('*, profiles(username, display_name), offseason_props(line, actual_result)')
+      .eq('season', 2026);
+
+    if (!data) { setLoading(false); return; }
+
+    const userMap = {};
+    data.forEach(p => {
+      if (!p.profiles) return;
+      const uid = p.user_id;
+      if (!userMap[uid]) {
+        userMap[uid] = { user_id: uid, username: p.profiles.username, display_name: p.profiles.display_name, diffs: [], points: 0 };
+      }
+      if (p.offseason_props?.actual_result !== null && p.offseason_props?.actual_result !== undefined) {
+        const diff = Math.abs(p.predicted_value - p.offseason_props.actual_result);
+        userMap[uid].diffs.push(diff);
+      }
+      userMap[uid].points += p.points_earned || 0;
+    });
+
+    const rows = Object.values(userMap)
+      .map(u => ({
+        ...u,
+        total_predictions: data.filter(p => p.user_id === u.user_id).length,
+        avg_difference: u.diffs.length > 0 ? u.diffs.reduce((a,b) => a+b, 0) / u.diffs.length : null,
+      }))
+      .sort((a, b) => (b.total_predictions - a.total_predictions))
+      .map((u, i) => ({ ...u, rank: i + 1 }));
+
+    setOffseasonData(rows);
+    setLoading(false);
+  }
 
   async function fetchLeaderboards() {
     setLoading(true);
@@ -83,9 +121,12 @@ export default function LeaderboardPage() {
     if (tab === 'weekly' && weeklyData.length === 0 && !loading) {
       fetchFromPredictions();
     }
-  }, [weeklyData, loading, tab]);
+    if (tab === 'offseason' && offseasonData.length === 0 && !loading) {
+      fetchOffseasonLeaderboard();
+    }
+  }, [weeklyData, offseasonData, loading, tab]);
 
-  const displayData = tab === 'weekly' ? weeklyData : seasonData;
+  const displayData = tab === 'weekly' ? weeklyData : tab === 'season' ? seasonData : offseasonData;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -102,6 +143,7 @@ export default function LeaderboardPage() {
         {[
           { key: 'weekly', label: 'THIS WEEK', icon: <TrendingUp size={14} /> },
           { key: 'season', label: 'SEASON', icon: <Trophy size={14} /> },
+          { key: 'offseason', label: 'OFFSEASON', icon: <span>🏖️</span> },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             background: 'none', border: 'none',
