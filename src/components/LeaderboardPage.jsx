@@ -5,7 +5,7 @@ import { Trophy, TrendingUp, Award } from 'lucide-react';
 import { getCurrentNFLWeek } from '../lib/scoring';
 
 const CURRENT_WEEK = getCurrentNFLWeek(2026);
-const CURRENT_SEASON = 2025;
+const CURRENT_SEASON = 2026;
 
 export default function LeaderboardPage() {
   const { user } = useAuth();
