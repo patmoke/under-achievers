@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { calculatePoints, formatSpread, getAccuracyColor } from '../lib/scoring';
-import { getCurrentNFLWeek } from '../lib/scoring';
+import { calculatePoints, formatSpread, getAccuracyColor, getCurrentNFLWeek } from '../lib/scoring';
 import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 

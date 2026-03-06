@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Trophy, TrendingUp, Award, Sunset } from 'lucide-react';
+import { Trophy, TrendingUp, Award } from 'lucide-react';
+import { getCurrentNFLWeek } from '../lib/scoring';
 
 const CURRENT_WEEK = getCurrentNFLWeek(2026);
 const CURRENT_SEASON = 2025;
