@@ -2,12 +2,12 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, calculatePoints } from '../lib/scoring';
+import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
 import { Users, Copy, Check, Lock, Eye, EyeOff, Trophy, TrendingUp, LogOut, Settings, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const CURRENT_SEASON = 2026;
-const CURRENT_WEEK = 1;
+const CURRENT_WEEK = getCurrentNFLWeek(CURRENT_SEASON);
 
 export default function LeaguePage() {
   const { id } = useParams();

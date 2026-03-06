@@ -2,10 +2,11 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { calculatePoints, formatSpread, getAccuracyColor } from '../lib/scoring';
+import { getCurrentNFLWeek } from '../lib/scoring';
 import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const CURRENT_WEEK = 20;
+const CURRENT_WEEK = getCurrentNFLWeek(2026);
 const CURRENT_SEASON = 2025;
 
 export default function GamesPage() {

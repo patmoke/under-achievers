@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints } from '../lib/scoring';
 import { History, ChevronDown } from 'lucide-react';
 
-const CURRENT_SEASON = 2025;
+const CURRENT_SEASON = 2026;
 
 export default function HistoryPage() {
   const { user } = useAuth();
@@ -12,6 +12,8 @@ export default function HistoryPage() {
   const [history, setHistory] = useState({});
   const [loading, setLoading] = useState(true);
   const [availableWeeks, setAvailableWeeks] = useState([]);
+  const [offseasonPicks, setOffseasonPicks] = useState([]);
+  const [historyTab, setHistoryTab] = useState('offseason'); // default to offseason since we're in offseason
 
   useEffect(() => {
     fetchHistory();
@@ -20,16 +22,24 @@ export default function HistoryPage() {
   async function fetchHistory() {
     if (!user) return;
     setLoading(true);
-    const { data } = await supabase
-      .from('predictions')
-      .select('*, games(home_team, away_team, home_team_abbr, away_team_abbr, actual_spread, status, home_score, away_score, game_time)')
-      .eq('user_id', user.id)
-      .eq('season', CURRENT_SEASON)
-      .order('week', { ascending: false });
+    const [{ data: weekly }, { data: offseason }] = await Promise.all([
+      supabase
+        .from('predictions')
+        .select('*, games(home_team, away_team, home_team_abbr, away_team_abbr, actual_spread, status, home_score, away_score, game_time)')
+        .eq('user_id', user.id)
+        .eq('season', CURRENT_SEASON)
+        .order('week', { ascending: false }),
+      supabase
+        .from('offseason_predictions')
+        .select('*, offseason_props(description, team, line, actual_result, is_locked, category)')
+        .eq('user_id', user.id)
+        .eq('season', CURRENT_SEASON)
+        .order('created_at', { ascending: false }),
+    ]);
 
-    if (data) {
+    if (weekly) {
       const grouped = {};
-      data.forEach(p => {
+      weekly.forEach(p => {
         if (!grouped[p.week]) grouped[p.week] = [];
         grouped[p.week].push(p);
       });
@@ -38,6 +48,7 @@ export default function HistoryPage() {
       setAvailableWeeks(weeks);
       if (weeks.length > 0) setSelectedWeek(weeks[0]);
     }
+    setOffseasonPicks(offseason || []);
     setLoading(false);
   }
 
@@ -67,13 +78,99 @@ export default function HistoryPage() {
         <h1 style={{ fontSize: 42 }}>PICK <span style={{ color: 'var(--lime)' }}>HISTORY</span></h1>
       </div>
 
-      {availableWeeks.length === 0 ? (
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)' }}>
+        {[
+          { key: 'offseason', label: '🏖️ OFFSEASON PROPS', count: offseasonPicks.length },
+          { key: 'weekly', label: '🏈 WEEKLY PICKS', count: Object.values(history).flat().length },
+        ].map(t => (
+          <button key={t.key} onClick={() => setHistoryTab(t.key)} style={{
+            background: 'none', border: 'none',
+            borderBottom: historyTab === t.key ? '2px solid var(--lime)' : '2px solid transparent',
+            color: historyTab === t.key ? 'var(--lime)' : 'var(--slate)',
+            fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
+            letterSpacing: '0.08em', padding: '12px 24px',
+            cursor: 'pointer', marginBottom: -1, transition: 'all 0.15s'
+          }}>
+            {t.label}
+            <span style={{ marginLeft: 8, fontSize: 11, opacity: 0.6 }}>({t.count})</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Offseason History */}
+      {historyTab === 'offseason' && (
+        offseasonPicks.length === 0 ? (
+          <div className="card" style={{ padding: 48, textAlign: 'center' }}>
+            <span style={{ fontSize: 48 }}>🏖️</span>
+            <h3 style={{ fontSize: 24, marginBottom: 8, marginTop: 16 }}>NO OFFSEASON PICKS YET</h3>
+            <p style={{ color: 'var(--slate)' }}>Head to the Offseason Props page to make your predictions!</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gap: 8 }}>
+            {['win_total', 'draft'].map(cat => {
+              const catPicks = offseasonPicks.filter(p => p.offseason_props?.category === cat);
+              if (catPicks.length === 0) return null;
+              return (
+                <div key={cat} className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 20px', background: 'rgba(192,255,0,0.05)', borderBottom: '1px solid var(--border)', fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 15, letterSpacing: '0.08em', color: 'var(--lime)' }}>
+                    {cat === 'win_total' ? '🏈 WIN TOTALS' : '📋 DRAFT PROPS'}
+                    <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--slate)', fontWeight: 400 }}>{catPicks.length} picks</span>
+                  </div>
+                  {catPicks.map((p, idx) => {
+                    const prop = p.offseason_props;
+                    const diff = prop?.actual_result !== null && prop?.actual_result !== undefined
+                      ? Math.abs(p.predicted_value - prop.actual_result) : null;
+                    return (
+                      <div key={p.id} style={{
+                        padding: '14px 20px', borderBottom: idx === catPicks.length - 1 ? 'none' : '1px solid var(--border)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
+                      }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 15, fontFamily: 'Barlow Condensed', fontWeight: 700 }}>
+                            {prop?.team || prop?.description}
+                          </div>
+                          <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
+                            Your pick: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{p.predicted_value}</span>
+                            {prop?.is_locked ? (
+                              <> · Vegas: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.line}</span>
+                              {prop?.actual_result !== null && prop?.actual_result !== undefined &&
+                                <> · Result: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.actual_result}</span></>
+                              }</>
+                            ) : (
+                              <> · <span style={{ color: 'var(--lime)', fontStyle: 'italic' }}>Vegas line revealed after lock</span></>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                          {diff !== null ? (
+                            <div style={{ fontSize: 14, fontWeight: 700, color: diff <= 1 ? 'var(--green)' : diff <= 3 ? 'var(--amber)' : 'var(--red)' }}>
+                              Δ {diff.toFixed(1)}
+                            </div>
+                          ) : prop?.is_locked ? (
+                            <span style={{ fontSize: 12, color: 'var(--slate)' }}>Awaiting result</span>
+                          ) : (
+                            <span className="badge badge-lime" style={{ fontSize: 10 }}>PENDING</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )
+      )}
+
+      {/* Weekly History */}
+      {historyTab === 'weekly' && availableWeeks.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
           <History size={48} style={{ color: 'var(--slate)', marginBottom: 16 }} />
-          <h3 style={{ fontSize: 24, marginBottom: 8 }}>NO PICKS YET</h3>
+          <h3 style={{ fontSize: 24, marginBottom: 8 }}>NO WEEKLY PICKS YET</h3>
           <p style={{ color: 'var(--slate)' }}>Make your first predictions on the Games page!</p>
         </div>
-      ) : (
+      ) : historyTab === 'weekly' && (
         <div style={{ display: 'grid', gap: 20 }}>
           {availableWeeks.map(week => {
             const picks = history[week] || [];

@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, TrendingUp, Award, Sunset } from 'lucide-react';
 
-const CURRENT_WEEK = 20;
+const CURRENT_WEEK = getCurrentNFLWeek(2026);
 const CURRENT_SEASON = 2025;
 
 export default function LeaderboardPage() {
@@ -21,39 +21,56 @@ export default function LeaderboardPage() {
 
   async function fetchOffseasonLeaderboard() {
     setLoading(true);
-    // Build from offseason_predictions directly
-    const { data } = await supabase
-      .from('offseason_predictions')
-      .select('*, profiles(username, display_name), offseason_props(line, actual_result)')
-      .eq('season', 2026);
+    try {
+      // Step 1: get all offseason predictions with prop data
+      const { data: picks } = await supabase
+        .from('offseason_predictions')
+        .select('user_id, predicted_value, points_earned, prop_id, offseason_props(actual_result)')
+        .eq('season', 2026);
 
-    if (!data) { setLoading(false); return; }
+      if (!picks || picks.length === 0) { setOffseasonData([]); setLoading(false); return; }
 
-    const userMap = {};
-    data.forEach(p => {
-      if (!p.profiles) return;
-      const uid = p.user_id;
-      if (!userMap[uid]) {
-        userMap[uid] = { user_id: uid, username: p.profiles.username, display_name: p.profiles.display_name, diffs: [], points: 0 };
-      }
-      if (p.offseason_props?.actual_result !== null && p.offseason_props?.actual_result !== undefined) {
-        const diff = Math.abs(p.predicted_value - p.offseason_props.actual_result);
-        userMap[uid].diffs.push(diff);
-      }
-      userMap[uid].points += p.points_earned || 0;
-    });
+      // Step 2: get all relevant profiles
+      const userIds = [...new Set(picks.map(p => p.user_id))];
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, username, display_name')
+        .in('id', userIds);
 
-    const rows = Object.values(userMap)
-      .map(u => ({
-        ...u,
-        total_predictions: data.filter(p => p.user_id === u.user_id).length,
-        avg_difference: u.diffs.length > 0 ? u.diffs.reduce((a,b) => a+b, 0) / u.diffs.length : null,
-      }))
-      .sort((a, b) => (b.total_predictions - a.total_predictions))
-      .map((u, i) => ({ ...u, rank: i + 1 }));
+      const profileMap = {};
+      (profilesData || []).forEach(p => { profileMap[p.id] = p; });
 
-    setOffseasonData(rows);
-    setLoading(false);
+      // Step 3: aggregate
+      const userMap = {};
+      picks.forEach(p => {
+        const profile = profileMap[p.user_id];
+        if (!profile) return;
+        if (!userMap[p.user_id]) {
+          userMap[p.user_id] = { user_id: p.user_id, username: profile.username, display_name: profile.display_name, diffs: [], points: 0, count: 0 };
+        }
+        userMap[p.user_id].count++;
+        userMap[p.user_id].points += p.points_earned || 0;
+        const result = p.offseason_props?.actual_result;
+        if (result !== null && result !== undefined) {
+          userMap[p.user_id].diffs.push(Math.abs(p.predicted_value - result));
+        }
+      });
+
+      const rows = Object.values(userMap)
+        .map(u => ({
+          ...u,
+          total_predictions: u.count,
+          avg_difference: u.diffs.length > 0 ? u.diffs.reduce((a,b) => a+b, 0) / u.diffs.length : null,
+        }))
+        .sort((a, b) => b.total_predictions - a.total_predictions)
+        .map((u, i) => ({ ...u, rank: i + 1 }));
+
+      setOffseasonData(rows);
+    } catch (err) {
+      console.error('Offseason leaderboard error:', err);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function fetchLeaderboards() {
@@ -118,13 +135,18 @@ export default function LeaderboardPage() {
   }
 
   useEffect(() => {
-    if (tab === 'weekly' && weeklyData.length === 0 && !loading) {
+    if (tab === 'offseason') {
+      fetchOffseasonLeaderboard();
+    } else {
+      fetchLeaderboards();
+    }
+  }, [tab, selectedWeek]);
+
+  useEffect(() => {
+    if (tab === 'weekly' && !loading && weeklyData.length === 0) {
       fetchFromPredictions();
     }
-    if (tab === 'offseason' && offseasonData.length === 0 && !loading) {
-      fetchOffseasonLeaderboard();
-    }
-  }, [weeklyData, offseasonData, loading, tab]);
+  }, [loading, tab]);
 
   const displayData = tab === 'weekly' ? weeklyData : tab === 'season' ? seasonData : offseasonData;
 
