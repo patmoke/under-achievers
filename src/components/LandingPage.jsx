@@ -129,13 +129,13 @@ export default function LandingPage() {
           </div>
           
           {SAMPLE_LEADERS.map((user, i) => (
-            <div key={user.rank} className="card" style={{ 
+            <div key={user.rank} className="card fade-in-up" style={{ 
               padding: '16px 20px', 
               marginBottom: 8,
               display: 'flex', alignItems: 'center', gap: 16,
               borderLeft: user.rank === 1 ? '3px solid var(--gold)' : user.rank === 2 ? '3px solid var(--silver)' : user.rank === 3 ? '3px solid var(--bronze)' : '3px solid transparent',
               animationDelay: `${i * 0.05}s`
-            }} className="card fade-in-up">
+            }}>
               <div style={{ 
                 fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 28, 
                 width: 40, textAlign: 'center',
