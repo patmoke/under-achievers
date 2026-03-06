@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BarChart2, User, History, Menu, X, LogOut, ChevronDown } from 'lucide-react';
+import { BarChart2, User, History, Menu, X, LogOut, ChevronDown, Shield } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -95,6 +95,16 @@ export default function Navigation() {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.display_name || profile?.username}</div>
                 <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{profile?.total_points || 0} total points</div>
               </div>
+              {profile?.is_admin && (
+                <button onClick={() => { navigate('/admin'); setDropdownOpen(false); }} style={{
+                  width: '100%', padding: '12px 16px', background: 'none', border: 'none',
+                  color: 'var(--lime)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
+                  display: 'flex', alignItems: 'center', gap: 10,
+                  borderBottom: '1px solid var(--border)'
+                }}>
+                  <Shield size={14} /> Admin Dashboard
+                </button>
+              )}
               <button onClick={() => { navigate('/profile'); setDropdownOpen(false); }} style={{
                 width: '100%', padding: '12px 16px', background: 'none', border: 'none',
                 color: 'var(--white)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
