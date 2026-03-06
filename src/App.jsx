@@ -9,6 +9,8 @@ import LeaderboardPage from './components/LeaderboardPage';
 import ProfilePage from './components/ProfilePage';
 import HistoryPage from './components/HistoryPage';
 import AdminPage from './components/AdminPage';
+import LeaguesPage from './components/LeaguesPage';
+import LeaguePage from './components/LeaguePage';
 import Footer from './components/Footer';
 import './styles/globals.css';
 
@@ -50,6 +52,8 @@ function AppRoutes() {
       <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />
       <Route path="/history" element={<ProtectedLayout><HistoryPage /></ProtectedLayout>} />
       <Route path="/admin" element={<ProtectedLayout><AdminPage /></ProtectedLayout>} />
+      <Route path="/leagues" element={<ProtectedLayout><LeaguesPage /></ProtectedLayout>} />
+      <Route path="/leagues/:id" element={<ProtectedLayout><LeaguePage /></ProtectedLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

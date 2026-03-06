@@ -14,6 +14,7 @@ export default function Navigation() {
   const navItems = [
     { path: '/games', label: 'THIS WEEK', icon: <span>🏈</span> },
     { path: '/offseason', label: 'OFFSEASON', icon: <span>🏖️</span> },
+    { path: '/leagues', label: 'LEAGUES', icon: <span>🏆</span> },
     { path: '/leaderboard', label: 'LEADERBOARD', icon: <BarChart2 size={16} /> },
     { path: '/profile', label: 'MY PROFILE', icon: <User size={16} /> },
     { path: '/history', label: 'HISTORY', icon: <History size={16} /> },
