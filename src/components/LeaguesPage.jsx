@@ -52,13 +52,18 @@ export default function LeaguesPage() {
     }
 
     // Public leagues (not already a member)
-    const { data: pub } = await supabase
+    let pubQuery = supabase
       .from('leagues')
       .select('*, league_members(count)')
       .eq('is_public', true)
-      .not('id', 'in', myIds.length > 0 ? `(${myIds.join(',')})` : '(null)')
       .order('created_at', { ascending: false })
       .limit(20);
+
+    if (myIds.length > 0) {
+      pubQuery = pubQuery.not('id', 'in', `(${myIds.join(',')})`);
+    }
+
+    const { data: pub } = await pubQuery;
     setPublicLeagues(pub || []);
     setLoading(false);
   }

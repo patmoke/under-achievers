@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
       password,
       options: {
         emailRedirectTo: 'https://under-achievers.vercel.app',
+        data: { username },
       },
     });
     if (error) throw error;
