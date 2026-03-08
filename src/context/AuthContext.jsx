@@ -30,7 +30,13 @@ export function AuthProvider({ children }) {
   }
 
   async function signUp(email, password, username) {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: 'https://under-achievers.vercel.app',
+      },
+    });
     if (error) throw error;
     // Update username if signup succeeded
     if (data.user) {
