@@ -47,26 +47,40 @@ export default function LeaguePage() {
 
   async function fetchLeague() {
     setLoading(true);
-    const { data: leagueData, error } = await supabase
+    const { data: leagueData, error: leagueError } = await supabase
       .from('leagues')
       .select('*')
       .eq('id', id)
       .single();
 
-    if (error || !leagueData) { navigate('/leagues'); return; }
+    if (leagueError || !leagueData) {
+      console.error('League fetch error:', leagueError);
+      toast.error('Could not load league');
+      navigate('/leagues');
+      return;
+    }
     setLeague(leagueData);
 
-    const { data: membersData } = await supabase
+    const { data: membersData, error: membersError } = await supabase
       .from('league_members')
       .select('*, profiles(username, display_name, total_points, total_predictions)')
       .eq('league_id', id)
       .order('joined_at');
 
+    console.log('Members data:', membersData, 'Members error:', membersError);
+
     setMembers(membersData || []);
     const me = (membersData || []).find(m => m.user_id === user.id);
     setMyMembership(me);
 
-    if (!me) { navigate('/leagues'); return; }
+    // Only redirect if we got members back but current user isn't one of them
+    // (empty array could mean RLS blocked it, so don't redirect on empty)
+    if (membersData && membersData.length > 0 && !me) {
+      toast.error('You are not a member of this league');
+      navigate('/leagues');
+      return;
+    }
+
     setLoading(false);
   }
 
