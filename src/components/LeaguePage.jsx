@@ -40,8 +40,7 @@ export default function LeaguePage() {
 
   useEffect(() => {
     if (league && members.length > 0) {
-      checkAllSubmitted();
-      fetchPicks();
+      checkAllSubmittedThenFetch();
     }
   }, [league, members, weeklyTab]);
 
@@ -84,17 +83,17 @@ export default function LeaguePage() {
     setLoading(false);
   }
 
-  async function checkAllSubmitted() {
-    const { data: weekResult } = await supabase
-      .rpc('league_week_all_locked', { p_league_id: id, p_week: weeklyTab, p_season: CURRENT_SEASON });
-    setWeekAllSubmitted(weekResult);
-
-    const { data: offseasonResult } = await supabase
-      .rpc('league_offseason_all_locked', { p_league_id: id, p_season: CURRENT_SEASON });
-    setOffseasonAllSubmitted(offseasonResult);
+  async function checkAllSubmittedThenFetch() {
+    const [{ data: weekResult }, { data: offseasonResult }] = await Promise.all([
+      supabase.rpc('league_week_all_locked', { p_league_id: id, p_week: weeklyTab, p_season: CURRENT_SEASON }),
+      supabase.rpc('league_offseason_all_locked', { p_league_id: id, p_season: CURRENT_SEASON }),
+    ]);
+    setWeekAllSubmitted(!!weekResult);
+    setOffseasonAllSubmitted(!!offseasonResult);
+    await fetchPicks(!!weekResult, !!offseasonResult);
   }
 
-  async function fetchPicks() {
+  async function fetchPicks(weekAllDone, offseasonAllDone) {
     const memberIds = members.map(m => m.user_id);
 
     // My picks always visible
@@ -132,7 +131,7 @@ export default function LeaguePage() {
     setOffseasonProps(propsData || []);
 
     // Only fetch other members' picks if all have submitted
-    if (weekAllSubmitted && memberIds.length > 0) {
+    if (weekAllDone && memberIds.length > 0) {
       const { data: allWeek } = await supabase
         .from('predictions')
         .select('*, profiles(username), games(home_team_abbr, away_team_abbr, actual_spread)')
@@ -142,7 +141,7 @@ export default function LeaguePage() {
       setWeeklyPicks(allWeek || []);
     }
 
-    if (offseasonAllSubmitted && memberIds.length > 0) {
+    if (offseasonAllDone && memberIds.length > 0) {
       const { data: allOffseason } = await supabase
         .from('offseason_predictions')
         .select('*, profiles(username), offseason_props(description, team, line, actual_result, is_locked)')
