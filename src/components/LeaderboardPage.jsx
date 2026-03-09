@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, TrendingUp, Award } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { getCurrentNFLWeek } from '../lib/scoring';
 
 const CURRENT_WEEK = getCurrentNFLWeek(2026);
@@ -9,6 +10,7 @@ const CURRENT_SEASON = 2026;
 
 export default function LeaderboardPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [tab, setTab] = useState('weekly');
   const [weeklyData, setWeeklyData] = useState([]);
   const [seasonData, setSeasonData] = useState([]);
@@ -279,7 +281,10 @@ export default function LeaderboardPage() {
                           }}>
                             {username[0]?.toUpperCase()}
                           </div>
-                          <span style={{ fontWeight: 600, color: isMe ? 'var(--lime)' : 'var(--white)' }}>
+                          <span
+                            onClick={() => !isMe && navigate(`/users/${entry.user_id}`)}
+                            style={{ fontWeight: 600, color: isMe ? 'var(--lime)' : 'var(--white)', cursor: isMe ? 'default' : 'pointer' }}
+                          >
                             {username} {isMe && <span style={{ fontSize: 11, color: 'var(--lime)' }}>(you)</span>}
                           </span>
                         </div>

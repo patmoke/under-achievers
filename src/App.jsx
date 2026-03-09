@@ -11,6 +11,8 @@ import HistoryPage from './components/HistoryPage';
 import AdminPage from './components/AdminPage';
 import LeaguesPage from './components/LeaguesPage';
 import LeaguePage from './components/LeaguePage';
+import FeedPage from './components/FeedPage';
+import UserProfilePage from './components/UserProfilePage';
 import Footer from './components/Footer';
 import './styles/globals.css';
 
@@ -54,6 +56,8 @@ function AppRoutes() {
       <Route path="/admin" element={<ProtectedLayout><AdminPage /></ProtectedLayout>} />
       <Route path="/leagues" element={<ProtectedLayout><LeaguesPage /></ProtectedLayout>} />
       <Route path="/leagues/:id" element={<ProtectedLayout><LeaguePage /></ProtectedLayout>} />
+      <Route path="/feed" element={<ProtectedLayout><FeedPage /></ProtectedLayout>} />
+      <Route path="/users/:id" element={<ProtectedLayout><UserProfilePage /></ProtectedLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
