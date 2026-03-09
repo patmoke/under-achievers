@@ -16,10 +16,6 @@ export default function LeaderboardPage() {
   const [loading, setLoading] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState(CURRENT_WEEK);
 
-  useEffect(() => {
-    fetchLeaderboards();
-  }, [tab, selectedWeek]);
-
   async function fetchOffseasonLeaderboard() {
     setLoading(true);
     try {
@@ -83,7 +79,13 @@ export default function LeaderboardPage() {
         .eq('week', selectedWeek)
         .eq('season', CURRENT_SEASON)
         .order('rank');
-      setWeeklyData(data || []);
+      if (data && data.length > 0) {
+        setWeeklyData(data);
+        setLoading(false);
+      } else {
+        // Fall through to live predictions if leaderboard table is empty
+        await fetchFromPredictions();
+      }
     } else {
       const { data } = await supabase
         .from('season_leaderboards')
@@ -91,8 +93,8 @@ export default function LeaderboardPage() {
         .eq('season', CURRENT_SEASON)
         .order('rank');
       setSeasonData(data || []);
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // Build from predictions if leaderboard table is empty
@@ -142,12 +144,6 @@ export default function LeaderboardPage() {
       fetchLeaderboards();
     }
   }, [tab, selectedWeek]);
-
-  useEffect(() => {
-    if (tab === 'weekly' && !loading && weeklyData.length === 0) {
-      fetchFromPredictions();
-    }
-  }, [loading, tab]);
 
   const displayData = tab === 'weekly' ? weeklyData : tab === 'season' ? seasonData : offseasonData;
 
