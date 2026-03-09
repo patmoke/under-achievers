@@ -149,14 +149,15 @@ export default function LeaguePage() {
     picks.forEach(p => {
       if (!userMap[p.user_id]) return;
       userMap[p.user_id].picks++;
+      // Use actual_spread if available (post-game), otherwise no diff yet for weekly
       if (p.games?.actual_spread !== null && p.games?.actual_spread !== undefined) {
-        const diff = Math.abs(p.predicted_spread - p.games.actual_spread);
+        const diff = Math.abs(Number(p.predicted_spread) - Number(p.games.actual_spread));
         userMap[p.user_id].diffs.push(diff);
         userMap[p.user_id].points += calculatePoints(p.predicted_spread, p.games.actual_spread, p.confidence_points || 1);
       }
     });
     return Object.values(userMap)
-      .sort((a, b) => b.points - a.points)
+      .sort((a, b) => b.points - a.points || a.diffs.reduce((s,d)=>s+d,0) - b.diffs.reduce((s,d)=>s+d,0))
       .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null }));
   }
 
@@ -170,22 +171,26 @@ export default function LeaguePage() {
       if (!userMap[p.user_id]) return;
       userMap[p.user_id].picks++;
       const prop = p.offseason_props;
-      if (prop?.actual_result !== null && prop?.actual_result !== undefined) {
-        userMap[p.user_id].diffs.push(Math.abs(p.predicted_value - prop.actual_result));
+      // Use actual_result if available, otherwise fall back to Vegas line
+      const compareVal = prop?.actual_result !== null && prop?.actual_result !== undefined
+        ? Number(prop.actual_result)
+        : prop?.line !== null && prop?.line !== undefined
+          ? Number(prop.line)
+          : null;
+      if (compareVal !== null) {
+        userMap[p.user_id].diffs.push(Math.abs(Number(p.predicted_value) - compareVal));
       }
     });
+    const avg = diffs => diffs.length ? diffs.reduce((a, b) => a + b, 0) / diffs.length : null;
     return Object.values(userMap)
       .sort((a, b) => {
-        // Sort by avgDiff if available, else by picks count
-        const aAvg = a.diffs.length ? a.diffs.reduce((x, y) => x + y, 0) / a.diffs.length : null;
-        const bAvg = b.diffs.length ? b.diffs.reduce((x, y) => x + y, 0) / b.diffs.length : null;
+        const aAvg = avg(a.diffs), bAvg = avg(b.diffs);
         if (aAvg !== null && bAvg !== null) return aAvg - bAvg;
+        if (aAvg !== null) return -1;
+        if (bAvg !== null) return 1;
         return b.picks - a.picks;
       })
-      .map((u, i) => ({
-        ...u, rank: i + 1,
-        avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null
-      }));
+      .map((u, i) => ({ ...u, rank: i + 1, avgDiff: avg(u.diffs) }));
   }
 
   if (loading) return (
@@ -616,10 +621,14 @@ function LeaderboardTable({ board, currentUserId, revealed, type }) {
     <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--slate)' }}>No data yet.</div>
   );
 
+  const isWeekly = type === 'weekly';
+  const cols = isWeekly ? '48px 1fr 80px 80px 80px' : '48px 1fr 80px 130px';
+  const diffColor = (d) => d <= 1 ? 'var(--green)' : d <= 3 ? 'var(--amber)' : 'var(--red)';
+
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 80px 80px 80px', padding: '10px 20px', borderBottom: '1px solid var(--border)' }}>
-        {['#', 'PLAYER', 'PICKS', type === 'weekly' ? 'PTS' : 'PICKS', 'AVG Δ'].map((h, i) => (
+      <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '10px 20px', borderBottom: '1px solid var(--border)' }}>
+        {(isWeekly ? ['#', 'PLAYER', 'PICKS', 'PTS', 'AVG Δ'] : ['#', 'PLAYER', 'PICKS', 'AVG Δ vs VEGAS']).map((h, i) => (
           <div key={i} style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
         ))}
       </div>
@@ -628,7 +637,7 @@ function LeaderboardTable({ board, currentUserId, revealed, type }) {
         const showData = revealed || isMe;
         return (
           <div key={entry.user_id} style={{
-            display: 'grid', gridTemplateColumns: '48px 1fr 80px 80px 80px',
+            display: 'grid', gridTemplateColumns: cols,
             padding: '14px 20px', borderBottom: idx === board.length - 1 ? 'none' : '1px solid var(--border)',
             background: isMe ? 'rgba(192,255,0,0.04)' : 'transparent',
             outline: isMe ? '1px solid rgba(192,255,0,0.15)' : 'none',
@@ -644,16 +653,15 @@ function LeaderboardTable({ board, currentUserId, revealed, type }) {
               {isMe && <span style={{ fontSize: 11, color: 'var(--lime)', marginLeft: 6 }}>(you)</span>}
               {!showData && !isMe && <span style={{ fontSize: 11, color: 'var(--slate)', marginLeft: 6 }}><EyeOff size={10} style={{ display: 'inline' }} /> hidden</span>}
             </div>
-            <div style={{ color: 'var(--slate)', fontSize: 14, textAlign: 'right' }}>{showData ? entry.picks : '—'}</div>
-            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)', textAlign: 'right' }}>
-              {showData ? (type === 'weekly' ? entry.points : entry.picks) : '—'}
+            <div style={{ color: 'var(--slate)', fontSize: 14, textAlign: 'right' }}>
+              {showData ? entry.picks : '—'}
             </div>
-            <div style={{
-              fontSize: 14, textAlign: 'right',
-              color: showData && entry.avgDiff !== null
-                ? (entry.avgDiff <= 1 ? 'var(--green)' : entry.avgDiff <= 3 ? 'var(--amber)' : 'var(--red)')
-                : 'var(--slate)'
-            }}>
+            {isWeekly && (
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)', textAlign: 'right' }}>
+                {showData ? entry.points : '—'}
+              </div>
+            )}
+            <div style={{ fontSize: 14, textAlign: 'right', color: showData && entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--slate)' }}>
               {showData && entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}
             </div>
           </div>
