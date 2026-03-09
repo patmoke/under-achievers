@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BarChart2, User, History, Menu, X, LogOut, ChevronDown, Shield } from 'lucide-react';
+import { BarChart2, User, History, Menu, X, LogOut, ChevronDown, Shield, Calendar, Umbrella, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -12,9 +12,9 @@ export default function Navigation() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const navItems = [
-    { path: '/games', label: 'THIS WEEK', icon: <span>🏈</span> },
-    { path: '/offseason', label: 'OFFSEASON', icon: <span>🏖️</span> },
-    { path: '/leagues', label: 'LEAGUES', icon: <span>🏆</span> },
+    { path: '/games', label: 'THIS WEEK', icon: <Calendar size={16} /> },
+    { path: '/offseason', label: 'OFFSEASON', icon: <Umbrella size={16} /> },
+    { path: '/leagues', label: 'LEAGUES', icon: <Trophy size={16} /> },
     { path: '/leaderboard', label: 'LEADERBOARD', icon: <BarChart2 size={16} /> },
     { path: '/profile', label: 'MY PROFILE', icon: <User size={16} /> },
     { path: '/history', label: 'HISTORY', icon: <History size={16} /> },
