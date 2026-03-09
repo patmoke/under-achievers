@@ -530,34 +530,38 @@ function OffseasonPicksTab({ offseasonProps, myOffseasonPicks, offseasonPicks, o
                 {/* Picks grid */}
                 <div style={{ padding: '12px 20px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {(() => {
-                    // Find winner: closest to actual_result (or closest to line if no result yet)
-                    const compareVal = hasResult ? prop.actual_result : (offseasonAllSubmitted ? prop.line : null);
+                    // Compare vs actual result if available, otherwise vs Vegas line once all submitted
+                    const compareVal = hasResult
+                      ? Number(prop.actual_result)
+                      : offseasonAllSubmitted && prop.line !== null
+                        ? Number(prop.line)
+                        : null;
+
                     let minDiff = Infinity;
-                    if (compareVal !== null && compareVal !== undefined) {
+                    if (compareVal !== null) {
                       allPickEntries.forEach(({ pick }) => {
-                        const d = Math.abs(pick.predicted_value - compareVal);
+                        const d = Math.abs(Number(pick.predicted_value) - compareVal);
                         if (d < minDiff) minDiff = d;
                       });
                     }
+
                     return allPickEntries.map(({ member, pick }) => {
                       const isMe = member.user_id === currentUserId;
-                      const diff = hasResult ? Math.abs(pick.predicted_value - prop.actual_result) : null;
-                      const vegasDiff = (offseasonAllSubmitted && prop.line !== null) ? Math.abs(pick.predicted_value - prop.line) : null;
-                      const isWinner = compareVal !== null && compareVal !== undefined &&
-                        Math.abs(pick.predicted_value - compareVal) === minDiff;
+                      const pickNum = Number(pick.predicted_value);
+                      const diff = compareVal !== null ? Math.abs(pickNum - compareVal) : null;
+                      const isWinner = compareVal !== null && diff === minDiff;
+
                       return (
                         <div key={member.user_id} style={{
                           padding: '10px 14px',
-                          background: isWinner && hasResult
-                            ? 'rgba(192,255,0,0.1)'
-                            : isMe ? 'rgba(192,255,0,0.04)' : 'rgba(255,255,255,0.03)',
-                          border: `1px solid ${isWinner && hasResult ? 'rgba(192,255,0,0.5)' : isMe ? 'rgba(192,255,0,0.2)' : 'var(--border)'}`,
+                          background: isWinner ? 'rgba(192,255,0,0.1)' : isMe ? 'rgba(192,255,0,0.04)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${isWinner ? 'rgba(192,255,0,0.5)' : isMe ? 'rgba(192,255,0,0.2)' : 'var(--border)'}`,
                           minWidth: 100,
                           flex: '1 1 100px',
                           maxWidth: 160,
                           position: 'relative',
                         }}>
-                          {isWinner && hasResult && (
+                          {isWinner && (
                             <div style={{ position: 'absolute', top: -10, right: 8, fontSize: 16 }}>🏆</div>
                           )}
                           <div style={{
@@ -569,15 +573,11 @@ function OffseasonPicksTab({ offseasonProps, myOffseasonPicks, offseasonPicks, o
                           <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 26, color: 'var(--white)', lineHeight: 1 }}>
                             {pick.predicted_value}
                           </div>
-                          {diff !== null ? (
+                          {diff !== null && (
                             <div style={{ fontSize: 12, color: diffColor(diff), marginTop: 4, fontWeight: 600 }}>
-                              Δ{diff.toFixed(1)} from result
+                              Δ{diff.toFixed(1)} {hasResult ? 'from result' : 'from Vegas'}
                             </div>
-                          ) : vegasDiff !== null ? (
-                            <div style={{ fontSize: 12, color: diffColor(vegasDiff), marginTop: 4, fontWeight: 600 }}>
-                              Δ{vegasDiff.toFixed(1)} from Vegas
-                            </div>
-                          ) : null}
+                          )}
                         </div>
                       );
                     });
