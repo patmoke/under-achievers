@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
-import { Users, Copy, Check, Lock, Eye, EyeOff, Trophy, TrendingUp, LogOut, Settings, ChevronDown } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const CURRENT_SEASON = 2026;
@@ -22,11 +22,9 @@ export default function LeaguePage() {
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
 
-  // Picks reveal state
   const [weekAllSubmitted, setWeekAllSubmitted] = useState(false);
   const [offseasonAllSubmitted, setOffseasonAllSubmitted] = useState(false);
 
-  // Data
   const [weeklyPicks, setWeeklyPicks] = useState([]);
   const [offseasonPicks, setOffseasonPicks] = useState([]);
   const [games, setGames] = useState([]);
@@ -34,26 +32,18 @@ export default function LeaguePage() {
   const [myWeekPicks, setMyWeekPicks] = useState([]);
   const [myOffseasonPicks, setMyOffseasonPicks] = useState([]);
 
-  useEffect(() => {
-    fetchLeague();
-  }, [id, user]);
+  useEffect(() => { fetchLeague(); }, [id, user]);
 
   useEffect(() => {
-    if (league && members.length > 0) {
-      checkAllSubmittedThenFetch();
-    }
+    if (league && members.length > 0) checkAllSubmittedThenFetch();
   }, [league, members, weeklyTab]);
 
   async function fetchLeague() {
     setLoading(true);
     const { data: leagueData, error: leagueError } = await supabase
-      .from('leagues')
-      .select('*')
-      .eq('id', id)
-      .single();
+      .from('leagues').select('*').eq('id', id).single();
 
     if (leagueError || !leagueData) {
-      console.error('League fetch error:', leagueError);
       toast.error('Could not load league');
       navigate('/leagues');
       return;
@@ -66,20 +56,15 @@ export default function LeaguePage() {
       .eq('league_id', id)
       .order('joined_at');
 
-    console.log('Members data:', membersData, 'Members error:', membersError);
-
     setMembers(membersData || []);
     const me = (membersData || []).find(m => m.user_id === user.id);
     setMyMembership(me);
 
-    // Only redirect if we got members back but current user isn't one of them
-    // (empty array could mean RLS blocked it, so don't redirect on empty)
     if (membersData && membersData.length > 0 && !me) {
       toast.error('You are not a member of this league');
       navigate('/leagues');
       return;
     }
-
     setLoading(false);
   }
 
@@ -96,48 +81,31 @@ export default function LeaguePage() {
   async function fetchPicks(weekAllDone, offseasonAllDone) {
     const memberIds = members.map(m => m.user_id);
 
-    // My picks always visible
     const { data: myWeek } = await supabase
       .from('predictions')
       .select('*, games(home_team_abbr, away_team_abbr, actual_spread, home_score, away_score, status)')
-      .eq('user_id', user.id)
-      .eq('week', weeklyTab)
-      .eq('season', CURRENT_SEASON);
+      .eq('user_id', user.id).eq('week', weeklyTab).eq('season', CURRENT_SEASON);
     setMyWeekPicks(myWeek || []);
 
     const { data: myOffseason } = await supabase
       .from('offseason_predictions')
       .select('*, offseason_props(description, team, line, actual_result, is_locked, category)')
-      .eq('user_id', user.id)
-      .eq('season', CURRENT_SEASON);
+      .eq('user_id', user.id).eq('season', CURRENT_SEASON);
     setMyOffseasonPicks(myOffseason || []);
 
-    // Fetch games for this week
     const { data: gamesData } = await supabase
-      .from('games')
-      .select('*')
-      .eq('week', weeklyTab)
-      .eq('season', CURRENT_SEASON)
-      .order('game_time');
+      .from('games').select('*').eq('week', weeklyTab).eq('season', CURRENT_SEASON).order('game_time');
     setGames(gamesData || []);
 
-    // Fetch offseason props
     const { data: propsData } = await supabase
-      .from('offseason_props')
-      .select('*')
-      .eq('season', CURRENT_SEASON)
-      .order('category')
-      .order('team');
+      .from('offseason_props').select('*').eq('season', CURRENT_SEASON).order('category').order('team');
     setOffseasonProps(propsData || []);
 
-    // Only fetch other members' picks if all have submitted
     if (weekAllDone && memberIds.length > 0) {
       const { data: allWeek } = await supabase
         .from('predictions')
         .select('*, profiles(username), games(home_team_abbr, away_team_abbr, actual_spread)')
-        .in('user_id', memberIds)
-        .eq('week', weeklyTab)
-        .eq('season', CURRENT_SEASON);
+        .in('user_id', memberIds).eq('week', weeklyTab).eq('season', CURRENT_SEASON);
       setWeeklyPicks(allWeek || []);
     }
 
@@ -145,17 +113,13 @@ export default function LeaguePage() {
       const { data: allOffseason } = await supabase
         .from('offseason_predictions')
         .select('*, profiles(username), offseason_props(description, team, line, actual_result, is_locked)')
-        .in('user_id', memberIds)
-        .eq('season', CURRENT_SEASON);
+        .in('user_id', memberIds).eq('season', CURRENT_SEASON);
       setOffseasonPicks(allOffseason || []);
     }
   }
 
   async function leaveLeague() {
-    if (myMembership?.role === 'owner') {
-      toast.error('Transfer ownership or delete the league before leaving');
-      return;
-    }
+    if (myMembership?.role === 'owner') { toast.error('Transfer ownership or delete the league before leaving'); return; }
     if (!confirm('Leave this league?')) return;
     await supabase.from('league_members').delete().eq('league_id', id).eq('user_id', user.id);
     toast.success('Left league');
@@ -176,17 +140,11 @@ export default function LeaguePage() {
     toast.success('Join code copied!');
   }
 
-  // Build leaderboard from picks data
   function buildWeeklyLeaderboard() {
     const userMap = {};
     members.forEach(m => {
-      userMap[m.user_id] = {
-        user_id: m.user_id,
-        username: m.profiles?.username || 'Unknown',
-        picks: 0, points: 0, diffs: []
-      };
+      userMap[m.user_id] = { user_id: m.user_id, username: m.profiles?.username || 'Unknown', picks: 0, points: 0, diffs: [] };
     });
-
     const picks = weekAllSubmitted ? weeklyPicks : myWeekPicks;
     picks.forEach(p => {
       if (!userMap[p.user_id]) return;
@@ -197,36 +155,37 @@ export default function LeaguePage() {
         userMap[p.user_id].points += calculatePoints(p.predicted_spread, p.games.actual_spread, p.confidence_points || 1);
       }
     });
-
     return Object.values(userMap)
       .sort((a, b) => b.points - a.points)
-      .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a,b) => a+b,0)/u.diffs.length : null }));
+      .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null }));
   }
 
   function buildOffseasonLeaderboard() {
     const userMap = {};
     members.forEach(m => {
-      userMap[m.user_id] = {
-        user_id: m.user_id,
-        username: m.profiles?.username || 'Unknown',
-        picks: 0, points: 0, diffs: []
-      };
+      userMap[m.user_id] = { user_id: m.user_id, username: m.profiles?.username || 'Unknown', picks: 0, diffs: [] };
     });
-
     const picks = offseasonAllSubmitted ? offseasonPicks : myOffseasonPicks;
     picks.forEach(p => {
       if (!userMap[p.user_id]) return;
       userMap[p.user_id].picks++;
       const prop = p.offseason_props;
       if (prop?.actual_result !== null && prop?.actual_result !== undefined) {
-        const diff = Math.abs(p.predicted_value - prop.actual_result);
-        userMap[p.user_id].diffs.push(diff);
+        userMap[p.user_id].diffs.push(Math.abs(p.predicted_value - prop.actual_result));
       }
     });
-
     return Object.values(userMap)
-      .sort((a, b) => b.picks - a.picks)
-      .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a,b) => a+b,0)/u.diffs.length : null }));
+      .sort((a, b) => {
+        // Sort by avgDiff if available, else by picks count
+        const aAvg = a.diffs.length ? a.diffs.reduce((x, y) => x + y, 0) / a.diffs.length : null;
+        const bAvg = b.diffs.length ? b.diffs.reduce((x, y) => x + y, 0) / b.diffs.length : null;
+        if (aAvg !== null && bAvg !== null) return aAvg - bAvg;
+        return b.picks - a.picks;
+      })
+      .map((u, i) => ({
+        ...u, rank: i + 1,
+        avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null
+      }));
   }
 
   if (loading) return (
@@ -268,7 +227,6 @@ export default function LeaguePage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-            {/* Join code */}
             <button onClick={copyCode} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Barlow Condensed', letterSpacing: '0.15em' }}>
               {copied ? <Check size={14} /> : <Copy size={14} />}
               {league.join_code}
@@ -291,11 +249,7 @@ export default function LeaguePage() {
       <BlindPicksBanner
         weekAllSubmitted={weekAllSubmitted}
         offseasonAllSubmitted={offseasonAllSubmitted}
-        members={members}
-        weeklyPicks={myWeekPicks}
-        offseasonPicks={myOffseasonPicks}
         competeOn={competeOn}
-        week={weeklyTab}
       />
 
       {/* Tabs */}
@@ -311,8 +265,6 @@ export default function LeaguePage() {
           }}>{t.label}</button>
         ))}
       </div>
-
-      {/* Tab Content */}
 
       {/* LEADERBOARD */}
       {tab === 'leaderboard' && (
@@ -356,17 +308,15 @@ export default function LeaguePage() {
               {Array.from({ length: 18 }, (_, i) => i + 1).map(w => <option key={w} value={w}>Wk {w}</option>)}
             </select>
           </div>
-
           {games.length === 0 ? (
             <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--slate)' }}>No games scheduled for Week {weeklyTab} yet.</div>
           ) : (
             games.map(game => {
               const myPick = myWeekPicks.find(p => p.game_id === game.id);
               const allPicksForGame = weekAllSubmitted ? weeklyPicks.filter(p => p.game_id === game.id) : [];
-
               return (
                 <div key={game.id} className="card" style={{ padding: 20, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: myPick || allPicksForGame.length > 0 ? 16 : 0, flexWrap: 'wrap', gap: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
                     <div>
                       <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 22 }}>
                         {game.away_team_abbr} @ {game.home_team_abbr}
@@ -382,8 +332,6 @@ export default function LeaguePage() {
                       </div>
                     )}
                   </div>
-
-                  {/* My pick always shown */}
                   {myPick && (
                     <div style={{ padding: '10px 14px', background: 'rgba(192,255,0,0.05)', border: '1px solid rgba(192,255,0,0.15)', marginBottom: allPicksForGame.length > 0 ? 10 : 0 }}>
                       <div style={{ fontSize: 11, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 4 }}>YOUR PICK</div>
@@ -398,8 +346,6 @@ export default function LeaguePage() {
                       </div>
                     </div>
                   )}
-
-                  {/* Others' picks - only when all submitted */}
                   {weekAllSubmitted && allPicksForGame.length > 0 && (
                     <div>
                       <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 6 }}>
@@ -415,10 +361,7 @@ export default function LeaguePage() {
                       </div>
                     </div>
                   )}
-
-                  {!myPick && !weekAllSubmitted && (
-                    <div style={{ fontSize: 13, color: 'var(--slate)', fontStyle: 'italic' }}>You haven't submitted a pick for this game yet.</div>
-                  )}
+                  {!myPick && <div style={{ fontSize: 13, color: 'var(--slate)', fontStyle: 'italic' }}>You haven't submitted a pick for this game yet.</div>}
                 </div>
               );
             })
@@ -428,66 +371,14 @@ export default function LeaguePage() {
 
       {/* OFFSEASON PICKS */}
       {tab === 'offseason' && (
-        <div>
-          <h3 style={{ fontSize: 22, marginBottom: 20 }}>OFFSEASON PICKS</h3>
-          {!offseasonAllSubmitted && (
-            <div style={{ marginBottom: 16, padding: '12px 16px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', fontSize: 13, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <EyeOff size={14} /> Other members' offseason picks are hidden until everyone has submitted at least one pick.
-            </div>
-          )}
-          {myOffseasonPicks.length === 0 ? (
-            <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--slate)' }}>
-              You haven't made any offseason picks yet. Head to the <strong>Offseason Props</strong> page to get started!
-            </div>
-          ) : (
-            offseasonProps.filter(prop => myOffseasonPicks.some(p => p.prop_id === prop.id)).map(prop => {
-              const myPick = myOffseasonPicks.find(p => p.prop_id === prop.id);
-              const allPicksForProp = offseasonAllSubmitted ? offseasonPicks.filter(p => p.prop_id === prop.id) : [];
-
-              return (
-                <div key={prop.id} className="card" style={{ padding: 20, marginBottom: 10 }}>
-                  <div style={{ marginBottom: myPick ? 12 : 0 }}>
-                    <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18 }}>{prop.team || prop.description}</div>
-                    {prop.team && <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{prop.description}</div>}
-                  </div>
-                  {myPick && (
-                    <div style={{ padding: '10px 14px', background: 'rgba(192,255,0,0.05)', border: '1px solid rgba(192,255,0,0.15)', marginBottom: allPicksForProp.length > 0 ? 10 : 0 }}>
-                      <div style={{ fontSize: 11, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 4 }}>YOUR PICK</div>
-                      <div style={{ fontSize: 14, display: 'flex', gap: 16 }}>
-                        <span>Pick: <strong>{myPick.predicted_value}</strong></span>
-                        {prop.is_locked && prop.actual_result !== null && (
-                          <>
-                            <span>Vegas: <strong>{prop.line}</strong></span>
-                            <span>Result: <strong>{prop.actual_result}</strong></span>
-                            <span style={{ color: Math.abs(myPick.predicted_value - prop.actual_result) <= 1 ? 'var(--green)' : 'var(--red)' }}>
-                              Δ{Math.abs(myPick.predicted_value - prop.actual_result).toFixed(1)}
-                            </span>
-                          </>
-                        )}
-                        {!prop.is_locked && <span style={{ color: 'var(--lime)' }}>Vegas line: {prop.line} (revealed after your pick)</span>}
-                      </div>
-                    </div>
-                  )}
-                  {offseasonAllSubmitted && allPicksForProp.length > 0 && (
-                    <div>
-                      <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 6 }}>
-                        <Eye size={11} style={{ display: 'inline', marginRight: 4 }} />ALL PICKS REVEALED
-                      </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {allPicksForProp.filter(p => p.user_id !== user.id).map(p => (
-                          <div key={p.id} style={{ padding: '6px 12px', background: 'var(--navy)', border: '1px solid var(--border)', fontSize: 13 }}>
-                            <span style={{ color: 'var(--slate)', marginRight: 6 }}>{p.profiles?.username}:</span>
-                            <strong>{p.predicted_value}</strong>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-        </div>
+        <OffseasonPicksTab
+          offseasonProps={offseasonProps}
+          myOffseasonPicks={myOffseasonPicks}
+          offseasonPicks={offseasonPicks}
+          offseasonAllSubmitted={offseasonAllSubmitted}
+          members={members}
+          currentUserId={user.id}
+        />
       )}
 
       {/* MEMBERS */}
@@ -533,6 +424,169 @@ export default function LeaguePage() {
   );
 }
 
+// ─── Offseason Picks Tab ────────────────────────────────────────────────────
+
+function OffseasonPicksTab({ offseasonProps, myOffseasonPicks, offseasonPicks, offseasonAllSubmitted, members, currentUserId }) {
+  if (myOffseasonPicks.length === 0) {
+    return (
+      <div className="card" style={{ padding: 48, textAlign: 'center', color: 'var(--slate)' }}>
+        You haven't made any offseason picks yet. Head to the <strong>Offseason Props</strong> page to get started!
+      </div>
+    );
+  }
+
+  // Build a map of all picks by prop_id → user_id → pick
+  const picksByProp = {};
+  if (offseasonAllSubmitted) {
+    offseasonPicks.forEach(p => {
+      if (!picksByProp[p.prop_id]) picksByProp[p.prop_id] = {};
+      picksByProp[p.prop_id][p.user_id] = p;
+    });
+  }
+  // Always include my picks
+  myOffseasonPicks.forEach(p => {
+    if (!picksByProp[p.prop_id]) picksByProp[p.prop_id] = {};
+    picksByProp[p.prop_id][currentUserId] = p;
+  });
+
+  // Group props by category
+  const propsWithMyPick = offseasonProps.filter(prop => myOffseasonPicks.some(p => p.prop_id === prop.id));
+  const byCategory = {};
+  propsWithMyPick.forEach(prop => {
+    const cat = prop.category || 'other';
+    if (!byCategory[cat]) byCategory[cat] = [];
+    byCategory[cat].push(prop);
+  });
+
+  // Member order for columns: me first, then others
+  const memberOrder = [
+    members.find(m => m.user_id === currentUserId),
+    ...members.filter(m => m.user_id !== currentUserId),
+  ].filter(Boolean);
+
+  const diffColor = (diff) => {
+    if (diff === null || diff === undefined) return 'var(--slate)';
+    if (diff <= 1) return 'var(--green)';
+    if (diff <= 3) return 'var(--amber)';
+    return 'var(--red)';
+  };
+
+  return (
+    <div>
+      {!offseasonAllSubmitted && (
+        <div style={{ marginBottom: 20, padding: '12px 16px', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', fontSize: 13, color: 'var(--amber)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <EyeOff size={14} /> Other members' picks are hidden until everyone has submitted at least one pick.
+        </div>
+      )}
+
+      {Object.entries(byCategory).map(([category, props]) => (
+        <div key={category} style={{ marginBottom: 32 }}>
+          <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.12em', fontWeight: 700, marginBottom: 12 }}>
+            {category === 'win_total' ? '🏈 WIN TOTALS' : category === 'draft' ? '📋 NFL DRAFT' : category.toUpperCase()}
+          </div>
+
+          {props.map(prop => {
+            const picksForProp = picksByProp[prop.id] || {};
+            const myPick = picksForProp[currentUserId];
+            const hasResult = prop.actual_result !== null && prop.actual_result !== undefined;
+            const isLocked = prop.is_locked;
+
+            // All picks sorted: me first
+            const allPickEntries = memberOrder
+              .map(m => ({ member: m, pick: picksForProp[m.user_id] }))
+              .filter(({ pick }) => !!pick);
+
+            return (
+              <div key={prop.id} className="card" style={{ marginBottom: 10, padding: 0, overflow: 'hidden' }}>
+                {/* Prop header */}
+                <div style={{
+                  padding: '14px 20px',
+                  borderBottom: '1px solid var(--border)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12
+                }}>
+                  <div>
+                    <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 18 }}>
+                      {prop.team || prop.description}
+                    </div>
+                    {prop.team && <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{prop.description}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 13 }}>
+                    {isLocked && (
+                      <span style={{ color: 'var(--slate)' }}>
+                        Vegas: <strong style={{ color: 'var(--white)' }}>{prop.line}</strong>
+                      </span>
+                    )}
+                    {hasResult && (
+                      <span style={{ color: 'var(--slate)' }}>
+                        Result: <strong style={{ color: 'var(--lime)' }}>{prop.actual_result}</strong>
+                      </span>
+                    )}
+                    {!isLocked && (
+                      <span style={{ fontSize: 11, color: 'var(--slate)', fontStyle: 'italic' }}>Vegas line hidden until locked</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Picks grid */}
+                <div style={{ padding: '12px 20px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {allPickEntries.map(({ member, pick }) => {
+                    const isMe = member.user_id === currentUserId;
+                    const diff = hasResult ? Math.abs(pick.predicted_value - prop.actual_result) : null;
+                    return (
+                      <div key={member.user_id} style={{
+                        padding: '10px 14px',
+                        background: isMe ? 'rgba(192,255,0,0.06)' : 'rgba(255,255,255,0.03)',
+                        border: `1px solid ${isMe ? 'rgba(192,255,0,0.25)' : 'var(--border)'}`,
+                        minWidth: 100,
+                        flex: '1 1 100px',
+                        maxWidth: 160,
+                      }}>
+                        <div style={{
+                          fontSize: 11, fontFamily: 'Barlow Condensed', letterSpacing: '0.08em',
+                          color: isMe ? 'var(--lime)' : 'var(--slate)', marginBottom: 6, fontWeight: 700
+                        }}>
+                          {isMe ? 'YOU' : member.profiles?.username?.toUpperCase() || 'UNKNOWN'}
+                        </div>
+                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 26, color: 'var(--white)', lineHeight: 1 }}>
+                          {pick.predicted_value}
+                        </div>
+                        {diff !== null && (
+                          <div style={{ fontSize: 12, color: diffColor(diff), marginTop: 4, fontWeight: 600 }}>
+                            Δ{diff.toFixed(1)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Hidden member slots */}
+                  {!offseasonAllSubmitted && members.filter(m => m.user_id !== currentUserId && !picksForProp[m.user_id]).map(m => (
+                    <div key={m.user_id} style={{
+                      padding: '10px 14px', background: 'rgba(255,255,255,0.02)',
+                      border: '1px solid var(--border)', minWidth: 100, flex: '1 1 100px', maxWidth: 160,
+                      display: 'flex', flexDirection: 'column', gap: 6
+                    }}>
+                      <div style={{ fontSize: 11, fontFamily: 'Barlow Condensed', color: 'var(--slate)', fontWeight: 700 }}>
+                        {m.profiles?.username?.toUpperCase() || 'UNKNOWN'}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <EyeOff size={12} style={{ color: 'var(--slate)' }} />
+                        <span style={{ fontSize: 12, color: 'var(--slate)' }}>hidden</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Leaderboard Table ──────────────────────────────────────────────────────
+
 function LeaderboardTable({ board, currentUserId, revealed, type }) {
   if (board.length === 0) return (
     <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--slate)' }}>No data yet.</div>
@@ -541,8 +595,8 @@ function LeaderboardTable({ board, currentUserId, revealed, type }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '48px 1fr 80px 80px 80px', padding: '10px 20px', borderBottom: '1px solid var(--border)' }}>
-        {['#', 'PLAYER', 'PICKS', type === 'weekly' ? 'PTS' : 'PICKS', 'AVG Δ'].map(h => (
-          <div key={h} style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em' }}>{h}</div>
+        {['#', 'PLAYER', 'PICKS', type === 'weekly' ? 'PTS' : 'PICKS', 'AVG Δ'].map((h, i) => (
+          <div key={i} style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
         ))}
       </div>
       {board.map((entry, idx) => {
@@ -559,18 +613,23 @@ function LeaderboardTable({ board, currentUserId, revealed, type }) {
             <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 22,
               color: entry.rank === 1 ? 'var(--gold)' : entry.rank === 2 ? 'var(--silver)' : entry.rank === 3 ? 'var(--bronze)' : 'var(--slate)'
             }}>
-              {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank-1] : `#${entry.rank}`}
+              {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank - 1] : `#${entry.rank}`}
             </div>
             <div style={{ fontWeight: 600, color: isMe ? 'var(--lime)' : 'var(--white)', fontSize: 15 }}>
               {entry.username}
               {isMe && <span style={{ fontSize: 11, color: 'var(--lime)', marginLeft: 6 }}>(you)</span>}
               {!showData && !isMe && <span style={{ fontSize: 11, color: 'var(--slate)', marginLeft: 6 }}><EyeOff size={10} style={{ display: 'inline' }} /> hidden</span>}
             </div>
-            <div style={{ color: 'var(--slate)', fontSize: 14 }}>{showData ? entry.picks : '—'}</div>
-            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)' }}>
+            <div style={{ color: 'var(--slate)', fontSize: 14, textAlign: 'right' }}>{showData ? entry.picks : '—'}</div>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)', textAlign: 'right' }}>
               {showData ? (type === 'weekly' ? entry.points : entry.picks) : '—'}
             </div>
-            <div style={{ fontSize: 14, color: showData && entry.avgDiff !== null ? (entry.avgDiff <= 1 ? 'var(--green)' : entry.avgDiff <= 3 ? 'var(--amber)' : 'var(--red)') : 'var(--slate)' }}>
+            <div style={{
+              fontSize: 14, textAlign: 'right',
+              color: showData && entry.avgDiff !== null
+                ? (entry.avgDiff <= 1 ? 'var(--green)' : entry.avgDiff <= 3 ? 'var(--amber)' : 'var(--red)')
+                : 'var(--slate)'
+            }}>
               {showData && entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}
             </div>
           </div>
@@ -580,14 +639,12 @@ function LeaderboardTable({ board, currentUserId, revealed, type }) {
   );
 }
 
-function BlindPicksBanner({ weekAllSubmitted, offseasonAllSubmitted, members, weeklyPicks, offseasonPicks, competeOn, week }) {
-  const weekSubmitted = weeklyPicks.length > 0;
-  const offseasonSubmitted = offseasonPicks.length > 0;
+// ─── Blind Picks Banner ─────────────────────────────────────────────────────
 
-  if (weekAllSubmitted && offseasonAllSubmitted) return null;
-
-  const memberCount = members.length;
-  const weekPickedCount = members.filter(() => true).length; // simplified - real count from picks
+function BlindPicksBanner({ weekAllSubmitted, offseasonAllSubmitted, competeOn }) {
+  const weekDone = competeOn === 'offseason' || weekAllSubmitted;
+  const offseasonDone = competeOn === 'weekly' || offseasonAllSubmitted;
+  if (weekDone && offseasonDone) return null;
 
   return (
     <div style={{ marginBottom: 20, padding: '14px 20px', background: 'rgba(192,255,0,0.05)', border: '1px solid rgba(192,255,0,0.2)', display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -598,7 +655,6 @@ function BlindPicksBanner({ weekAllSubmitted, offseasonAllSubmitted, members, we
         </div>
         <div style={{ fontSize: 13, color: 'var(--slate)', marginTop: 2 }}>
           Other members' picks are hidden until everyone in this league has submitted.
-          {weekSubmitted && ' Your picks are locked in ✓'}
         </div>
       </div>
     </div>
