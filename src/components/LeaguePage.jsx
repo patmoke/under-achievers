@@ -511,7 +511,7 @@ function OffseasonPicksTab({ offseasonProps, myOffseasonPicks, offseasonPicks, o
                     {prop.team && <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{prop.description}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 16, alignItems: 'center', fontSize: 13 }}>
-                    {isLocked && (
+                    {(isLocked || offseasonAllSubmitted) && (
                       <span style={{ color: 'var(--slate)' }}>
                         Vegas: <strong style={{ color: 'var(--white)' }}>{prop.line}</strong>
                       </span>
@@ -521,43 +521,67 @@ function OffseasonPicksTab({ offseasonProps, myOffseasonPicks, offseasonPicks, o
                         Result: <strong style={{ color: 'var(--lime)' }}>{prop.actual_result}</strong>
                       </span>
                     )}
-                    {!isLocked && (
-                      <span style={{ fontSize: 11, color: 'var(--slate)', fontStyle: 'italic' }}>Vegas line hidden until locked</span>
+                    {!isLocked && !offseasonAllSubmitted && (
+                      <span style={{ fontSize: 11, color: 'var(--slate)', fontStyle: 'italic' }}>Vegas line hidden until all picks submitted</span>
                     )}
                   </div>
                 </div>
 
                 {/* Picks grid */}
                 <div style={{ padding: '12px 20px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {allPickEntries.map(({ member, pick }) => {
-                    const isMe = member.user_id === currentUserId;
-                    const diff = hasResult ? Math.abs(pick.predicted_value - prop.actual_result) : null;
-                    return (
-                      <div key={member.user_id} style={{
-                        padding: '10px 14px',
-                        background: isMe ? 'rgba(192,255,0,0.06)' : 'rgba(255,255,255,0.03)',
-                        border: `1px solid ${isMe ? 'rgba(192,255,0,0.25)' : 'var(--border)'}`,
-                        minWidth: 100,
-                        flex: '1 1 100px',
-                        maxWidth: 160,
-                      }}>
-                        <div style={{
-                          fontSize: 11, fontFamily: 'Barlow Condensed', letterSpacing: '0.08em',
-                          color: isMe ? 'var(--lime)' : 'var(--slate)', marginBottom: 6, fontWeight: 700
+                  {(() => {
+                    // Find winner: closest to actual_result (or closest to line if no result yet)
+                    const compareVal = hasResult ? prop.actual_result : (offseasonAllSubmitted ? prop.line : null);
+                    let minDiff = Infinity;
+                    if (compareVal !== null && compareVal !== undefined) {
+                      allPickEntries.forEach(({ pick }) => {
+                        const d = Math.abs(pick.predicted_value - compareVal);
+                        if (d < minDiff) minDiff = d;
+                      });
+                    }
+                    return allPickEntries.map(({ member, pick }) => {
+                      const isMe = member.user_id === currentUserId;
+                      const diff = hasResult ? Math.abs(pick.predicted_value - prop.actual_result) : null;
+                      const vegasDiff = (offseasonAllSubmitted && prop.line !== null) ? Math.abs(pick.predicted_value - prop.line) : null;
+                      const isWinner = compareVal !== null && compareVal !== undefined &&
+                        Math.abs(pick.predicted_value - compareVal) === minDiff;
+                      return (
+                        <div key={member.user_id} style={{
+                          padding: '10px 14px',
+                          background: isWinner && hasResult
+                            ? 'rgba(192,255,0,0.1)'
+                            : isMe ? 'rgba(192,255,0,0.04)' : 'rgba(255,255,255,0.03)',
+                          border: `1px solid ${isWinner && hasResult ? 'rgba(192,255,0,0.5)' : isMe ? 'rgba(192,255,0,0.2)' : 'var(--border)'}`,
+                          minWidth: 100,
+                          flex: '1 1 100px',
+                          maxWidth: 160,
+                          position: 'relative',
                         }}>
-                          {isMe ? 'YOU' : member.profiles?.username?.toUpperCase() || 'UNKNOWN'}
-                        </div>
-                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 26, color: 'var(--white)', lineHeight: 1 }}>
-                          {pick.predicted_value}
-                        </div>
-                        {diff !== null && (
-                          <div style={{ fontSize: 12, color: diffColor(diff), marginTop: 4, fontWeight: 600 }}>
-                            Δ{diff.toFixed(1)}
+                          {isWinner && hasResult && (
+                            <div style={{ position: 'absolute', top: -10, right: 8, fontSize: 16 }}>🏆</div>
+                          )}
+                          <div style={{
+                            fontSize: 11, fontFamily: 'Barlow Condensed', letterSpacing: '0.08em',
+                            color: isMe ? 'var(--lime)' : 'var(--slate)', marginBottom: 6, fontWeight: 700
+                          }}>
+                            {isMe ? 'YOU' : member.profiles?.username?.toUpperCase() || 'UNKNOWN'}
                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                          <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 26, color: 'var(--white)', lineHeight: 1 }}>
+                            {pick.predicted_value}
+                          </div>
+                          {diff !== null ? (
+                            <div style={{ fontSize: 12, color: diffColor(diff), marginTop: 4, fontWeight: 600 }}>
+                              Δ{diff.toFixed(1)} from result
+                            </div>
+                          ) : vegasDiff !== null ? (
+                            <div style={{ fontSize: 12, color: diffColor(vegasDiff), marginTop: 4, fontWeight: 600 }}>
+                              Δ{vegasDiff.toFixed(1)} from Vegas
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    });
+                  })()}
 
                   {/* Hidden member slots */}
                   {!offseasonAllSubmitted && members.filter(m => m.user_id !== currentUserId && !picksForProp[m.user_id]).map(m => (
