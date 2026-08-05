@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
 import { Users, Copy, Check, Eye, EyeOff, LogOut, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
+import SurvivorTab from './SurvivorTab';
 
 const CURRENT_SEASON = 2026;
 const CURRENT_WEEK = getCurrentNFLWeek(CURRENT_SEASON);
@@ -133,6 +134,13 @@ export default function LeaguePage() {
     navigate('/leagues');
   }
 
+  async function enableSurvivor() {
+    const { error } = await supabase.from('leagues').update({ survivor_enabled: true, survivor_start_week: CURRENT_WEEK }).eq('id', id);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Survivor pool enabled!');
+    fetchLeague();
+  }
+
   function copyCode() {
     navigator.clipboard.writeText(league.join_code);
     setCopied(true);
@@ -208,6 +216,7 @@ export default function LeaguePage() {
     { key: 'leaderboard', label: '🏆 LEADERBOARD' },
     ...(competeOn !== 'offseason' ? [{ key: 'weekly', label: '🏈 WEEKLY PICKS' }] : []),
     ...(competeOn !== 'weekly' ? [{ key: 'offseason', label: '🏖️ OFFSEASON PICKS' }] : []),
+    ...(league.survivor_enabled ? [{ key: 'survivor', label: '💀 SURVIVOR' }] : []),
     { key: 'members', label: `👥 MEMBERS (${members.length})` },
   ];
 
@@ -249,6 +258,16 @@ export default function LeaguePage() {
           </div>
         </div>
       </div>
+
+      {!league.survivor_enabled && isOwner && (
+        <div className="card" style={{ padding: 20, marginBottom: 24, borderColor: 'rgba(239,68,68,0.3)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+          <div>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>💀 SURVIVOR POOL</div>
+            <div style={{ fontSize: 13, color: 'var(--slate)', marginTop: 2 }}>Pick one team to win straight-up each week. Lose and you're out — unless the commissioner brings you back.</div>
+          </div>
+          <button className="btn btn-primary" onClick={enableSurvivor}>ENABLE SURVIVOR</button>
+        </div>
+      )}
 
       {/* Blind Picks Banner */}
       <BlindPicksBanner
@@ -383,6 +402,16 @@ export default function LeaguePage() {
           offseasonAllSubmitted={offseasonAllSubmitted}
           members={members}
           currentUserId={user.id}
+        />
+      )}
+
+      {tab === 'survivor' && (
+        <SurvivorTab
+          leagueId={id}
+          currentUserId={user.id}
+          isOwner={isOwner}
+          season={CURRENT_SEASON}
+          currentWeek={CURRENT_WEEK}
         />
       )}
 

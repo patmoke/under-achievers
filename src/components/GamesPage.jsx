@@ -6,7 +6,7 @@ import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-r
 import toast from 'react-hot-toast';
 
 const CURRENT_WEEK = getCurrentNFLWeek(2026);
-const CURRENT_SEASON = 2025;
+const CURRENT_SEASON = 2026;
 
 export default function GamesPage() {
   const { user, profile } = useAuth();
