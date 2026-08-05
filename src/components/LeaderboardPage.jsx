@@ -14,63 +14,8 @@ export default function LeaderboardPage() {
   const [tab, setTab] = useState('weekly');
   const [weeklyData, setWeeklyData] = useState([]);
   const [seasonData, setSeasonData] = useState([]);
-  const [offseasonData, setOffseasonData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedWeek, setSelectedWeek] = useState(CURRENT_WEEK);
-
-  async function fetchOffseasonLeaderboard() {
-    setLoading(true);
-    try {
-      // Step 1: get all offseason predictions with prop data
-      const { data: picks } = await supabase
-        .from('offseason_predictions')
-        .select('user_id, predicted_value, points_earned, prop_id, offseason_props(actual_result)')
-        .eq('season', 2026);
-
-      if (!picks || picks.length === 0) { setOffseasonData([]); setLoading(false); return; }
-
-      // Step 2: get all relevant profiles
-      const userIds = [...new Set(picks.map(p => p.user_id))];
-      const { data: profilesData } = await supabase
-        .from('profiles')
-        .select('id, username, display_name')
-        .in('id', userIds);
-
-      const profileMap = {};
-      (profilesData || []).forEach(p => { profileMap[p.id] = p; });
-
-      // Step 3: aggregate
-      const userMap = {};
-      picks.forEach(p => {
-        const profile = profileMap[p.user_id];
-        if (!profile) return;
-        if (!userMap[p.user_id]) {
-          userMap[p.user_id] = { user_id: p.user_id, username: profile.username, display_name: profile.display_name, diffs: [], points: 0, count: 0 };
-        }
-        userMap[p.user_id].count++;
-        userMap[p.user_id].points += p.points_earned || 0;
-        const result = p.offseason_props?.actual_result;
-        if (result !== null && result !== undefined) {
-          userMap[p.user_id].diffs.push(Math.abs(p.predicted_value - result));
-        }
-      });
-
-      const rows = Object.values(userMap)
-        .map(u => ({
-          ...u,
-          total_predictions: u.count,
-          avg_difference: u.diffs.length > 0 ? u.diffs.reduce((a,b) => a+b, 0) / u.diffs.length : null,
-        }))
-        .sort((a, b) => b.total_predictions - a.total_predictions)
-        .map((u, i) => ({ ...u, rank: i + 1 }));
-
-      setOffseasonData(rows);
-    } catch (err) {
-      console.error('Offseason leaderboard error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }
 
   async function fetchLeaderboards() {
     setLoading(true);
@@ -140,39 +85,32 @@ export default function LeaderboardPage() {
   }
 
   useEffect(() => {
-    if (tab === 'offseason') {
-      fetchOffseasonLeaderboard();
-    } else {
-      fetchLeaderboards();
-    }
+    fetchLeaderboards();
   }, [tab, selectedWeek]);
 
-  const displayData = tab === 'weekly' ? weeklyData : tab === 'season' ? seasonData : offseasonData;
+  const displayData = tab === 'weekly' ? weeklyData : seasonData;
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>
-          {CURRENT_SEASON} NFL SEASON
-        </div>
-        <h1 style={{ fontSize: 42 }}>LEADER<span style={{ color: 'var(--lime)' }}>BOARD</span></h1>
+      <div style={{ marginBottom: 28 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>{CURRENT_SEASON} NFL Season</div>
+        <h1 style={{ fontSize: 34, textTransform: 'none' }}>Leaderboard</h1>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 32, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
         {[
-          { key: 'weekly', label: 'THIS WEEK', icon: <TrendingUp size={14} /> },
-          { key: 'season', label: 'SEASON', icon: <Trophy size={14} /> },
-          { key: 'offseason', label: 'OFFSEASON', icon: <span>🏖️</span> },
+          { key: 'weekly', label: 'This week', icon: <TrendingUp size={14} /> },
+          { key: 'season', label: 'Season', icon: <Trophy size={14} /> },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             background: 'none', border: 'none',
-            borderBottom: tab === t.key ? '2px solid var(--lime)' : '2px solid transparent',
-            color: tab === t.key ? 'var(--lime)' : 'var(--slate)',
-            fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
-            letterSpacing: '0.08em', padding: '12px 24px',
-            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8,
+            borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
+            color: tab === t.key ? 'var(--accent)' : 'var(--ink-soft)',
+            fontWeight: 700, fontSize: 14,
+            padding: '10px 20px',
+            cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 7,
             marginBottom: -1, transition: 'all 0.15s'
           }}>
             {t.icon} {t.label}
@@ -180,8 +118,8 @@ export default function LeaderboardPage() {
         ))}
         {tab === 'weekly' && (
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 8 }}>
-            <span style={{ fontSize: 12, color: 'var(--slate)' }}>WEEK:</span>
-            <select value={selectedWeek} onChange={e => setSelectedWeek(Number(e.target.value))} style={{ width: 80, padding: '6px 10px' }}>
+            <label htmlFor="lb-week" style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Week:</label>
+            <select id="lb-week" value={selectedWeek} onChange={e => setSelectedWeek(Number(e.target.value))} style={{ width: 80, padding: '6px 10px' }}>
               {Array.from({ length: 20 }, (_, i) => i + 1).map(w => (
                 <option key={w} value={w}>W{w}</option>
               ))}
@@ -206,17 +144,17 @@ export default function LeaderboardPage() {
                 borderTop: `3px solid ${colors[podiumIdx]}`,
                 minHeight: heights[podiumIdx],
                 display: 'flex', flexDirection: 'column', justifyContent: 'center',
-                boxShadow: rank === 1 ? `0 0 30px rgba(245,158,11,0.15)` : 'none'
+                boxShadow: rank === 1 ? `0 0 30px rgba(184,134,11,0.15)` : 'none'
               }}>
                 <div style={{ fontSize: 28, marginBottom: 8 }}>{icons[podiumIdx]}</div>
                 <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: colors[podiumIdx] }}>
                   {username}
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--slate)', marginTop: 4 }}>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 4 }}>
                   {entry.points_earned !== undefined ? `${entry.points_earned} pts` : `${entry.total_points || 0} pts`}
                 </div>
                 {entry.avg_difference !== null && entry.avg_difference !== undefined && (
-                  <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
                     Avg Δ {Number(entry.avg_difference).toFixed(2)}
                   </div>
                 )}
@@ -233,21 +171,19 @@ export default function LeaderboardPage() {
         </div>
       ) : displayData.length === 0 ? (
         <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-          <Award size={48} style={{ color: 'var(--slate)', marginBottom: 16 }} />
-          <h3 style={{ fontSize: 24, marginBottom: 8 }}>NO DATA YET</h3>
-          <p style={{ color: 'var(--slate)' }}>Make your picks to appear on the leaderboard!</p>
+          <Award size={36} style={{ color: 'var(--ink-faint)', marginBottom: 16 }} />
+          <h3 style={{ fontSize: 21, marginBottom: 8, textTransform: 'none' }}>No data yet</h3>
+          <p style={{ color: 'var(--ink-soft)' }}>Make your picks to appear on the leaderboard!</p>
         </div>
       ) : (
         <div className="card">
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  {['RANK', 'PLAYER', 'PICKS', tab === 'weekly' ? 'AVG Δ' : 'ACCURACY', 'POINTS'].map(h => (
-                    <th key={h} style={{ 
-                      padding: '14px 16px', textAlign: h === 'RANK' || h === 'PLAYER' ? 'left' : 'right',
-                      fontFamily: 'Barlow Condensed', fontSize: 11, letterSpacing: '0.1em',
-                      color: 'var(--slate)', fontWeight: 700
+                <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+                  {['Rank', 'Player', 'Picks', tab === 'weekly' ? 'Avg Δ' : 'Accuracy', 'Points'].map(h => (
+                    <th key={h} className="label-muted" style={{
+                      padding: '12px 16px', textAlign: h === 'Rank' || h === 'Player' ? 'left' : 'right',
                     }}>{h}</th>
                   ))}
                 </tr>
@@ -258,48 +194,47 @@ export default function LeaderboardPage() {
                   const rank = entry.rank || idx + 1;
                   const username = entry.username || entry.profiles?.username || 'Unknown';
                   return (
-                    <tr key={entry.user_id || idx} style={{ 
+                    <tr key={entry.user_id || idx} style={{
                       borderBottom: '1px solid var(--border)',
-                      background: isMe ? 'rgba(192,255,0,0.05)' : idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
-                      outline: isMe ? '1px solid rgba(192,255,0,0.2)' : 'none'
+                      background: isMe ? 'var(--accent-soft)' : idx % 2 === 0 ? 'transparent' : 'rgba(22,24,28,0.02)',
                     }}>
                       <td style={{ padding: '14px 16px' }}>
-                        <span style={{ 
-                          fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 20,
-                          color: rank === 1 ? 'var(--gold)' : rank === 2 ? 'var(--silver)' : rank === 3 ? 'var(--bronze)' : 'var(--slate)'
+                        <span style={{
+                          fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 19,
+                          color: rank === 1 ? 'var(--gold)' : rank === 2 ? 'var(--silver)' : rank === 3 ? 'var(--bronze)' : 'var(--ink-faint)'
                         }}>
                           {rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : `#${rank}`}
                         </span>
                       </td>
                       <td style={{ padding: '14px 16px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                          <div style={{ 
-                            width: 30, height: 30, background: isMe ? 'var(--lime)' : 'var(--border)',
+                          <div style={{
+                            width: 28, height: 28, borderRadius: '50%', background: isMe ? 'var(--accent)' : 'var(--surface-alt)',
                             display: 'flex', alignItems: 'center', justifyContent: 'center',
                             fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 13,
-                            color: isMe ? 'var(--navy)' : 'var(--white)', flexShrink: 0
+                            color: isMe ? 'var(--accent-ink)' : 'var(--ink)', flexShrink: 0
                           }}>
                             {username[0]?.toUpperCase()}
                           </div>
                           <span
                             onClick={() => !isMe && navigate(`/users/${entry.user_id}`)}
-                            style={{ fontWeight: 600, color: isMe ? 'var(--lime)' : 'var(--white)', cursor: isMe ? 'default' : 'pointer' }}
+                            style={{ fontWeight: 600, color: isMe ? 'var(--accent-dark)' : 'var(--ink)', cursor: isMe ? 'default' : 'pointer' }}
                           >
-                            {username} {isMe && <span style={{ fontSize: 11, color: 'var(--lime)' }}>(you)</span>}
+                            {username} {isMe && <span style={{ fontSize: 11, color: 'var(--accent)' }}>(you)</span>}
                           </span>
                         </div>
                       </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'right', color: 'var(--slate)' }}>
+                      <td style={{ padding: '14px 16px', textAlign: 'right', color: 'var(--ink-soft)' }}>
                         {entry.total_predictions}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {tab === 'weekly' 
-                          ? <span style={{ color: 'var(--green)', fontWeight: 600 }}>{Number(entry.avg_difference || 0).toFixed(2)}</span>
-                          : <span style={{ color: 'var(--green)', fontWeight: 600 }}>{Number(entry.avg_accuracy || 0).toFixed(1)}%</span>
+                        {tab === 'weekly'
+                          ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>{Number(entry.avg_difference || 0).toFixed(2)}</span>
+                          : <span style={{ color: 'var(--success)', fontWeight: 600 }}>{Number(entry.avg_accuracy || 0).toFixed(1)}%</span>
                         }
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)' }}>
+                        <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>
                           {entry.points_earned || entry.total_points || 0}
                         </span>
                       </td>
