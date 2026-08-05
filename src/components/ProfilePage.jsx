@@ -65,30 +65,28 @@ export default function ProfilePage() {
   }
 
   const stats = [
-    { label: 'TOTAL PICKS', value: profile?.total_predictions || 0, icon: <Target size={18} />, color: 'var(--lime)' },
-    { label: 'SEASON RANK', value: profile?.season_rank ? `#${profile.season_rank}` : '—', icon: <Trophy size={18} />, color: 'var(--gold)' },
-    { label: 'TOTAL POINTS', value: profile?.total_points || 0, icon: <Zap size={18} />, color: 'var(--lime)' },
-    { label: 'WEEKS WON', value: profile?.weekly_wins || 0, icon: <TrendingUp size={18} />, color: 'var(--gold)' },
+    { label: 'Total picks', value: profile?.total_predictions || 0, icon: <Target size={18} />, color: 'var(--accent)' },
+    { label: 'Season rank', value: profile?.season_rank ? `#${profile.season_rank}` : '—', icon: <Trophy size={18} />, color: 'var(--gold)' },
+    { label: 'Total points', value: profile?.total_points || 0, icon: <Zap size={18} />, color: 'var(--accent)' },
+    { label: 'Weeks won', value: profile?.weekly_wins || 0, icon: <TrendingUp size={18} />, color: 'var(--gold)' },
   ];
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>
-          MY ACCOUNT
-        </div>
-        <h1 style={{ fontSize: 42 }}>MY <span style={{ color: 'var(--lime)' }}>PROFILE</span></h1>
+      <div style={{ marginBottom: 28 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>My account</div>
+        <h1 style={{ fontSize: 34, textTransform: 'none' }}>My profile</h1>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24, alignItems: 'start' }}>
         {/* Left: Profile Card */}
         <div className="card" style={{ padding: 28 }}>
           {/* Avatar */}
-          <div style={{ 
-            width: 80, height: 80, background: 'var(--lime)',
+          <div style={{
+            width: 72, height: 72, background: 'var(--accent)', borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 40,
-            color: 'var(--navy)', marginBottom: 16
+            fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 34,
+            color: 'var(--accent-ink)', marginBottom: 16
           }}>
             {profile?.username?.[0]?.toUpperCase() || '?'}
           </div>
@@ -96,15 +94,15 @@ export default function ProfilePage() {
           {editing ? (
             <div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', display: 'block', marginBottom: 4 }}>DISPLAY NAME</label>
+                <label className="label-muted" style={{ display: 'block', marginBottom: 4 }}>Display name</label>
                 <input value={form.display_name} onChange={e => setForm(f => ({ ...f, display_name: e.target.value }))} maxLength={30} />
               </div>
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', display: 'block', marginBottom: 4 }}>BIO</label>
+                <label className="label-muted" style={{ display: 'block', marginBottom: 4 }}>Bio</label>
                 <textarea value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} maxLength={200} rows={3} style={{ resize: 'vertical' }} />
               </div>
               <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', display: 'block', marginBottom: 4 }}>FAVORITE TEAM</label>
+                <label className="label-muted" style={{ display: 'block', marginBottom: 4 }}>Favorite team</label>
                 <select value={form.favorite_team} onChange={e => setForm(f => ({ ...f, favorite_team: e.target.value }))}>
                   <option value="">Select team...</option>
                   {NFL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -112,27 +110,27 @@ export default function ProfilePage() {
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button className="btn btn-primary" onClick={handleSave} disabled={loading} style={{ flex: 1, justifyContent: 'center', padding: '10px' }}>
-                  <Save size={14} /> {loading ? '...' : 'SAVE'}
+                  <Save size={14} /> {loading ? '...' : 'Save'}
                 </button>
-                <button className="btn btn-secondary" onClick={() => setEditing(false)} style={{ padding: '10px 14px' }}>
+                <button className="btn btn-secondary" onClick={() => setEditing(false)} aria-label="Cancel editing" style={{ padding: '10px 14px' }}>
                   <X size={14} />
                 </button>
               </div>
             </div>
           ) : (
             <div>
-              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 24 }}>{profile?.display_name || profile?.username}</div>
-              <div style={{ fontSize: 14, color: 'var(--slate)', marginTop: 2 }}>@{profile?.username}</div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 22 }}>{profile?.display_name || profile?.username}</div>
+              <div style={{ fontSize: 14, color: 'var(--ink-soft)', marginTop: 2 }}>@{profile?.username}</div>
               {profile?.favorite_team && (
                 <div style={{ marginTop: 10 }}>
-                  <span className="badge badge-lime">🏈 {profile.favorite_team}</span>
+                  <span className="badge badge-lime">{profile.favorite_team}</span>
                 </div>
               )}
               {profile?.bio && (
-                <p style={{ marginTop: 12, fontSize: 14, color: 'var(--slate)', lineHeight: 1.5 }}>{profile.bio}</p>
+                <p style={{ marginTop: 12, fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.5 }}>{profile.bio}</p>
               )}
               <button className="btn btn-secondary" onClick={() => setEditing(true)} style={{ marginTop: 20, width: '100%', justifyContent: 'center', padding: '10px' }}>
-                <Edit2 size={14} /> EDIT PROFILE
+                <Edit2 size={14} /> Edit profile
               </button>
             </div>
           )}
@@ -146,9 +144,9 @@ export default function ProfilePage() {
               <div key={s.label} className="card" style={{ padding: 20 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: s.color, marginBottom: 8 }}>
                   {s.icon}
-                  <span style={{ fontSize: 11, fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', color: 'var(--slate)' }}>{s.label}</span>
+                  <span className="label-muted" style={{ color: 'var(--ink-soft)' }}>{s.label}</span>
                 </div>
-                <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 36, color: s.color }}>{s.value}</div>
+                <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 32, color: s.color }}>{s.value}</div>
               </div>
             ))}
           </div>
@@ -156,18 +154,18 @@ export default function ProfilePage() {
           {/* Recent Picks */}
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
-              <h3 style={{ fontSize: 18 }}>RECENT PICKS</h3>
+              <h3 style={{ fontSize: 17, textTransform: 'none' }}>Recent picks</h3>
             </div>
             {recentPicks.length === 0 && recentOffseasonPicks.length === 0 ? (
-              <div style={{ padding: 32, textAlign: 'center', color: 'var(--slate)' }}>
+              <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>
                 No predictions yet. Make your first picks!
               </div>
             ) : (
               <>
                 {recentOffseasonPicks.length > 0 && (
                   <>
-                    <div style={{ padding: '8px 20px', background: 'rgba(192,255,0,0.05)', borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em' }}>
-                      🏖️ OFFSEASON PROPS
+                    <div className="eyebrow" style={{ padding: '8px 20px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--border)' }}>
+                      Offseason props
                     </div>
                     {recentOffseasonPicks.map(p => {
                       const prop = p.offseason_props;
@@ -181,28 +179,28 @@ export default function ProfilePage() {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {prop?.team || prop?.description || 'Offseason Prop'}
-                              <span style={{ fontSize: 11, color: 'var(--lime)', marginLeft: 8, fontFamily: 'Barlow Condensed' }}>
-                                {prop?.category === 'win_total' ? 'WIN TOTAL' : 'DRAFT'}
+                              <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 8, fontFamily: 'Barlow Condensed' }}>
+                                {prop?.category === 'win_total' ? 'Win total' : 'Draft'}
                               </span>
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-                              Your pick: <span style={{ color: 'var(--white)' }}>{p.predicted_value}</span>
+                            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
+                              Your pick: <span style={{ color: 'var(--ink)' }}>{p.predicted_value}</span>
                               {prop?.is_locked && prop?.actual_result !== null && prop?.actual_result !== undefined && (
-                                <> · Vegas: <span style={{ color: 'var(--white)' }}>{prop.line}</span>
-                                   · Result: <span style={{ color: 'var(--white)' }}>{prop.actual_result}</span></>
+                                <> · Vegas: <span style={{ color: 'var(--ink)' }}>{prop.line}</span>
+                                   · Result: <span style={{ color: 'var(--ink)' }}>{prop.actual_result}</span></>
                               )}
                               {!prop?.is_locked && (
-                                <> · <span style={{ color: 'var(--lime)', fontStyle: 'italic' }}>Vegas line hidden</span></>
+                                <> · <span style={{ color: 'var(--accent)', fontStyle: 'italic' }}>Vegas line hidden</span></>
                               )}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             {diff !== null ? (
-                              <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--green)' : diff <= 3 ? 'var(--amber)' : 'var(--red)' }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
                                 Δ {diff.toFixed(1)}
                               </div>
                             ) : (
-                              <span className="badge badge-lime" style={{ fontSize: 10 }}>PENDING</span>
+                              <span className="badge badge-lime" style={{ fontSize: 10 }}>Pending</span>
                             )}
                           </div>
                         </div>
@@ -212,8 +210,8 @@ export default function ProfilePage() {
                 )}
                 {recentPicks.length > 0 && (
                   <>
-                    <div style={{ padding: '8px 20px', background: 'rgba(192,255,0,0.05)', borderBottom: '1px solid var(--border)', fontSize: 11, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em' }}>
-                      🏈 WEEKLY PICKS
+                    <div className="eyebrow" style={{ padding: '8px 20px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--border)' }}>
+                      Weekly picks
                     </div>
                     {recentPicks.map(p => {
                       const g = p.games;
@@ -227,23 +225,23 @@ export default function ProfilePage() {
                           <div>
                             <div style={{ fontSize: 14, fontWeight: 600 }}>
                               {g ? `${g.away_team_abbr} @ ${g.home_team_abbr}` : 'Game'}
-                              <span style={{ fontSize: 11, color: 'var(--slate)', marginLeft: 8 }}>Wk {p.week}</span>
+                              <span style={{ fontSize: 11, color: 'var(--ink-soft)', marginLeft: 8 }}>Wk {p.week}</span>
                             </div>
-                            <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
-                              Your pick: <span style={{ color: 'var(--white)' }}>{formatSpread(p.predicted_spread)}</span>
+                            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
+                              Your pick: <span style={{ color: 'var(--ink)' }}>{formatSpread(p.predicted_spread)}</span>
                               {g?.actual_spread !== null && g?.actual_spread !== undefined && (
-                                <> · Actual: <span style={{ color: 'var(--white)' }}>{formatSpread(g.actual_spread)}</span></>
+                                <> · Actual: <span style={{ color: 'var(--ink)' }}>{formatSpread(g.actual_spread)}</span></>
                               )}
                             </div>
                           </div>
                           <div style={{ textAlign: 'right', flexShrink: 0 }}>
                             {diff !== null ? (
                               <>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--green)' : diff <= 3 ? 'var(--amber)' : 'var(--red)' }}>Δ {diff.toFixed(1)}</div>
-                                <div style={{ fontSize: 11, color: 'var(--slate)', marginTop: 2 }}>×{p.confidence_points}</div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>Δ {diff.toFixed(1)}</div>
+                                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 2 }}>×{p.confidence_points}</div>
                               </>
                             ) : (
-                              <span className="badge badge-lime" style={{ fontSize: 10 }}>PENDING</span>
+                              <span className="badge badge-lime" style={{ fontSize: 10 }}>Pending</span>
                             )}
                           </div>
                         </div>

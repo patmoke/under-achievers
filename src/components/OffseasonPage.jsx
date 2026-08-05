@@ -7,8 +7,8 @@ import toast from 'react-hot-toast';
 const CURRENT_SEASON = 2026;
 
 const CATEGORY_LABELS = {
-  win_total: { label: 'WIN TOTALS', emoji: '🏈', desc: 'Predict how many regular season games each team wins in 2026' },
-  draft: { label: '2026 NFL DRAFT', emoji: '📋', desc: 'Predict draft day outcomes before the picks are in' },
+  win_total: { label: 'Win Totals', desc: 'Predict how many regular season games each team wins in 2026' },
+  draft: { label: '2026 NFL Draft', desc: 'Predict draft day outcomes before the picks are in' },
 };
 
 const AFC_EAST = ['Buffalo Bills', 'Miami Dolphins', 'New York Jets', 'New England Patriots'];
@@ -21,14 +21,14 @@ const NFC_SOUTH = ['Tampa Bay Buccaneers', 'Atlanta Falcons', 'New Orleans Saint
 const NFC_WEST = ['Los Angeles Rams', 'Seattle Seahawks', 'San Francisco 49ers', 'Arizona Cardinals'];
 
 const DIVISION_ORDER = [
-  { name: 'AFC EAST', teams: AFC_EAST },
-  { name: 'AFC NORTH', teams: AFC_NORTH },
-  { name: 'AFC SOUTH', teams: AFC_SOUTH },
-  { name: 'AFC WEST', teams: AFC_WEST },
-  { name: 'NFC EAST', teams: NFC_EAST },
-  { name: 'NFC NORTH', teams: NFC_NORTH },
-  { name: 'NFC SOUTH', teams: NFC_SOUTH },
-  { name: 'NFC WEST', teams: NFC_WEST },
+  { name: 'AFC East', teams: AFC_EAST },
+  { name: 'AFC North', teams: AFC_NORTH },
+  { name: 'AFC South', teams: AFC_SOUTH },
+  { name: 'AFC West', teams: AFC_WEST },
+  { name: 'NFC East', teams: NFC_EAST },
+  { name: 'NFC North', teams: NFC_NORTH },
+  { name: 'NFC South', teams: NFC_SOUTH },
+  { name: 'NFC West', teams: NFC_WEST },
 ];
 
 export default function OffseasonPage() {
@@ -129,49 +129,45 @@ export default function OffseasonPage() {
   return (
     <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 20px' }}>
       {/* Header */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>
-          🏖️ NFL OFFSEASON · 2026 SEASON PREVIEW
-        </div>
-        <h1 style={{ fontSize: 42 }}>
-          OFFSEASON <span style={{ color: 'var(--lime)' }}>PROPS</span>
-        </h1>
-        <p style={{ color: 'var(--slate)', marginTop: 8, fontSize: 15 }}>
+      <div style={{ marginBottom: 28 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>NFL Offseason · 2026 Season Preview</div>
+        <h1 style={{ fontSize: 34, textTransform: 'none' }}>Offseason props</h1>
+        <p style={{ color: 'var(--ink-soft)', marginTop: 8, fontSize: 15 }}>
           {CATEGORY_LABELS[activeTab]?.desc}
         </p>
       </div>
 
       {/* Summary Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 32 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 28 }}>
         {[
-          { label: 'TOTAL PROPS', value: filteredProps.length, icon: <Zap size={16} />, color: 'var(--lime)' },
-          { label: 'YOUR PICKS', value: totalSaved, icon: <CheckCircle size={16} />, color: 'var(--green)' },
-          { label: 'REMAINING', value: unlocked.length - picksMade, icon: <Trophy size={16} />, color: 'var(--gold)' },
+          { label: 'Total props', value: filteredProps.length, icon: <Zap size={16} />, color: 'var(--accent)' },
+          { label: 'Your picks', value: totalSaved, icon: <CheckCircle size={16} />, color: 'var(--success)' },
+          { label: 'Remaining', value: unlocked.length - picksMade, icon: <Trophy size={16} />, color: 'var(--gold)' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ color: s.color }}>{s.icon}</div>
             <div>
-              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 28, color: s.color, lineHeight: 1 }}>{s.value}</div>
-              <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginTop: 2 }}>{s.label}</div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 26, color: s.color, lineHeight: 1 }}>{s.value}</div>
+              <div className="label-muted" style={{ marginTop: 2 }}>{s.label}</div>
             </div>
           </div>
         ))}
       </div>
 
       {/* Category Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 32, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
         {Object.entries(CATEGORY_LABELS).map(([key, val]) => (
           <button key={key} onClick={() => setActiveTab(key)} style={{
             background: 'none', border: 'none',
-            borderBottom: activeTab === key ? '2px solid var(--lime)' : '2px solid transparent',
-            color: activeTab === key ? 'var(--lime)' : 'var(--slate)',
-            fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
-            letterSpacing: '0.08em', padding: '12px 24px',
+            borderBottom: activeTab === key ? '2px solid var(--accent)' : '2px solid transparent',
+            color: activeTab === key ? 'var(--accent)' : 'var(--ink-soft)',
+            fontWeight: 700, fontSize: 15,
+            padding: '10px 20px',
             cursor: 'pointer', marginBottom: -1, transition: 'all 0.15s'
           }}>
-            {val.emoji} {val.label}
+            {val.label}
             {key === activeTab && (
-              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--slate)' }}>
+              <span style={{ marginLeft: 8, fontSize: 11, color: 'var(--ink-faint)' }}>
                 ({totalSaved}/{filteredProps.length} picked)
               </span>
             )}
@@ -193,10 +189,10 @@ export default function OffseasonPage() {
             return (
               <div key={div.name} className="card" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{
-                  padding: '12px 20px', background: 'rgba(192,255,0,0.05)',
+                  padding: '12px 20px', background: 'var(--accent-soft)',
                   borderBottom: '1px solid var(--border)',
                   fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16,
-                  letterSpacing: '0.08em', color: 'var(--lime)'
+                  color: 'var(--accent-dark)'
                 }}>
                   {div.name}
                 </div>
@@ -219,12 +215,12 @@ export default function OffseasonPage() {
         // Draft props - single list
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           <div style={{
-            padding: '12px 20px', background: 'rgba(192,255,0,0.05)',
+            padding: '12px 20px', background: 'var(--accent-soft)',
             borderBottom: '1px solid var(--border)',
             fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16,
-            letterSpacing: '0.08em', color: 'var(--lime)'
+            color: 'var(--accent-dark)'
           }}>
-            📋 2026 NFL DRAFT PROPS · April 23, 2026
+            2026 NFL Draft props · April 23, 2026
           </div>
           {filteredProps.map((prop, idx) => (
             <PropRow
@@ -245,15 +241,16 @@ export default function OffseasonPage() {
       {unlocked.length > 0 && (
         <div style={{
           position: 'sticky', bottom: 0, marginTop: 24,
-          background: 'var(--navy-card)', borderTop: '1px solid var(--border)',
+          background: 'var(--surface)', borderTop: '1px solid var(--border)', borderRadius: 'var(--radius)',
+          boxShadow: 'var(--shadow-card-hover)',
           padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           flexWrap: 'wrap', gap: 12
         }}>
           <div>
-            <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--lime)' }}>{picksMade}</span>
-            <span style={{ color: 'var(--slate)', fontSize: 15 }}> / {unlocked.length} picks entered</span>
+            <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>{picksMade}</span>
+            <span style={{ color: 'var(--ink-soft)', fontSize: 15 }}> / {unlocked.length} picks entered</span>
             {totalSaved > 0 && (
-              <span style={{ marginLeft: 16, fontSize: 13, color: 'var(--green)' }}>
+              <span style={{ marginLeft: 16, fontSize: 13, color: 'var(--success)' }}>
                 <CheckCircle size={12} style={{ display: 'inline', marginRight: 4 }} />
                 {totalSaved} saved
               </span>
@@ -265,7 +262,7 @@ export default function OffseasonPage() {
             disabled={submitting || picksMade === 0}
             style={{ display: 'flex', alignItems: 'center', gap: 8 }}
           >
-            <Save size={16} /> {submitting ? 'SAVING...' : 'LOCK IN PICKS'}
+            <Save size={16} /> {submitting ? 'Saving…' : 'Lock in picks'}
           </button>
         </div>
       )}
@@ -284,7 +281,7 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
       borderBottom: isLast ? 'none' : '1px solid var(--border)',
       display: 'flex', justifyContent: 'space-between', alignItems: 'center',
       gap: 16, flexWrap: 'wrap',
-      background: saved && !isLocked ? 'rgba(16,185,129,0.03)' : 'transparent'
+      background: saved && !isLocked ? 'rgba(15,122,77,0.03)' : 'transparent'
     }}>
       {/* Label */}
       <div style={{ flex: 1, minWidth: 140 }}>
@@ -317,7 +314,7 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
       {isLocked ? (
         <div style={{ textAlign: 'right', flexShrink: 0 }}>
           <div className="badge badge-red" style={{ marginBottom: 6 }}>
-            <Lock size={10} style={{ marginRight: 4 }} /> LOCKED
+            <Lock size={10} style={{ marginRight: 4 }} /> Locked
           </div>
           {hasResult && saved ? (
             <div style={{ fontSize: 13 }}>
@@ -342,20 +339,23 @@ function PropRow({ prop, value, saved, onChange, isLast, label, showFullDesc }) 
             type="number"
             step="0.5"
             placeholder="e.g. 9.5"
+            aria-label={`Prediction for ${label}`}
             value={value || ''}
             onChange={e => onChange(e.target.value)}
             style={{ width: 90, padding: '8px 12px', fontSize: 17, fontFamily: 'Barlow Condensed', fontWeight: 700, textAlign: 'center' }}
           />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <button
+              aria-label={`Increase ${label} prediction`}
               onClick={() => onChange(String((parseFloat(value || 0) + 0.5).toFixed(1)))}
-              style={{ background: 'var(--border)', border: 'none', color: 'var(--white)', cursor: 'pointer', padding: '3px 7px' }}
+              style={{ background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--ink)', cursor: 'pointer', padding: '3px 7px' }}
             >
               <ChevronUp size={12} />
             </button>
             <button
+              aria-label={`Decrease ${label} prediction`}
               onClick={() => onChange(String((parseFloat(value || 0) - 0.5).toFixed(1)))}
-              style={{ background: 'var(--border)', border: 'none', color: 'var(--white)', cursor: 'pointer', padding: '3px 7px' }}
+              style={{ background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 4, color: 'var(--ink)', cursor: 'pointer', padding: '3px 7px' }}
             >
               <ChevronDown size={12} />
             </button>

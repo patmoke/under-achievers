@@ -117,26 +117,24 @@ export default function FeedPage() {
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>
-          SOCIAL
-        </div>
-        <h1 style={{ fontSize: 42 }}>PICK <span style={{ color: 'var(--lime)' }}>FEED</span></h1>
+      <div style={{ marginBottom: 28 }}>
+        <div className="eyebrow" style={{ marginBottom: 6 }}>Social</div>
+        <h1 style={{ fontSize: 34, textTransform: 'none' }}>Pick feed</h1>
       </div>
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
         {[
-          { key: 'feed', label: 'FEED', icon: <Rss size={14} /> },
-          { key: 'following', label: `FOLLOWING (${following.length})`, icon: <Users size={14} /> },
-          { key: 'discover', label: 'DISCOVER', icon: <Search size={14} /> },
+          { key: 'feed', label: 'Feed', icon: <Rss size={14} /> },
+          { key: 'following', label: `Following (${following.length})`, icon: <Users size={14} /> },
+          { key: 'discover', label: 'Discover', icon: <Search size={14} /> },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             background: 'none', border: 'none',
-            borderBottom: tab === t.key ? '2px solid var(--lime)' : '2px solid transparent',
-            color: tab === t.key ? 'var(--lime)' : 'var(--slate)',
-            fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-            letterSpacing: '0.08em', padding: '12px 20px',
+            borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
+            color: tab === t.key ? 'var(--accent)' : 'var(--ink-soft)',
+            fontWeight: 700, fontSize: 14,
+            padding: '10px 18px',
             cursor: 'pointer', marginBottom: -1, transition: 'all 0.15s',
             display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap',
           }}>{t.icon} {t.label}</button>
@@ -148,11 +146,11 @@ export default function FeedPage() {
         <div>
           {following.length === 0 ? (
             <div className="card" style={{ padding: 56, textAlign: 'center' }}>
-              <Rss size={48} style={{ color: 'var(--slate)', marginBottom: 16 }} />
-              <h3 style={{ fontSize: 24, marginBottom: 8 }}>YOUR FEED IS EMPTY</h3>
-              <p style={{ color: 'var(--slate)', marginBottom: 20 }}>Follow other pickers to see their locked picks here.</p>
+              <Rss size={36} style={{ color: 'var(--ink-faint)', marginBottom: 16 }} />
+              <h3 style={{ fontSize: 22, marginBottom: 8, textTransform: 'none' }}>Your feed is empty</h3>
+              <p style={{ color: 'var(--ink-soft)', marginBottom: 20 }}>Follow other pickers to see their locked picks here.</p>
               <button className="btn btn-primary" onClick={() => setTab('discover')}>
-                <Search size={14} /> FIND PEOPLE TO FOLLOW
+                <Search size={14} /> Find people to follow
               </button>
             </div>
           ) : loading ? (
@@ -161,7 +159,7 @@ export default function FeedPage() {
             </div>
           ) : feedItems.length === 0 ? (
             <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-              <p style={{ color: 'var(--slate)' }}>No locked picks from people you follow yet. Check back once games kick off!</p>
+              <p style={{ color: 'var(--ink-soft)' }}>No locked picks from people you follow yet. Check back once games kick off!</p>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
@@ -178,10 +176,10 @@ export default function FeedPage() {
         <div>
           {following.length === 0 ? (
             <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-              <Users size={48} style={{ color: 'var(--slate)', marginBottom: 16 }} />
-              <h3 style={{ fontSize: 22, marginBottom: 8 }}>NOT FOLLOWING ANYONE YET</h3>
-              <p style={{ color: 'var(--slate)', marginBottom: 20 }}>Head to Discover to find people to follow.</p>
-              <button className="btn btn-primary" onClick={() => setTab('discover')}><Search size={14} /> DISCOVER</button>
+              <Users size={36} style={{ color: 'var(--ink-faint)', marginBottom: 16 }} />
+              <h3 style={{ fontSize: 21, marginBottom: 8, textTransform: 'none' }}>Not following anyone yet</h3>
+              <p style={{ color: 'var(--ink-soft)', marginBottom: 20 }}>Head to Discover to find people to follow.</p>
+              <button className="btn btn-primary" onClick={() => setTab('discover')}><Search size={14} /> Discover</button>
             </div>
           ) : (
             <div style={{ display: 'grid', gap: 10 }}>
@@ -218,7 +216,7 @@ export default function FeedPage() {
             </div>
           )}
           {!searching && searchQuery.length >= 2 && searchResults.length === 0 && (
-            <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--slate)' }}>
+            <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>
               No users found for "{searchQuery}"
             </div>
           )}
@@ -237,7 +235,7 @@ export default function FeedPage() {
             </div>
           )}
           {searchQuery.length < 2 && (
-            <div style={{ textAlign: 'center', color: 'var(--slate)', fontSize: 14, padding: 32 }}>
+            <div style={{ textAlign: 'center', color: 'var(--ink-soft)', fontSize: 14, padding: 32 }}>
               Type at least 2 characters to search
             </div>
           )}
@@ -255,38 +253,38 @@ function FeedCard({ item, onProfileClick }) {
     const g = item.games;
     const diff = g?.actual_spread !== null && g?.actual_spread !== undefined
       ? Math.abs(item.predicted_spread - g.actual_spread) : null;
-    const diffColor = diff === null ? 'var(--slate)' : diff <= 1 ? 'var(--green)' : diff <= 3 ? 'var(--amber)' : 'var(--red)';
+    const diffColor = diff === null ? 'var(--ink-soft)' : diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)';
 
     return (
       <div className="card" style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-        <button onClick={() => onProfileClick(item.user_id)} style={{
-          width: 38, height: 38, background: 'var(--border)', border: 'none', cursor: 'pointer',
+        <button onClick={() => onProfileClick(item.user_id)} aria-label={`View ${username}'s profile`} style={{
+          width: 36, height: 36, borderRadius: '50%', background: 'var(--surface-alt)', border: '1px solid var(--border)', cursor: 'pointer',
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16, color: 'var(--white)',
+          fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15, color: 'var(--ink)',
         }}>{initial}</button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
             <div>
               <button onClick={() => onProfileClick(item.user_id)} style={{
-                background: 'none', border: 'none', color: 'var(--lime)', fontWeight: 700,
+                background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700,
                 fontSize: 14, cursor: 'pointer', padding: 0, fontFamily: 'DM Sans',
               }}>{username}</button>
-              <span style={{ color: 'var(--slate)', fontSize: 13 }}> picked </span>
+              <span style={{ color: 'var(--ink-soft)', fontSize: 13 }}> picked </span>
               <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16 }}>
                 {g ? `${g.away_team_abbr} @ ${g.home_team_abbr}` : 'game'}
               </span>
-              <span style={{ fontSize: 12, color: 'var(--slate)', marginLeft: 8 }}>Wk {item.week}</span>
+              <span style={{ fontSize: 12, color: 'var(--ink-soft)', marginLeft: 8 }}>Wk {item.week}</span>
             </div>
             {diff !== null && (
               <span style={{ fontSize: 13, fontWeight: 700, color: diffColor, flexShrink: 0 }}>Δ{diff.toFixed(1)}</span>
             )}
           </div>
           <div style={{ marginTop: 6, display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
-            <span style={{ color: 'var(--slate)' }}>Spread: <strong style={{ color: 'var(--white)' }}>{formatSpread(item.predicted_spread)}</strong></span>
+            <span style={{ color: 'var(--ink-soft)' }}>Spread: <strong style={{ color: 'var(--ink)' }}>{formatSpread(item.predicted_spread)}</strong></span>
             {g?.actual_spread !== null && g?.actual_spread !== undefined && (
-              <span style={{ color: 'var(--slate)' }}>Actual: <strong style={{ color: 'var(--white)' }}>{formatSpread(g.actual_spread)}</strong></span>
+              <span style={{ color: 'var(--ink-soft)' }}>Actual: <strong style={{ color: 'var(--ink)' }}>{formatSpread(g.actual_spread)}</strong></span>
             )}
-            <span style={{ color: 'var(--slate)' }}>Conf: <strong style={{ color: 'var(--white)' }}>×{item.confidence_points}</strong></span>
+            <span style={{ color: 'var(--ink-soft)' }}>Conf: <strong style={{ color: 'var(--ink)' }}>×{item.confidence_points}</strong></span>
           </div>
         </div>
       </div>
@@ -300,28 +298,28 @@ function FeedCard({ item, onProfileClick }) {
   const vegasDiff = prop?.line !== null && prop?.line !== undefined
     ? Math.abs(item.predicted_value - Number(prop.line)) : null;
   const displayDiff = diff ?? vegasDiff;
-  const diffColor = displayDiff === null ? 'var(--slate)' : displayDiff <= 1 ? 'var(--green)' : displayDiff <= 3 ? 'var(--amber)' : 'var(--red)';
+  const diffColor = displayDiff === null ? 'var(--ink-soft)' : displayDiff <= 1 ? 'var(--success)' : displayDiff <= 3 ? 'var(--warning)' : 'var(--danger)';
 
   return (
     <div className="card" style={{ padding: 16, display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-      <button onClick={() => onProfileClick(item.user_id)} style={{
-        width: 38, height: 38, background: 'var(--border)', border: 'none', cursor: 'pointer',
+      <button onClick={() => onProfileClick(item.user_id)} aria-label={`View ${username}'s profile`} style={{
+        width: 36, height: 36, borderRadius: '50%', background: 'var(--surface-alt)', border: '1px solid var(--border)', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16, color: 'var(--white)',
+        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15, color: 'var(--ink)',
       }}>{initial}</button>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
           <div>
             <button onClick={() => onProfileClick(item.user_id)} style={{
-              background: 'none', border: 'none', color: 'var(--lime)', fontWeight: 700,
+              background: 'none', border: 'none', color: 'var(--accent)', fontWeight: 700,
               fontSize: 14, cursor: 'pointer', padding: 0, fontFamily: 'DM Sans',
             }}>{username}</button>
-            <span style={{ color: 'var(--slate)', fontSize: 13 }}> picked </span>
+            <span style={{ color: 'var(--ink-soft)', fontSize: 13 }}> picked </span>
             <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 15 }}>
               {prop?.team || prop?.description || 'offseason prop'}
             </span>
-            <span style={{ fontSize: 11, color: 'var(--lime)', marginLeft: 8, fontFamily: 'Barlow Condensed' }}>
-              {prop?.category === 'win_total' ? 'WIN TOTAL' : 'DRAFT'}
+            <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 8, fontFamily: 'Barlow Condensed' }}>
+              {prop?.category === 'win_total' ? 'Win total' : 'Draft'}
             </span>
           </div>
           {displayDiff !== null && (
@@ -329,10 +327,10 @@ function FeedCard({ item, onProfileClick }) {
           )}
         </div>
         <div style={{ marginTop: 6, display: 'flex', gap: 16, fontSize: 13, flexWrap: 'wrap' }}>
-          <span style={{ color: 'var(--slate)' }}>Pick: <strong style={{ color: 'var(--white)' }}>{item.predicted_value}</strong></span>
-          <span style={{ color: 'var(--slate)' }}>Vegas: <strong style={{ color: 'var(--white)' }}>{prop?.line}</strong></span>
+          <span style={{ color: 'var(--ink-soft)' }}>Pick: <strong style={{ color: 'var(--ink)' }}>{item.predicted_value}</strong></span>
+          <span style={{ color: 'var(--ink-soft)' }}>Vegas: <strong style={{ color: 'var(--ink)' }}>{prop?.line}</strong></span>
           {prop?.actual_result !== null && prop?.actual_result !== undefined && (
-            <span style={{ color: 'var(--slate)' }}>Result: <strong style={{ color: 'var(--lime)' }}>{prop.actual_result}</strong></span>
+            <span style={{ color: 'var(--ink-soft)' }}>Result: <strong style={{ color: 'var(--accent)' }}>{prop.actual_result}</strong></span>
           )}
         </div>
       </div>
@@ -343,25 +341,25 @@ function FeedCard({ item, onProfileClick }) {
 function UserCard({ profile, isFollowing, onFollow, onUnfollow, onClick }) {
   return (
     <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 14 }}>
-      <button onClick={onClick} style={{
-        width: 44, height: 44, background: 'var(--border)', border: 'none', cursor: 'pointer',
+      <button onClick={onClick} aria-label={`View ${profile.username}'s profile`} style={{
+        width: 42, height: 42, borderRadius: '50%', background: 'var(--surface-alt)', border: '1px solid var(--border)', cursor: 'pointer',
         display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, color: 'var(--white)',
+        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--ink)',
       }}>
         {profile.username?.[0]?.toUpperCase()}
       </button>
-      <div style={{ flex: 1, minWidth: 0 }} onClick={onClick} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17 }}>
+      <div onClick={onClick} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
+        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
           {profile.display_name || profile.username}
         </div>
-        <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 1 }}>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 1 }}>
           @{profile.username}
-          {profile.favorite_team && <span style={{ marginLeft: 10 }}>🏈 {profile.favorite_team}</span>}
+          {profile.favorite_team && <span style={{ marginLeft: 10 }}>{profile.favorite_team}</span>}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', flexShrink: 0 }}>
-        <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--slate)' }}>
-          <div style={{ color: 'var(--lime)', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>{profile.total_points || 0} pts</div>
+        <div style={{ textAlign: 'right', fontSize: 12, color: 'var(--ink-soft)' }}>
+          <div style={{ color: 'var(--accent)', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>{profile.total_points || 0} pts</div>
           <div>{profile.follower_count || 0} followers</div>
         </div>
         <button
@@ -369,7 +367,7 @@ function UserCard({ profile, isFollowing, onFollow, onUnfollow, onClick }) {
           className={isFollowing ? 'btn btn-secondary' : 'btn btn-primary'}
           style={{ padding: '8px 16px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
         >
-          {isFollowing ? 'UNFOLLOW' : <><UserPlus size={13} /> FOLLOW</>}
+          {isFollowing ? 'Unfollow' : <><UserPlus size={13} /> Follow</>}
         </button>
       </div>
     </div>

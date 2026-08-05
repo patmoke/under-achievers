@@ -21,7 +21,7 @@ function ProtectedLayout({ children }) {
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/" replace />;
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--navy)' }} className="bg-grid">
+    <div style={{ minHeight: '100vh', background: 'var(--paper)' }}>
       <Navigation />
       {children}
       <Footer />
@@ -31,12 +31,12 @@ function ProtectedLayout({ children }) {
 
 function LoadingScreen() {
   return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--navy)' }}>
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--paper)' }}>
       <div style={{ textAlign: 'center' }}>
-        <div className="pulse-lime" style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 28, color: 'var(--lime)', letterSpacing: '0.05em' }}>
-          UNDER ACHIEVERS
+        <div className="pulse-lime" style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 26, color: 'var(--ink)', letterSpacing: '0.01em' }}>
+          Under Achievers
         </div>
-        <div style={{ color: 'var(--slate)', marginTop: 8, fontSize: 13 }}>Loading...</div>
+        <div style={{ color: 'var(--ink-soft)', marginTop: 8, fontSize: 13 }}>Loading…</div>
       </div>
     </div>
   );
@@ -72,13 +72,15 @@ export default function App() {
           position="top-right"
           toastOptions={{
             style: {
-              background: '#1a2744',
+              background: '#16181c',
               color: '#ffffff',
-              border: '1px solid #2d3748',
+              border: '1px solid #2d3038',
+              borderRadius: 8,
               fontFamily: 'DM Sans, sans-serif',
               fontSize: 14,
+              boxShadow: '0 4px 20px rgba(22,24,28,0.25)',
             },
-            success: { iconTheme: { primary: '#c0ff00', secondary: '#0a1128' } },
+            success: { iconTheme: { primary: '#3ddc91', secondary: '#16181c' } },
             error: { iconTheme: { primary: '#ef4444', secondary: '#ffffff' } },
           }}
         />

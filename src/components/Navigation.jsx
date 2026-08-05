@@ -12,13 +12,12 @@ export default function Navigation() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const navItems = [
-    { path: '/games', label: 'THIS WEEK', icon: <Calendar size={16} /> },
-    { path: '/offseason', label: 'OFFSEASON', icon: <Umbrella size={16} /> },
-    { path: '/leagues', label: 'LEAGUES', icon: <Trophy size={16} /> },
-    { path: '/feed', label: 'FEED', icon: <Rss size={16} /> },
-    { path: '/leaderboard', label: 'LEADERBOARD', icon: <BarChart2 size={16} /> },
-    { path: '/profile', label: 'MY PROFILE', icon: <User size={16} /> },
-    { path: '/history', label: 'HISTORY', icon: <History size={16} /> },
+    { path: '/games', label: 'This Week', icon: <Calendar size={16} /> },
+    { path: '/offseason', label: 'Offseason', icon: <Umbrella size={16} /> },
+    { path: '/leagues', label: 'Leagues', icon: <Trophy size={16} /> },
+    { path: '/feed', label: 'Feed', icon: <Rss size={16} /> },
+    { path: '/leaderboard', label: 'Leaderboard', icon: <BarChart2 size={16} /> },
+    { path: '/history', label: 'History', icon: <History size={16} /> },
   ];
 
   async function handleSignOut() {
@@ -30,7 +29,7 @@ export default function Navigation() {
   return (
     <>
       <nav style={{
-        background: 'var(--navy-light)',
+        background: 'var(--surface)',
         borderBottom: '1px solid var(--border)',
         position: 'sticky', top: 0, zIndex: 100
       }}>
@@ -41,7 +40,7 @@ export default function Navigation() {
 
           {/* Logo */}
           <button onClick={() => navigate('/games')} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
-            <span className="gradient-hero-text" style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 20, letterSpacing: '0.05em' }}>
+            <span className="gradient-hero-text" style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 20, letterSpacing: '0.02em' }}>
               UNDER ACHIEVERS
             </span>
           </button>
@@ -52,15 +51,15 @@ export default function Navigation() {
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
+                aria-current={location.pathname === item.path ? 'page' : undefined}
                 style={{
-                  background: location.pathname === item.path ? 'var(--lime-dim)' : 'none',
-                  border: 'none', cursor: 'pointer',
-                  color: location.pathname === item.path ? 'var(--lime)' : 'var(--slate)',
-                  fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 13,
-                  letterSpacing: '0.06em', padding: '8px 10px',
-                  display: 'flex', alignItems: 'center', gap: 5,
+                  background: location.pathname === item.path ? 'var(--accent-soft)' : 'none',
+                  border: 'none', cursor: 'pointer', borderRadius: 'var(--radius-sm)',
+                  color: location.pathname === item.path ? 'var(--accent)' : 'var(--ink-soft)',
+                  fontWeight: 600, fontSize: 13.5,
+                  padding: '8px 12px',
+                  display: 'flex', alignItems: 'center', gap: 6,
                   transition: 'all 0.15s',
-                  borderBottom: location.pathname === item.path ? '2px solid var(--lime)' : '2px solid transparent',
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -73,17 +72,20 @@ export default function Navigation() {
           <div className="desktop-user" style={{ position: 'relative', flexShrink: 0 }}>
             <button
               onClick={() => setDropdownOpen(!dropdownOpen)}
+              aria-haspopup="menu"
+              aria-expanded={dropdownOpen}
+              aria-label="Account menu"
               style={{
-                background: 'rgba(26,39,68,0.8)', border: '1px solid var(--border)',
-                color: 'var(--white)', cursor: 'pointer', padding: '8px 12px',
+                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 999,
+                color: 'var(--ink)', cursor: 'pointer', padding: '6px 12px 6px 6px',
                 display: 'flex', alignItems: 'center', gap: 8,
                 fontFamily: 'DM Sans', fontSize: 14
               }}
             >
               <div style={{
-                width: 28, height: 28, background: 'var(--lime)',
+                width: 26, height: 26, background: 'var(--accent)', borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14, color: 'var(--navy)',
+                fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 13, color: 'var(--accent-ink)',
                 flexShrink: 0,
               }}>
                 {profile?.username?.[0]?.toUpperCase() || '?'}
@@ -91,43 +93,43 @@ export default function Navigation() {
               <span style={{ maxWidth: 90, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {profile?.username || 'User'}
               </span>
-              <ChevronDown size={14} style={{ color: 'var(--slate)' }} />
+              <ChevronDown size={14} style={{ color: 'var(--ink-faint)' }} />
             </button>
 
             {dropdownOpen && (
-              <div style={{
-                position: 'absolute', right: 0, top: '100%', marginTop: 4,
-                background: 'var(--navy-card)', border: '1px solid var(--border)',
-                minWidth: 180, zIndex: 200
+              <div role="menu" style={{
+                position: 'absolute', right: 0, top: '100%', marginTop: 8,
+                background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 'var(--radius)',
+                minWidth: 190, zIndex: 200, overflow: 'hidden', boxShadow: 'var(--shadow-card-hover)'
               }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.display_name || profile?.username}</div>
-                  <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>{profile?.total_points || 0} total points</div>
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>{profile?.total_points || 0} total points</div>
                 </div>
                 {profile?.is_admin && (
-                  <button onClick={() => { navigate('/admin'); setDropdownOpen(false); }} style={{
-                    width: '100%', padding: '12px 16px', background: 'none', border: 'none',
-                    color: 'var(--lime)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
+                  <button role="menuitem" onClick={() => { navigate('/admin'); setDropdownOpen(false); }} style={{
+                    width: '100%', padding: '11px 16px', background: 'none', border: 'none',
+                    color: 'var(--accent)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
                     display: 'flex', alignItems: 'center', gap: 10,
                     borderBottom: '1px solid var(--border)'
                   }}>
-                    <Shield size={14} /> Admin Dashboard
+                    <Shield size={14} /> Admin dashboard
                   </button>
                 )}
-                <button onClick={() => { navigate('/profile'); setDropdownOpen(false); }} style={{
-                  width: '100%', padding: '12px 16px', background: 'none', border: 'none',
-                  color: 'var(--white)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
+                <button role="menuitem" onClick={() => { navigate('/profile'); setDropdownOpen(false); }} style={{
+                  width: '100%', padding: '11px 16px', background: 'none', border: 'none',
+                  color: 'var(--ink)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
                   display: 'flex', alignItems: 'center', gap: 10
                 }}>
-                  <User size={14} /> My Profile
+                  <User size={14} /> My profile
                 </button>
-                <button onClick={handleSignOut} style={{
-                  width: '100%', padding: '12px 16px', background: 'none', border: 'none',
-                  color: 'var(--red)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
+                <button role="menuitem" onClick={handleSignOut} style={{
+                  width: '100%', padding: '11px 16px', background: 'none', border: 'none',
+                  color: 'var(--danger)', cursor: 'pointer', textAlign: 'left', fontSize: 14,
                   display: 'flex', alignItems: 'center', gap: 10,
                   borderTop: '1px solid var(--border)'
                 }}>
-                  <LogOut size={14} /> Sign Out
+                  <LogOut size={14} /> Sign out
                 </button>
               </div>
             )}
@@ -137,8 +139,10 @@ export default function Navigation() {
           <button
             className="mobile-menu-btn"
             onClick={() => setMobileOpen(!mobileOpen)}
+            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileOpen}
             style={{
-              background: 'none', border: 'none', color: 'var(--white)',
+              background: 'none', border: 'none', color: 'var(--ink)',
               cursor: 'pointer', padding: 8, display: 'none',
               flexShrink: 0, marginLeft: 'auto',
             }}
@@ -149,19 +153,19 @@ export default function Navigation() {
 
         {/* Mobile Nav Drawer */}
         {mobileOpen && (
-          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--navy-light)' }}>
+          <div style={{ borderTop: '1px solid var(--border)', background: 'var(--surface)' }}>
             {/* User info header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', alignItems: 'center', gap: 12 }}>
               <div style={{
-                width: 36, height: 36, background: 'var(--lime)', flexShrink: 0,
+                width: 36, height: 36, background: 'var(--accent)', flexShrink: 0, borderRadius: '50%',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16, color: 'var(--navy)'
+                fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16, color: 'var(--accent-ink)'
               }}>
                 {profile?.username?.[0]?.toUpperCase() || '?'}
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{profile?.display_name || profile?.username}</div>
-                <div style={{ fontSize: 12, color: 'var(--slate)' }}>{profile?.total_points || 0} pts</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{profile?.total_points || 0} pts</div>
               </div>
             </div>
 
@@ -170,13 +174,14 @@ export default function Navigation() {
               <button
                 key={item.path}
                 onClick={() => { navigate(item.path); setMobileOpen(false); }}
+                aria-current={location.pathname === item.path ? 'page' : undefined}
                 style={{
                   display: 'flex', alignItems: 'center', gap: 14, width: '100%',
-                  background: location.pathname === item.path ? 'rgba(192,255,0,0.06)' : 'none',
+                  background: location.pathname === item.path ? 'var(--accent-soft)' : 'none',
                   border: 'none',
-                  borderLeft: location.pathname === item.path ? '3px solid var(--lime)' : '3px solid transparent',
-                  color: location.pathname === item.path ? 'var(--lime)' : 'var(--white)',
-                  fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, letterSpacing: '0.08em',
+                  borderLeft: location.pathname === item.path ? '3px solid var(--accent)' : '3px solid transparent',
+                  color: location.pathname === item.path ? 'var(--accent)' : 'var(--ink)',
+                  fontWeight: 600, fontSize: 15,
                   padding: '14px 20px', cursor: 'pointer',
                   borderBottom: '1px solid var(--border)',
                 }}
@@ -190,22 +195,31 @@ export default function Navigation() {
               <button onClick={() => { navigate('/admin'); setMobileOpen(false); }} style={{
                 display: 'flex', alignItems: 'center', gap: 14, width: '100%',
                 background: 'none', border: 'none', borderLeft: '3px solid transparent',
-                color: 'var(--lime)', fontFamily: 'Barlow Condensed', fontWeight: 700,
-                fontSize: 17, letterSpacing: '0.08em', padding: '14px 20px', cursor: 'pointer',
+                color: 'var(--accent)', fontWeight: 600,
+                fontSize: 15, padding: '14px 20px', cursor: 'pointer',
                 borderBottom: '1px solid var(--border)',
               }}>
-                <Shield size={16} /> ADMIN
+                <Shield size={16} /> Admin
               </button>
             )}
 
-            {/* Sign out */}
+            {/* My profile + sign out */}
+            <button onClick={() => { navigate('/profile'); setMobileOpen(false); }} style={{
+              display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+              background: 'none', border: 'none', borderLeft: '3px solid transparent',
+              color: 'var(--ink)', fontWeight: 600,
+              fontSize: 15, padding: '14px 20px', cursor: 'pointer',
+              borderBottom: '1px solid var(--border)',
+            }}>
+              <User size={16} /> My profile
+            </button>
             <button onClick={() => { handleSignOut(); setMobileOpen(false); }} style={{
               display: 'flex', alignItems: 'center', gap: 14, width: '100%',
               background: 'none', border: 'none', borderLeft: '3px solid transparent',
-              color: 'var(--red)', fontFamily: 'Barlow Condensed', fontWeight: 700,
-              fontSize: 17, letterSpacing: '0.08em', padding: '14px 20px', cursor: 'pointer',
+              color: 'var(--danger)', fontWeight: 600,
+              fontSize: 15, padding: '14px 20px', cursor: 'pointer',
             }}>
-              <LogOut size={16} /> SIGN OUT
+              <LogOut size={16} /> Sign out
             </button>
           </div>
         )}

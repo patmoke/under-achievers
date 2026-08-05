@@ -40,9 +40,9 @@ export function calculatePoints(userPick, actualSpread, confidence = 1) {
 }
 
 export function getAccuracyColor(difference) {
-  if (difference <= 1) return '#10b981';
-  if (difference <= 3) return '#f59e0b';
-  return '#ef4444';
+  if (difference <= 1) return '#0f7a4d';
+  if (difference <= 3) return '#b8720b';
+  return '#c8322c';
 }
 
 export function formatSpread(spread) {

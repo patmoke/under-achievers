@@ -125,13 +125,13 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       {/* YOUR ENTRIES */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h3 style={{ fontSize: 22 }}>YOUR ENTRIES</h3>
+          <h3 style={{ fontSize: 20, textTransform: 'none' }}>Your entries</h3>
           <button className="btn btn-secondary" onClick={addEntry} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13 }}>
-            <Plus size={14} /> ADD ENTRY
+            <Plus size={14} /> Add entry
           </button>
         </div>
         {myEntries.length === 0 ? (
-          <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--slate)' }}>
+          <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>
             No entries yet. Add one to start picking.
           </div>
         ) : (
@@ -144,30 +144,30 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               const used = usedTeams(entry);
 
               return (
-                <div key={entry.id} className="card" style={{ padding: 20, borderLeft: `3px solid ${status === 'alive' ? 'var(--lime)' : 'var(--red)'}` }}>
+                <div key={entry.id} className="card" style={{ padding: 20, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                    <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 18 }}>
-                      {myEntries.length > 1 ? `ENTRY #${entry.entry_number}` : 'YOUR PICK'}
+                    <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
+                      {myEntries.length > 1 ? `Entry #${entry.entry_number}` : 'Your pick'}
                     </div>
                     <span className={status === 'alive' ? 'badge badge-lime' : 'badge badge-red'}>
-                      {status === 'alive' ? 'ALIVE' : 'ELIMINATED'}
+                      {status === 'alive' ? 'Alive' : 'Eliminated'}
                     </span>
                   </div>
 
                   {status === 'eliminated' ? (
-                    <div style={{ fontSize: 13, color: 'var(--slate)' }}>
-                      Out since Week {outWeek}. {isOwner ? 'You can reactivate below.' : 'Waiting on the commissioner...'}
+                    <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
+                      Out since Week {outWeek}. {isOwner ? 'You can reactivate below.' : 'Waiting on the commissioner…'}
                     </div>
                   ) : thisWeekPick && locked ? (
                     <div style={{ fontSize: 14 }}>
-                      <span style={{ color: 'var(--slate)' }}>This week: </span>
-                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 18 }}>{thisWeekPick.team_abbr}</strong>
-                      <span className="badge badge-red" style={{ marginLeft: 10 }}><Lock size={9} style={{ marginRight: 4 }} />LOCKED</span>
+                      <span style={{ color: 'var(--ink-soft)' }}>This week: </span>
+                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 17 }}>{thisWeekPick.team_abbr}</strong>
+                      <span className="badge badge-red" style={{ marginLeft: 10 }}><Lock size={9} style={{ marginRight: 4 }} />Locked</span>
                     </div>
                   ) : (
                     <div>
-                      <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 10 }}>
-                        PICK A TEAM TO WIN — WEEK {currentWeek}
+                      <div className="label-muted" style={{ marginBottom: 10 }}>
+                        Pick a team to win — Week {currentWeek}
                       </div>
                       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                         {weekGames.filter(g => !isGameLocked(g)).flatMap(g => [
@@ -181,15 +181,16 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                               key={abbr}
                               disabled={isUsed || submitting[entry.id]}
                               onClick={() => submitPick(entry.id, game, abbr)}
-                              title={name}
+                              title={isUsed ? `${name} — already used` : name}
                               style={{
                                 padding: '10px 16px',
-                                background: isSelected ? 'var(--lime)' : isUsed ? 'rgba(255,255,255,0.02)' : 'var(--navy)',
-                                border: `1px solid ${isSelected ? 'var(--lime)' : 'var(--border)'}`,
-                                color: isSelected ? 'var(--navy)' : isUsed ? 'var(--slate)' : 'var(--white)',
+                                borderRadius: 'var(--radius-sm)',
+                                background: isSelected ? 'var(--accent)' : isUsed ? 'var(--surface-alt)' : 'var(--surface)',
+                                border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border-strong)'}`,
+                                color: isSelected ? 'var(--accent-ink)' : isUsed ? 'var(--ink-faint)' : 'var(--ink)',
                                 fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
                                 cursor: isUsed ? 'not-allowed' : 'pointer',
-                                opacity: isUsed ? 0.4 : 1,
+                                opacity: isUsed ? 0.6 : 1,
                                 textDecoration: isUsed ? 'line-through' : 'none',
                               }}
                             >
@@ -199,7 +200,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         })}
                       </div>
                       {weekGames.filter(g => !isGameLocked(g)).length === 0 && (
-                        <div style={{ fontSize: 13, color: 'var(--slate)', fontStyle: 'italic' }}>All of this week's games have started.</div>
+                        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>All of this week's games have started.</div>
                       )}
                     </div>
                   )}
@@ -212,7 +213,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
       {/* STANDINGS */}
       <div>
-        <h3 style={{ fontSize: 22, marginBottom: 16 }}>STANDINGS</h3>
+        <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none' }}>Standings</h3>
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {sorted.map((entry, idx) => {
             const isMe = entry.user_id === currentUserId;
@@ -225,40 +226,40 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               <div key={entry.id} style={{
                 padding: '14px 20px', borderBottom: idx === sorted.length - 1 ? 'none' : '1px solid var(--border)',
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                background: isMe ? 'rgba(192,255,0,0.04)' : entry.status === 'eliminated' ? 'rgba(239,68,68,0.02)' : 'transparent',
-                opacity: entry.status === 'eliminated' ? 0.7 : 1,
+                background: isMe ? 'var(--accent-soft)' : entry.status === 'eliminated' ? 'rgba(200,50,44,0.03)' : 'transparent',
+                opacity: entry.status === 'eliminated' ? 0.75 : 1,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {isChampion && <Trophy size={18} style={{ color: 'var(--gold)' }} />}
+                  {isChampion && <Trophy size={18} style={{ color: 'var(--gold)' }} aria-label="Champion" />}
                   <div>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: isMe ? 'var(--lime)' : 'var(--white)' }}>
+                    <div style={{ fontWeight: 600, fontSize: 15, color: isMe ? 'var(--accent-dark)' : 'var(--ink)' }}>
                       {entry.profiles?.username}
                       {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
-                        <span style={{ color: 'var(--slate)', fontSize: 12 }}> #{entry.entry_number}</span>
+                        <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}> #{entry.entry_number}</span>
                       )}
-                      {isMe && <span style={{ fontSize: 11, color: 'var(--lime)', marginLeft: 6 }}>(you)</span>}
+                      {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
                     </div>
                     {entry.status === 'eliminated' && (
-                      <div style={{ fontSize: 12, color: 'var(--slate)' }}>Out — Week {entry.week}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Out — Week {entry.week}</div>
                     )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <div style={{ textAlign: 'right', fontSize: 13 }}>
                     {canSeePick && thisWeekPick ? (
-                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 16 }}>{thisWeekPick.team_abbr}</strong>
+                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 15 }}>{thisWeekPick.team_abbr}</strong>
                     ) : thisWeekPick ? (
-                      <span style={{ color: 'var(--slate)', display: 'flex', alignItems: 'center', gap: 4 }}><EyeOff size={11} /> hidden</span>
+                      <span style={{ color: 'var(--ink-faint)', display: 'flex', alignItems: 'center', gap: 4 }}><EyeOff size={11} /> hidden</span>
                     ) : (
-                      <span style={{ color: 'var(--slate)' }}>—</span>
+                      <span style={{ color: 'var(--ink-faint)' }}>—</span>
                     )}
                   </div>
                   <span className={entry.status === 'alive' ? 'badge badge-lime' : 'badge badge-red'} style={{ fontSize: 10 }}>
-                    {entry.status === 'alive' ? 'ALIVE' : 'OUT'}
+                    {entry.status === 'alive' ? 'Alive' : 'Out'}
                   </span>
                   {isOwner && entry.status === 'eliminated' && (
                     <button onClick={() => reactivate(entry.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <RotateCcw size={12} /> REVIVE
+                      <RotateCcw size={12} /> Revive
                     </button>
                   )}
                 </div>

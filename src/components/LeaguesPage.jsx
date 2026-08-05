@@ -2,11 +2,22 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Search, Lock, Globe, Users, ChevronRight, Copy, Check, X } from 'lucide-react';
+import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Umbrella, Layers, Skull, Key, Trophy } from 'lucide-react';
 import toast from 'react-hot-toast';
 
+const LEAGUE_TYPES = [
+  { val: 'weekly', label: 'Weekly Picks', desc: 'Predict NFL spreads every week', icon: Calendar },
+  { val: 'offseason', label: 'Offseason Props', desc: 'Win totals, draft props & more', icon: Umbrella },
+  { val: 'both', label: 'Weekly + Offseason', desc: 'Compete on both', icon: Layers },
+  { val: 'survivor', label: 'Survivor Pool', desc: 'Pick a winner each week — lose and you’re out', icon: Skull },
+];
+
+function leagueTypeInfo(competeOn) {
+  return LEAGUE_TYPES.find(t => t.val === competeOn) || LEAGUE_TYPES[2];
+}
+
 export default function LeaguesPage() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [myLeagues, setMyLeagues] = useState([]);
   const [publicLeagues, setPublicLeagues] = useState([]);
@@ -21,7 +32,7 @@ export default function LeaguesPage() {
     name: '',
     description: '',
     is_public: false,
-    compete_on: 'both',
+    compete_on: 'weekly',
     max_members: 20,
   });
   const [creating, setCreating] = useState(false);
@@ -100,9 +111,18 @@ export default function LeaguesPage() {
         role: 'owner',
       });
 
+      // Survivor pools auto-create the owner's first entry
+      if (form.compete_on === 'survivor') {
+        await supabase.from('survivor_entries').insert({
+          league_id: league.id,
+          user_id: user.id,
+          entry_number: 1,
+        });
+      }
+
       toast.success('League created!');
       setShowCreate(false);
-      setForm({ name: '', description: '', is_public: false, compete_on: 'both', max_members: 20 });
+      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_members: 20 });
       navigate(`/leagues/${league.id}`);
     } catch (err) {
       toast.error(err.message);
@@ -141,6 +161,13 @@ export default function LeaguesPage() {
         if (joinError.code === '23505') toast.error('You\'re already in this league');
         else throw joinError;
       } else {
+        if (league.compete_on === 'survivor') {
+          await supabase.from('survivor_entries').insert({
+            league_id: league.id,
+            user_id: user.id,
+            entry_number: 1,
+          });
+        }
         toast.success(`Joined "${league.name}"!`);
         setJoinCode('');
         navigate(`/leagues/${league.id}`);
@@ -161,6 +188,13 @@ export default function LeaguesPage() {
         role: 'member',
       });
       if (error) throw error;
+      if (league.compete_on === 'survivor') {
+        await supabase.from('survivor_entries').insert({
+          league_id: league.id,
+          user_id: user.id,
+          entry_number: 1,
+        });
+      }
       toast.success(`Joined "${league.name}"!`);
       navigate(`/leagues/${league.id}`);
     } catch (err) {
@@ -173,61 +207,81 @@ export default function LeaguesPage() {
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 32, flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 28, flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--lime)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>
-            COMPETE WITH FRIENDS
-          </div>
-          <h1 style={{ fontSize: 42 }}>MY <span style={{ color: 'var(--lime)' }}>LEAGUES</span></h1>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>Compete with friends</div>
+          <h1 style={{ fontSize: 34, textTransform: 'none' }}>My leagues</h1>
         </div>
         <button className="btn btn-primary" onClick={() => setShowCreate(!showCreate)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Plus size={16} /> CREATE LEAGUE
+          <Plus size={16} /> Create league
         </button>
       </div>
 
       {/* Create League Form */}
       {showCreate && (
-        <div className="card" style={{ padding: 28, marginBottom: 28, borderColor: 'rgba(192,255,0,0.3)' }}>
+        <div className="card" style={{ padding: 28, marginBottom: 24 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <h3 style={{ fontSize: 22 }}>CREATE A LEAGUE</h3>
-            <button onClick={() => setShowCreate(false)} style={{ background: 'none', border: 'none', color: 'var(--slate)', cursor: 'pointer' }}>
+            <h3 style={{ fontSize: 20, textTransform: 'none' }}>Create a league</h3>
+            <button onClick={() => setShowCreate(false)} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer' }}>
               <X size={20} />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
+
+          <div style={{ marginBottom: 20 }}>
+            <label className="label-muted" style={{ display: 'block', marginBottom: 10 }}>League type</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 10 }}>
+              {LEAGUE_TYPES.map(t => {
+                const Icon = t.icon;
+                const selected = form.compete_on === t.val;
+                return (
+                  <button key={t.val} onClick={() => setForm(f => ({ ...f, compete_on: t.val }))} style={{
+                    padding: '14px 16px', border: `1px solid ${selected ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    background: selected ? 'var(--accent-soft)' : 'var(--surface)',
+                    color: selected ? 'var(--accent-dark)' : 'var(--ink)',
+                    cursor: 'pointer', textAlign: 'left', display: 'flex', gap: 10, alignItems: 'flex-start',
+                  }}>
+                    <Icon size={18} style={{ marginTop: 2, flexShrink: 0 }} />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14 }}>{t.label}</div>
+                      <div style={{ fontSize: 12, color: selected ? 'var(--accent-dark)' : 'var(--ink-soft)', marginTop: 2 }}>{t.desc}</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>LEAGUE NAME *</label>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>League name *</label>
               <input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="e.g. The Degens" maxLength={50} />
             </div>
             <div style={{ gridColumn: '1 / -1' }}>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>DESCRIPTION (optional)</label>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Description (optional)</label>
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What's this league about?" maxLength={200} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>COMPETE ON</label>
-              <select value={form.compete_on} onChange={e => setForm(f => ({ ...f, compete_on: e.target.value }))}>
-                <option value="both">Both (Weekly + Offseason)</option>
-                <option value="weekly">Weekly NFL Picks Only</option>
-                <option value="offseason">Offseason Props Only</option>
-              </select>
-            </div>
-            <div>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>MAX MEMBERS</label>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max members</label>
               <input type="number" min={2} max={100} value={form.max_members} onChange={e => setForm(f => ({ ...f, max_members: parseInt(e.target.value) }))} />
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 12 }}>VISIBILITY</label>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 12 }}>Visibility</label>
               <div style={{ display: 'flex', gap: 8 }}>
-                {[{ val: false, label: '🔒 Private', desc: 'Join by code only' }, { val: true, label: '🌐 Public', desc: 'Anyone can find & join' }].map(opt => (
+                {[{ val: false, label: 'Private', icon: Lock, desc: 'Join by code only' }, { val: true, label: 'Public', icon: Globe, desc: 'Anyone can find & join' }].map(opt => (
                   <button key={String(opt.val)} onClick={() => setForm(f => ({ ...f, is_public: opt.val }))} style={{
-                    flex: 1, padding: '10px 12px', border: `1px solid ${form.is_public === opt.val ? 'var(--lime)' : 'var(--border)'}`,
-                    background: form.is_public === opt.val ? 'var(--lime-dim)' : 'transparent',
-                    color: form.is_public === opt.val ? 'var(--lime)' : 'var(--slate)',
-                    cursor: 'pointer', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-                    textAlign: 'left'
+                    flex: 1, padding: '10px 12px', border: `1px solid ${form.is_public === opt.val ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    background: form.is_public === opt.val ? 'var(--accent-soft)' : 'transparent',
+                    color: form.is_public === opt.val ? 'var(--accent-dark)' : 'var(--ink-soft)',
+                    cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                    textAlign: 'left', display: 'flex', alignItems: 'center', gap: 8
                   }}>
-                    <div>{opt.label}</div>
-                    <div style={{ fontSize: 11, fontWeight: 400, marginTop: 2, opacity: 0.7 }}>{opt.desc}</div>
+                    <opt.icon size={14} />
+                    <div>
+                      <div>{opt.label}</div>
+                      <div style={{ fontSize: 11, fontWeight: 400, marginTop: 1, opacity: 0.8 }}>{opt.desc}</div>
+                    </div>
                   </button>
                 ))}
               </div>
@@ -235,40 +289,41 @@ export default function LeaguesPage() {
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <button className="btn btn-primary" onClick={createLeague} disabled={creating} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={16} /> {creating ? 'CREATING...' : 'CREATE LEAGUE'}
+              <Plus size={16} /> {creating ? 'Creating…' : 'Create league'}
             </button>
-            <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>CANCEL</button>
+            <button className="btn btn-secondary" onClick={() => setShowCreate(false)}>Cancel</button>
           </div>
         </div>
       )}
 
       {/* Join by Code */}
-      <div className="card" style={{ padding: 20, marginBottom: 28, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 13, color: 'var(--slate)', fontFamily: 'Barlow Condensed', fontWeight: 700, letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>
-          🔑 JOIN BY CODE:
+      <div className="card" style={{ padding: 18, marginBottom: 24, display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontWeight: 700, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Key size={14} /> Join by code
         </div>
         <input
           value={joinCode}
           onChange={e => setJoinCode(e.target.value.toUpperCase())}
           placeholder="Enter 6-digit code (e.g. AB12CD)"
           maxLength={6}
-          style={{ flex: 1, minWidth: 180, padding: '10px 14px', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18, letterSpacing: '0.15em' }}
+          aria-label="League join code"
+          style={{ flex: 1, minWidth: 180, padding: '10px 14px', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, letterSpacing: '0.08em' }}
           onKeyDown={e => e.key === 'Enter' && joinLeague()}
         />
         <button className="btn btn-primary" onClick={joinLeague} disabled={joining || !joinCode.trim()} style={{ whiteSpace: 'nowrap' }}>
-          {joining ? 'JOINING...' : 'JOIN LEAGUE'}
+          {joining ? 'Joining…' : 'Join league'}
         </button>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)' }}>
-        {[{ key: 'my', label: `MY LEAGUES (${myLeagues.length})` }, { key: 'public', label: `BROWSE PUBLIC (${publicLeagues.length})` }].map(t => (
+      <div style={{ display: 'flex', gap: 4, marginBottom: 20, borderBottom: '1px solid var(--border)' }}>
+        {[{ key: 'my', label: `My leagues (${myLeagues.length})` }, { key: 'public', label: `Browse public (${publicLeagues.length})` }].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             background: 'none', border: 'none',
-            borderBottom: tab === t.key ? '2px solid var(--lime)' : '2px solid transparent',
-            color: tab === t.key ? 'var(--lime)' : 'var(--slate)',
-            fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
-            letterSpacing: '0.08em', padding: '12px 24px',
+            borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
+            color: tab === t.key ? 'var(--accent)' : 'var(--ink-soft)',
+            fontWeight: 700, fontSize: 14,
+            padding: '10px 18px',
             cursor: 'pointer', marginBottom: -1, transition: 'all 0.15s'
           }}>{t.label}</button>
         ))}
@@ -282,9 +337,9 @@ export default function LeaguesPage() {
       ) : tab === 'my' ? (
         myLeagues.length === 0 ? (
           <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-            <div style={{ fontSize: 48, marginBottom: 16 }}>🏆</div>
-            <h3 style={{ fontSize: 24, marginBottom: 8 }}>NO LEAGUES YET</h3>
-            <p style={{ color: 'var(--slate)' }}>Create a league or join one with a code to compete with friends.</p>
+            <Trophy size={36} style={{ color: 'var(--ink-faint)', marginBottom: 16 }} />
+            <h3 style={{ fontSize: 21, marginBottom: 8, textTransform: 'none' }}>No leagues yet</h3>
+            <p style={{ color: 'var(--ink-soft)' }}>Create a league or join one with a code to compete with friends.</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
@@ -296,9 +351,9 @@ export default function LeaguesPage() {
       ) : (
         publicLeagues.length === 0 ? (
           <div className="card" style={{ padding: 48, textAlign: 'center' }}>
-            <Globe size={48} style={{ color: 'var(--slate)', marginBottom: 16 }} />
-            <h3 style={{ fontSize: 24, marginBottom: 8 }}>NO PUBLIC LEAGUES</h3>
-            <p style={{ color: 'var(--slate)' }}>Be the first to create a public league!</p>
+            <Globe size={36} style={{ color: 'var(--ink-faint)', marginBottom: 16 }} />
+            <h3 style={{ fontSize: 21, marginBottom: 8, textTransform: 'none' }}>No public leagues</h3>
+            <p style={{ color: 'var(--ink-soft)' }}>Be the first to create a public league!</p>
           </div>
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
@@ -316,6 +371,8 @@ function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) 
   const [copied, setCopied] = useState(false);
   const memberCount = league.league_members?.[0]?.count || 0;
   const isOwner = league.created_by === userId;
+  const typeInfo = leagueTypeInfo(league.compete_on);
+  const TypeIcon = typeInfo.icon;
 
   function copyCode(e) {
     e.stopPropagation();
@@ -325,24 +382,22 @@ function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) 
     toast.success('Join code copied!');
   }
 
-  const competeLabel = league.compete_on === 'both' ? 'Weekly + Offseason' : league.compete_on === 'weekly' ? 'Weekly Picks' : 'Offseason Props';
-
   return (
-    <div className="card" style={{ padding: 20, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}
+    <div className="card" style={{ padding: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}
       onClick={onClick}>
       <div style={{ flex: 1, minWidth: 200 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <h3 style={{ fontSize: 20, fontFamily: 'Barlow Condensed', fontWeight: 800 }}>{league.name}</h3>
+          <h3 style={{ fontSize: 19, fontWeight: 800, textTransform: 'none' }}>{league.name}</h3>
           {league.is_public
-            ? <span className="badge badge-lime"><Globe size={9} style={{ marginRight: 3 }} />PUBLIC</span>
-            : <span className="badge" style={{ background: 'rgba(148,163,184,0.1)', color: 'var(--slate)', border: '1px solid var(--border)' }}><Lock size={9} style={{ marginRight: 3 }} />PRIVATE</span>
+            ? <span className="badge badge-lime"><Globe size={9} style={{ marginRight: 3 }} />Public</span>
+            : <span className="badge" style={{ background: 'var(--surface-alt)', color: 'var(--ink-soft)', border: '1px solid var(--border)' }}><Lock size={9} style={{ marginRight: 3 }} />Private</span>
           }
-          {isOwner && <span className="badge badge-gold">OWNER</span>}
+          {isOwner && <span className="badge badge-gold">Owner</span>}
         </div>
-        {league.description && <p style={{ fontSize: 13, color: 'var(--slate)', marginBottom: 6 }}>{league.description}</p>}
-        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--slate)' }}>
-          <span><Users size={11} style={{ display: 'inline', marginRight: 3 }} />{memberCount} / {league.max_members} members</span>
-          <span>🏈 {competeLabel}</span>
+        {league.description && <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 6 }}>{league.description}</p>}
+        <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--ink-soft)', flexWrap: 'wrap' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Users size={11} />{memberCount} / {league.max_members} members</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><TypeIcon size={11} />{typeInfo.label}</span>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
@@ -354,10 +409,10 @@ function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) 
         )}
         {onJoin && (
           <button onClick={e => { e.stopPropagation(); onJoin(); }} className="btn btn-primary" disabled={joining} style={{ padding: '8px 16px' }}>
-            JOIN
+            Join
           </button>
         )}
-        <ChevronRight size={18} style={{ color: 'var(--slate)' }} />
+        <ChevronRight size={18} style={{ color: 'var(--ink-faint)' }} />
       </div>
     </div>
   );

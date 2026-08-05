@@ -180,44 +180,44 @@ export default function AdminPage() {
   if (!profile.is_admin) return null;
 
   const TABS = [
-    { key: 'offseason', label: '🏖️ OFFSEASON PROPS', count: offseasonProps.length },
-    { key: 'games', label: '🏈 GAMES', count: games.length },
-    { key: 'users', label: '👥 USERS', count: users.length },
+    { key: 'offseason', label: 'Offseason props', count: offseasonProps.length },
+    { key: 'games', label: 'Games', count: games.length },
+    { key: 'users', label: 'Users', count: users.length },
   ];
 
   return (
     <div style={{ maxWidth: 1100, margin: '0 auto', padding: '32px 20px' }}>
       {/* Header */}
-      <div style={{ marginBottom: 32, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
+      <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
         <div>
-          <div style={{ fontSize: 12, color: 'var(--red)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>
-            🔐 ADMIN ONLY · {profile.email}
+          <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--danger)' }}>
+            Admin only · {profile.email}
           </div>
-          <h1 style={{ fontSize: 42 }}>ADMIN <span style={{ color: 'var(--lime)' }}>DASHBOARD</span></h1>
+          <h1 style={{ fontSize: 34, textTransform: 'none' }}>Admin dashboard</h1>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           {activeTab === 'offseason' && (
             <button className="btn btn-primary" onClick={() => setShowAddProp(!showAddProp)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={16} /> ADD PROP
+              <Plus size={16} /> Add prop
             </button>
           )}
           {activeTab === 'games' && (
             <button className="btn btn-primary" onClick={() => setShowAddGame(!showAddGame)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={16} /> ADD GAME
+              <Plus size={16} /> Add game
             </button>
           )}
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: 32, borderBottom: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', gap: 0, marginBottom: 28, borderBottom: '1px solid var(--border)' }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)} style={{
             background: 'none', border: 'none',
-            borderBottom: activeTab === t.key ? '2px solid var(--lime)' : '2px solid transparent',
-            color: activeTab === t.key ? 'var(--lime)' : 'var(--slate)',
-            fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
-            letterSpacing: '0.08em', padding: '12px 24px',
+            borderBottom: activeTab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
+            color: activeTab === t.key ? 'var(--accent)' : 'var(--ink-soft)',
+            fontWeight: 700, fontSize: 14,
+            padding: '10px 20px',
             cursor: 'pointer', marginBottom: -1, transition: 'all 0.15s'
           }}>
             {t.label}
@@ -247,9 +247,9 @@ export default function AdminPage() {
                 const catProps = offseasonProps.filter(p => p.category === cat);
                 if (catProps.length === 0) return null;
                 return (
-                  <div key={cat} style={{ marginBottom: 32 }}>
-                    <h3 style={{ fontSize: 20, marginBottom: 12, color: 'var(--lime)' }}>
-                      {cat === 'win_total' ? '🏈 WIN TOTALS' : '📋 DRAFT PROPS'}
+                  <div key={cat} style={{ marginBottom: 28 }}>
+                    <h3 style={{ fontSize: 18, marginBottom: 12, color: 'var(--accent)', textTransform: 'none' }}>
+                      {cat === 'win_total' ? 'Win totals' : 'Draft props'}
                     </h3>
                     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
                       {catProps.map((prop, idx) => (
@@ -283,7 +283,7 @@ export default function AdminPage() {
                 />
               )}
               {games.length === 0 ? (
-                <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--slate)' }}>
+                <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--ink-soft)' }}>
                   No games yet. Add the first game above.
                 </div>
               ) : (
@@ -306,9 +306,9 @@ export default function AdminPage() {
           {/* ── USERS ── */}
           {activeTab === 'users' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr', gap: 12 }}>
-                {['USERNAME', 'EMAIL', 'PICKS', 'POINTS', 'ADMIN'].map(h => (
-                  <div key={h} style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em' }}>{h}</div>
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr', gap: 12 }}>
+                {['Username', 'Email', 'Picks', 'Points', 'Admin'].map(h => (
+                  <div key={h} className="label-muted">{h}</div>
                 ))}
               </div>
               {users.map((u, idx) => (
@@ -319,12 +319,12 @@ export default function AdminPage() {
                 }}>
                   <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
                     {u.username}
-                    {u.is_admin && <span className="badge badge-lime" style={{ marginLeft: 8 }}>ADMIN</span>}
+                    {u.is_admin && <span className="badge badge-lime" style={{ marginLeft: 8 }}>Admin</span>}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--slate)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
                   <div style={{ fontSize: 14 }}>{u.total_predictions || 0}</div>
-                  <div style={{ fontSize: 14, color: 'var(--lime)', fontFamily: 'Barlow Condensed', fontWeight: 700 }}>{u.total_points || 0}</div>
-                  <div style={{ fontSize: 13, color: u.is_admin ? 'var(--green)' : 'var(--slate)' }}>
+                  <div style={{ fontSize: 14, color: 'var(--accent)', fontFamily: 'Barlow Condensed', fontWeight: 700 }}>{u.total_points || 0}</div>
+                  <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
                     {u.is_admin ? '✓ Admin' : '—'}
                   </div>
                 </div>
@@ -348,7 +348,7 @@ function PropAdminRow({ prop, isLast, saving, onToggleLock, onSaveResult, onDele
       <div style={{
         padding: '14px 20px', display: 'flex', justifyContent: 'space-between',
         alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        background: prop.is_locked ? 'rgba(239,68,68,0.03)' : 'transparent'
+        background: prop.is_locked ? 'rgba(200,50,44,0.03)' : 'transparent'
       }}>
         <div style={{ flex: 1, minWidth: 200 }}>
           <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
@@ -366,10 +366,10 @@ function PropAdminRow({ prop, isLast, saving, onToggleLock, onSaveResult, onDele
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           <div className={prop.is_locked ? 'badge badge-red' : 'badge badge-lime'}>
-            {prop.is_locked ? <><Lock size={10} style={{ marginRight: 4 }} />LOCKED</> : <><Unlock size={10} style={{ marginRight: 4 }} />OPEN</>}
+            {prop.is_locked ? <><Lock size={10} style={{ marginRight: 4 }} />Locked</> : <><Unlock size={10} style={{ marginRight: 4 }} />Open</>}
           </div>
           <button onClick={onToggleLock} disabled={saving[prop.id]} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
-            {saving[prop.id] ? '...' : prop.is_locked ? 'UNLOCK' : 'LOCK'}
+            {saving[prop.id] ? '...' : prop.is_locked ? 'Unlock' : 'Lock'}
           </button>
           <button onClick={() => setExpanded(!expanded)} className="btn btn-secondary" style={{ padding: '6px 10px' }}>
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -381,8 +381,8 @@ function PropAdminRow({ prop, isLast, saving, onToggleLock, onSaveResult, onDele
       </div>
 
       {expanded && (
-        <div style={{ padding: '12px 20px 16px', background: 'rgba(192,255,0,0.03)', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div style={{ fontSize: 12, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', whiteSpace: 'nowrap' }}>SET ACTUAL RESULT:</div>
+        <div style={{ padding: '12px 20px 16px', background: 'rgba(15,122,77,0.03)', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div className="label-muted" style={{ whiteSpace: 'nowrap' }}>Set actual result:</div>
           <input
             type="number"
             step="0.5"
@@ -397,9 +397,9 @@ function PropAdminRow({ prop, isLast, saving, onToggleLock, onSaveResult, onDele
             disabled={saving[`result_${prop.id}`]}
             style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <Check size={14} /> {saving[`result_${prop.id}`] ? 'SAVING...' : 'SAVE & LOCK'}
+            <Check size={14} /> {saving[`result_${prop.id}`] ? 'Saving…' : 'Save & lock'}
           </button>
-          <span style={{ fontSize: 12, color: 'var(--slate)' }}>This will lock the prop and record the result for scoring.</span>
+          <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>This will lock the prop and record the result for scoring.</span>
         </div>
       )}
     </div>
@@ -417,7 +417,7 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
       <div style={{
         padding: '14px 20px', display: 'flex', justifyContent: 'space-between',
         alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        background: game.is_locked ? 'rgba(239,68,68,0.03)' : 'transparent'
+        background: game.is_locked ? 'rgba(200,50,44,0.03)' : 'transparent'
       }}>
         <div style={{ flex: 1 }}>
           <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18 }}>
@@ -431,11 +431,11 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
           <div className={game.is_locked ? 'badge badge-red' : 'badge badge-lime'}>
-            {game.is_locked ? <><Lock size={10} style={{ marginRight: 4 }} />LOCKED</> : <><Unlock size={10} style={{ marginRight: 4 }} />OPEN</>}
+            {game.is_locked ? <><Lock size={10} style={{ marginRight: 4 }} />Locked</> : <><Unlock size={10} style={{ marginRight: 4 }} />Open</>}
           </div>
-          <span className={`badge ${game.status === 'final' ? 'badge-green' : 'badge-gold'}`} style={{ textTransform: 'uppercase' }}>{game.status}</span>
+          <span className={`badge ${game.status === 'final' ? 'badge-green' : 'badge-gold'}`}>{game.status}</span>
           <button onClick={onToggleLock} disabled={saving[game.id]} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
-            {saving[game.id] ? '...' : game.is_locked ? 'UNLOCK' : 'LOCK'}
+            {saving[game.id] ? '...' : game.is_locked ? 'Unlock' : 'Lock'}
           </button>
           <button onClick={() => setExpanded(!expanded)} className="btn btn-secondary" style={{ padding: '6px 10px' }}>
             {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
@@ -444,23 +444,23 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
       </div>
 
       {expanded && (
-        <div style={{ padding: '12px 20px 16px', background: 'rgba(192,255,0,0.03)', borderTop: '1px solid var(--border)' }}>
+        <div style={{ padding: '12px 20px 16px', background: 'rgba(15,122,77,0.03)', borderTop: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end', flexWrap: 'wrap' }}>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 6 }}>
-                {game.away_team_abbr} SCORE
+              <div className="label-muted" style={{ marginBottom: 6 }}>
+                {game.away_team_abbr} score
               </div>
               <input type="number" value={awayScore} onChange={e => setAwayScore(e.target.value)} placeholder="0" style={{ width: 80, padding: '8px 12px', fontSize: 15 }} />
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 6 }}>
-                {game.home_team_abbr} SCORE
+              <div className="label-muted" style={{ marginBottom: 6 }}>
+                {game.home_team_abbr} score
               </div>
               <input type="number" value={homeScore} onChange={e => setHomeScore(e.target.value)} placeholder="0" style={{ width: 80, padding: '8px 12px', fontSize: 15 }} />
             </div>
             <div>
-              <div style={{ fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.08em', marginBottom: 6 }}>
-                ACTUAL SPREAD (home perspective)
+              <div className="label-muted" style={{ marginBottom: 6 }}>
+                Actual spread (home perspective)
               </div>
               <input type="number" step="0.5" value={spread} onChange={e => setSpread(e.target.value)} placeholder="-3.5" style={{ width: 100, padding: '8px 12px', fontSize: 15 }} />
             </div>
@@ -470,7 +470,7 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
               disabled={saving[`score_${game.id}`]}
               style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
             >
-              <Save size={14} /> {saving[`score_${game.id}`] ? 'SAVING...' : 'SAVE RESULT'}
+              <Save size={14} /> {saving[`score_${game.id}`] ? 'Saving…' : 'Save result'}
             </button>
           </div>
         </div>
@@ -481,11 +481,11 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
 
 function AddPropForm({ prop, onChange, onSave, onCancel }) {
   return (
-    <div className="card" style={{ padding: 24, marginBottom: 24, borderColor: 'rgba(192,255,0,0.3)' }}>
-      <h3 style={{ fontSize: 20, marginBottom: 20 }}>ADD NEW PROP</h3>
+    <div className="card" style={{ padding: 24, marginBottom: 24, borderColor: 'rgba(15,122,77,0.3)' }}>
+      <h3 style={{ fontSize: 19, marginBottom: 20, textTransform: 'none' }}>Add new prop</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>CATEGORY</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>CATEGORY</label>
           <select value={prop.category} onChange={e => onChange(p => ({ ...p, category: e.target.value }))}>
             <option value="win_total">Win Total</option>
             <option value="draft">Draft Prop</option>
@@ -493,7 +493,7 @@ function AddPropForm({ prop, onChange, onSave, onCancel }) {
         </div>
         {prop.category === 'win_total' && (
           <div>
-            <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>TEAM</label>
+            <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>TEAM</label>
             <select value={prop.team} onChange={e => onChange(p => ({ ...p, team: e.target.value, description: `${e.target.value} ${CURRENT_SEASON} regular season wins` }))}>
               <option value="">Select team...</option>
               {NFL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
@@ -501,23 +501,23 @@ function AddPropForm({ prop, onChange, onSave, onCancel }) {
           </div>
         )}
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>VEGAS LINE</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>VEGAS LINE</label>
           <input type="number" step="0.5" placeholder="11.5" value={prop.line} onChange={e => onChange(p => ({ ...p, line: e.target.value }))} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>LOCKS AT</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>LOCKS AT</label>
           <input type="datetime-local" value={prop.closes_at} onChange={e => onChange(p => ({ ...p, closes_at: e.target.value }))} />
         </div>
       </div>
       <div style={{ marginBottom: 16 }}>
-        <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>DESCRIPTION</label>
+        <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>DESCRIPTION</label>
         <input value={prop.description} onChange={e => onChange(p => ({ ...p, description: e.target.value }))} placeholder="e.g. Kansas City Chiefs 2026 regular season wins" />
       </div>
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="btn btn-primary" onClick={onSave} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Plus size={16} /> ADD PROP
+          <Plus size={16} /> Add prop
         </button>
-        <button className="btn btn-secondary" onClick={onCancel}>CANCEL</button>
+        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
@@ -525,15 +525,15 @@ function AddPropForm({ prop, onChange, onSave, onCancel }) {
 
 function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
   return (
-    <div className="card" style={{ padding: 24, marginBottom: 24, borderColor: 'rgba(192,255,0,0.3)' }}>
-      <h3 style={{ fontSize: 20, marginBottom: 20 }}>ADD NEW GAME</h3>
+    <div className="card" style={{ padding: 24, marginBottom: 24, borderColor: 'rgba(15,122,77,0.3)' }}>
+      <h3 style={{ fontSize: 19, marginBottom: 20, textTransform: 'none' }}>Add new game</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>WEEK</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>WEEK</label>
           <input type="number" min="1" max="22" placeholder="1" value={game.week} onChange={e => onChange(g => ({ ...g, week: e.target.value }))} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>AWAY TEAM</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>AWAY TEAM</label>
           <select value={game.away_team} onChange={e => {
             const abbr = e.target.value.split(' ').pop().substring(0, 3).toUpperCase();
             onChange(g => ({ ...g, away_team: e.target.value, away_team_abbr: abbr }));
@@ -543,11 +543,11 @@ function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>AWAY ABBR</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>AWAY ABBR</label>
           <input placeholder="BUF" maxLength={3} value={game.away_team_abbr} onChange={e => onChange(g => ({ ...g, away_team_abbr: e.target.value.toUpperCase() }))} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>HOME TEAM</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>HOME TEAM</label>
           <select value={game.home_team} onChange={e => {
             const abbr = e.target.value.split(' ').pop().substring(0, 3).toUpperCase();
             onChange(g => ({ ...g, home_team: e.target.value, home_team_abbr: abbr }));
@@ -557,19 +557,19 @@ function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
           </select>
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>HOME ABBR</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>HOME ABBR</label>
           <input placeholder="KC" maxLength={3} value={game.home_team_abbr} onChange={e => onChange(g => ({ ...g, home_team_abbr: e.target.value.toUpperCase() }))} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>GAME TIME</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>GAME TIME</label>
           <input type="datetime-local" value={game.game_time} onChange={e => onChange(g => ({ ...g, game_time: e.target.value }))} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>SPREAD (optional)</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>SPREAD (optional)</label>
           <input type="number" step="0.5" placeholder="-3.5" value={game.actual_spread} onChange={e => onChange(g => ({ ...g, actual_spread: e.target.value }))} />
         </div>
         <div>
-          <label style={{ display: 'block', fontSize: 11, color: 'var(--slate)', fontFamily: 'Barlow Condensed', letterSpacing: '0.1em', marginBottom: 6 }}>BOOKMAKER</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>BOOKMAKER</label>
           <select value={game.bookmaker} onChange={e => onChange(g => ({ ...g, bookmaker: e.target.value }))}>
             <option value="DraftKings">DraftKings</option>
             <option value="FanDuel">FanDuel</option>
@@ -580,9 +580,9 @@ function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
       </div>
       <div style={{ display: 'flex', gap: 12 }}>
         <button className="btn btn-primary" onClick={onSave} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Plus size={16} /> ADD GAME
+          <Plus size={16} /> Add game
         </button>
-        <button className="btn btn-secondary" onClick={onCancel}>CANCEL</button>
+        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
       </div>
     </div>
   );
