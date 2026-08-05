@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { BarChart2, User, History, Menu, X, LogOut, ChevronDown, Shield, Calendar, Umbrella, Trophy, Rss } from 'lucide-react';
+import { BarChart2, User, History, Menu, X, LogOut, ChevronDown, Shield, Calendar, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
@@ -13,9 +13,7 @@ export default function Navigation() {
 
   const navItems = [
     { path: '/games', label: 'This Week', icon: <Calendar size={16} /> },
-    { path: '/offseason', label: 'Offseason', icon: <Umbrella size={16} /> },
     { path: '/leagues', label: 'Leagues', icon: <Trophy size={16} /> },
-    { path: '/feed', label: 'Feed', icon: <Rss size={16} /> },
     { path: '/leaderboard', label: 'Leaderboard', icon: <BarChart2 size={16} /> },
     { path: '/history', label: 'History', icon: <History size={16} /> },
   ];

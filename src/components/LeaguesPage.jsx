@@ -2,18 +2,16 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Umbrella, Layers, Skull, Key, Trophy } from 'lucide-react';
+import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const LEAGUE_TYPES = [
   { val: 'weekly', label: 'Weekly Picks', desc: 'Predict NFL spreads every week', icon: Calendar },
-  { val: 'offseason', label: 'Offseason Props', desc: 'Win totals, draft props & more', icon: Umbrella },
-  { val: 'both', label: 'Weekly + Offseason', desc: 'Compete on both', icon: Layers },
   { val: 'survivor', label: 'Survivor Pool', desc: 'Pick a winner each week — lose and you’re out', icon: Skull },
 ];
 
 function leagueTypeInfo(competeOn) {
-  return LEAGUE_TYPES.find(t => t.val === competeOn) || LEAGUE_TYPES[2];
+  return LEAGUE_TYPES.find(t => t.val === competeOn) || LEAGUE_TYPES[0];
 }
 
 export default function LeaguesPage() {

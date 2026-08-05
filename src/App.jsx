@@ -4,14 +4,12 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './components/LandingPage';
 import Navigation from './components/Navigation';
 import GamesPage from './components/GamesPage';
-import OffseasonPage from './components/OffseasonPage';
 import LeaderboardPage from './components/LeaderboardPage';
 import ProfilePage from './components/ProfilePage';
 import HistoryPage from './components/HistoryPage';
 import AdminPage from './components/AdminPage';
 import LeaguesPage from './components/LeaguesPage';
 import LeaguePage from './components/LeaguePage';
-import FeedPage from './components/FeedPage';
 import UserProfilePage from './components/UserProfilePage';
 import Footer from './components/Footer';
 import './styles/globals.css';
@@ -49,14 +47,12 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={user ? <Navigate to="/games" replace /> : <LandingPage />} />
       <Route path="/games" element={<ProtectedLayout><GamesPage /></ProtectedLayout>} />
-      <Route path="/offseason" element={<ProtectedLayout><OffseasonPage /></ProtectedLayout>} />
       <Route path="/leaderboard" element={<ProtectedLayout><LeaderboardPage /></ProtectedLayout>} />
       <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />
       <Route path="/history" element={<ProtectedLayout><HistoryPage /></ProtectedLayout>} />
       <Route path="/admin" element={<ProtectedLayout><AdminPage /></ProtectedLayout>} />
       <Route path="/leagues" element={<ProtectedLayout><LeaguesPage /></ProtectedLayout>} />
       <Route path="/leagues/:id" element={<ProtectedLayout><LeaguePage /></ProtectedLayout>} />
-      <Route path="/feed" element={<ProtectedLayout><FeedPage /></ProtectedLayout>} />
       <Route path="/users/:id" element={<ProtectedLayout><UserProfilePage /></ProtectedLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

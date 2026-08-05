@@ -2,10 +2,9 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Unlock, Plus, Save, Users, Trophy, X, ChevronDown, ChevronUp, Check } from 'lucide-react';
+import { Lock, Unlock, Plus, Save, ChevronDown, ChevronUp } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const ADMIN_EMAIL = 'patrickrmoke@gmail.com';
 const CURRENT_SEASON = 2026;
 
 const NFL_TEAMS = [
@@ -20,19 +19,15 @@ const NFL_TEAMS = [
 ];
 
 export default function AdminPage() {
-  const { user, profile } = useAuth();
+  const { profile } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('offseason');
-  const [offseasonProps, setOffseasonProps] = useState([]);
+  const [activeTab, setActiveTab] = useState('games');
   const [games, setGames] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
-  const [showAddProp, setShowAddProp] = useState(false);
   const [showAddGame, setShowAddGame] = useState(false);
 
-  // New prop form
-  const [newProp, setNewProp] = useState({ category: 'win_total', team: '', description: '', line: '', closes_at: '' });
   // New game form
   const [newGame, setNewGame] = useState({ week: '', home_team: '', home_team_abbr: '', away_team: '', away_team_abbr: '', game_time: '', actual_spread: '', bookmaker: 'DraftKings' });
 
@@ -47,77 +42,13 @@ export default function AdminPage() {
 
   async function fetchAll() {
     setLoading(true);
-    const [propsRes, gamesRes, usersRes] = await Promise.all([
-      supabase.from('offseason_props').select('*').eq('season', CURRENT_SEASON).order('category').order('team'),
+    const [gamesRes, usersRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
     ]);
-    setOffseasonProps(propsRes.data || []);
     setGames(gamesRes.data || []);
     setUsers(usersRes.data || []);
     setLoading(false);
-  }
-
-  // --- OFFSEASON PROPS ---
-  async function togglePropLock(prop) {
-    setSaving(s => ({ ...s, [prop.id]: true }));
-    const { error } = await supabase
-      .from('offseason_props')
-      .update({ is_locked: !prop.is_locked })
-      .eq('id', prop.id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success(prop.is_locked ? 'Prop unlocked' : 'Prop locked!');
-      fetchAll();
-    }
-    setSaving(s => ({ ...s, [prop.id]: false }));
-  }
-
-  async function saveActualResult(prop, result) {
-    if (result === '' || isNaN(parseFloat(result))) {
-      toast.error('Enter a valid number');
-      return;
-    }
-    setSaving(s => ({ ...s, [`result_${prop.id}`]: true }));
-    const { error } = await supabase
-      .from('offseason_props')
-      .update({ actual_result: parseFloat(result), is_locked: true })
-      .eq('id', prop.id);
-    if (error) toast.error(error.message);
-    else {
-      toast.success('Result saved & prop locked!');
-      fetchAll();
-    }
-    setSaving(s => ({ ...s, [`result_${prop.id}`]: false }));
-  }
-
-  async function addProp() {
-    if (!newProp.description || !newProp.line) {
-      toast.error('Description and line are required');
-      return;
-    }
-    const { error } = await supabase.from('offseason_props').insert({
-      season: CURRENT_SEASON,
-      category: newProp.category,
-      team: newProp.team || null,
-      description: newProp.description,
-      line: parseFloat(newProp.line),
-      closes_at: newProp.closes_at || null,
-    });
-    if (error) toast.error(error.message);
-    else {
-      toast.success('Prop added!');
-      setNewProp({ category: 'win_total', team: '', description: '', line: '', closes_at: '' });
-      setShowAddProp(false);
-      fetchAll();
-    }
-  }
-
-  async function deleteProp(id) {
-    if (!confirm('Delete this prop? This cannot be undone.')) return;
-    const { error } = await supabase.from('offseason_props').delete().eq('id', id);
-    if (error) toast.error(error.message);
-    else { toast.success('Prop deleted'); fetchAll(); }
   }
 
   // --- GAMES ---
@@ -176,11 +107,10 @@ export default function AdminPage() {
   }
 
   // Loading / access guard
-  if (!profile) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--slate)' }}>Loading...</div>;
+  if (!profile) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-soft)' }}>Loading...</div>;
   if (!profile.is_admin) return null;
 
   const TABS = [
-    { key: 'offseason', label: 'Offseason props', count: offseasonProps.length },
     { key: 'games', label: 'Games', count: games.length },
     { key: 'users', label: 'Users', count: users.length },
   ];
@@ -196,11 +126,6 @@ export default function AdminPage() {
           <h1 style={{ fontSize: 34, textTransform: 'none' }}>Admin dashboard</h1>
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
-          {activeTab === 'offseason' && (
-            <button className="btn btn-primary" onClick={() => setShowAddProp(!showAddProp)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={16} /> Add prop
-            </button>
-          )}
           {activeTab === 'games' && (
             <button className="btn btn-primary" onClick={() => setShowAddGame(!showAddGame)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Plus size={16} /> Add game
@@ -232,44 +157,6 @@ export default function AdminPage() {
         </div>
       ) : (
         <>
-          {/* ── OFFSEASON PROPS ── */}
-          {activeTab === 'offseason' && (
-            <div>
-              {showAddProp && (
-                <AddPropForm
-                  prop={newProp}
-                  onChange={setNewProp}
-                  onSave={addProp}
-                  onCancel={() => setShowAddProp(false)}
-                />
-              )}
-              {['win_total', 'draft'].map(cat => {
-                const catProps = offseasonProps.filter(p => p.category === cat);
-                if (catProps.length === 0) return null;
-                return (
-                  <div key={cat} style={{ marginBottom: 28 }}>
-                    <h3 style={{ fontSize: 18, marginBottom: 12, color: 'var(--accent)', textTransform: 'none' }}>
-                      {cat === 'win_total' ? 'Win totals' : 'Draft props'}
-                    </h3>
-                    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-                      {catProps.map((prop, idx) => (
-                        <PropAdminRow
-                          key={prop.id}
-                          prop={prop}
-                          isLast={idx === catProps.length - 1}
-                          saving={saving}
-                          onToggleLock={() => togglePropLock(prop)}
-                          onSaveResult={(result) => saveActualResult(prop, result)}
-                          onDelete={() => deleteProp(prop.id)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
           {/* ── GAMES ── */}
           {activeTab === 'games' && (
             <div>
@@ -339,73 +226,6 @@ export default function AdminPage() {
 
 // ── Sub-components ──
 
-function PropAdminRow({ prop, isLast, saving, onToggleLock, onSaveResult, onDelete }) {
-  const [result, setResult] = useState(prop.actual_result !== null && prop.actual_result !== undefined ? String(prop.actual_result) : '');
-  const [expanded, setExpanded] = useState(false);
-
-  return (
-    <div style={{ borderBottom: isLast ? 'none' : '1px solid var(--border)' }}>
-      <div style={{
-        padding: '14px 20px', display: 'flex', justifyContent: 'space-between',
-        alignItems: 'center', gap: 16, flexWrap: 'wrap',
-        background: prop.is_locked ? 'rgba(200,50,44,0.03)' : 'transparent'
-      }}>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
-            {prop.team || prop.description}
-          </div>
-          {prop.team && (
-            <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2, maxWidth: 400 }}>{prop.description}</div>
-          )}
-          <div style={{ fontSize: 12, marginTop: 4, display: 'flex', gap: 12 }}>
-            <span style={{ color: 'var(--slate)' }}>Line: <span style={{ color: 'var(--white)', fontWeight: 600 }}>{prop.line}</span></span>
-            {prop.actual_result !== null && prop.actual_result !== undefined && (
-              <span style={{ color: 'var(--green)' }}>Result: <span style={{ fontWeight: 600 }}>{prop.actual_result}</span></span>
-            )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
-          <div className={prop.is_locked ? 'badge badge-red' : 'badge badge-lime'}>
-            {prop.is_locked ? <><Lock size={10} style={{ marginRight: 4 }} />Locked</> : <><Unlock size={10} style={{ marginRight: 4 }} />Open</>}
-          </div>
-          <button onClick={onToggleLock} disabled={saving[prop.id]} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12 }}>
-            {saving[prop.id] ? '...' : prop.is_locked ? 'Unlock' : 'Lock'}
-          </button>
-          <button onClick={() => setExpanded(!expanded)} className="btn btn-secondary" style={{ padding: '6px 10px' }}>
-            {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-          </button>
-          <button onClick={onDelete} style={{ background: 'none', border: 'none', color: 'var(--red)', cursor: 'pointer', padding: '6px' }}>
-            <X size={16} />
-          </button>
-        </div>
-      </div>
-
-      {expanded && (
-        <div style={{ padding: '12px 20px 16px', background: 'rgba(15,122,77,0.03)', borderTop: '1px solid var(--border)', display: 'flex', gap: 12, alignItems: 'center' }}>
-          <div className="label-muted" style={{ whiteSpace: 'nowrap' }}>Set actual result:</div>
-          <input
-            type="number"
-            step="0.5"
-            placeholder="e.g. 13"
-            value={result}
-            onChange={e => setResult(e.target.value)}
-            style={{ width: 100, padding: '8px 12px', fontSize: 15 }}
-          />
-          <button
-            className="btn btn-primary"
-            onClick={() => onSaveResult(result)}
-            disabled={saving[`result_${prop.id}`]}
-            style={{ padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 6 }}
-          >
-            <Check size={14} /> {saving[`result_${prop.id}`] ? 'Saving…' : 'Save & lock'}
-          </button>
-          <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>This will lock the prop and record the result for scoring.</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
   const [homeScore, setHomeScore] = useState(game.home_score !== null ? String(game.home_score) : '');
   const [awayScore, setAwayScore] = useState(game.away_score !== null ? String(game.away_score) : '');
@@ -423,10 +243,10 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
           <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 18 }}>
             Wk{game.week} · {game.away_team_abbr} @ {game.home_team_abbr}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--slate)', marginTop: 2 }}>
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
             {new Date(game.game_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-            {game.actual_spread !== null && <span style={{ marginLeft: 12 }}>Spread: <span style={{ color: 'var(--white)' }}>{game.actual_spread > 0 ? '+' : ''}{game.actual_spread}</span></span>}
-            {game.home_score !== null && <span style={{ marginLeft: 12, color: 'var(--green)' }}>Final: {game.away_score}–{game.home_score}</span>}
+            {game.actual_spread !== null && <span style={{ marginLeft: 12 }}>Spread: <span style={{ color: 'var(--ink)' }}>{game.actual_spread > 0 ? '+' : ''}{game.actual_spread}</span></span>}
+            {game.home_score !== null && <span style={{ marginLeft: 12, color: 'var(--success)' }}>Final: {game.away_score}–{game.home_score}</span>}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
@@ -479,61 +299,17 @@ function GameAdminRow({ game, isLast, saving, onToggleLock, onSaveResult }) {
   );
 }
 
-function AddPropForm({ prop, onChange, onSave, onCancel }) {
-  return (
-    <div className="card" style={{ padding: 24, marginBottom: 24, borderColor: 'rgba(15,122,77,0.3)' }}>
-      <h3 style={{ fontSize: 19, marginBottom: 20, textTransform: 'none' }}>Add new prop</h3>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 16 }}>
-        <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>CATEGORY</label>
-          <select value={prop.category} onChange={e => onChange(p => ({ ...p, category: e.target.value }))}>
-            <option value="win_total">Win Total</option>
-            <option value="draft">Draft Prop</option>
-          </select>
-        </div>
-        {prop.category === 'win_total' && (
-          <div>
-            <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>TEAM</label>
-            <select value={prop.team} onChange={e => onChange(p => ({ ...p, team: e.target.value, description: `${e.target.value} ${CURRENT_SEASON} regular season wins` }))}>
-              <option value="">Select team...</option>
-              {NFL_TEAMS.map(t => <option key={t} value={t}>{t}</option>)}
-            </select>
-          </div>
-        )}
-        <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>VEGAS LINE</label>
-          <input type="number" step="0.5" placeholder="11.5" value={prop.line} onChange={e => onChange(p => ({ ...p, line: e.target.value }))} />
-        </div>
-        <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>LOCKS AT</label>
-          <input type="datetime-local" value={prop.closes_at} onChange={e => onChange(p => ({ ...p, closes_at: e.target.value }))} />
-        </div>
-      </div>
-      <div style={{ marginBottom: 16 }}>
-        <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>DESCRIPTION</label>
-        <input value={prop.description} onChange={e => onChange(p => ({ ...p, description: e.target.value }))} placeholder="e.g. Kansas City Chiefs 2026 regular season wins" />
-      </div>
-      <div style={{ display: 'flex', gap: 12 }}>
-        <button className="btn btn-primary" onClick={onSave} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Plus size={16} /> Add prop
-        </button>
-        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
-      </div>
-    </div>
-  );
-}
-
 function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
   return (
     <div className="card" style={{ padding: 24, marginBottom: 24, borderColor: 'rgba(15,122,77,0.3)' }}>
       <h3 style={{ fontSize: 19, marginBottom: 20, textTransform: 'none' }}>Add new game</h3>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 16 }}>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>WEEK</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Week</label>
           <input type="number" min="1" max="22" placeholder="1" value={game.week} onChange={e => onChange(g => ({ ...g, week: e.target.value }))} />
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>AWAY TEAM</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Away team</label>
           <select value={game.away_team} onChange={e => {
             const abbr = e.target.value.split(' ').pop().substring(0, 3).toUpperCase();
             onChange(g => ({ ...g, away_team: e.target.value, away_team_abbr: abbr }));
@@ -543,11 +319,11 @@ function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
           </select>
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>AWAY ABBR</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Away abbr</label>
           <input placeholder="BUF" maxLength={3} value={game.away_team_abbr} onChange={e => onChange(g => ({ ...g, away_team_abbr: e.target.value.toUpperCase() }))} />
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>HOME TEAM</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Home team</label>
           <select value={game.home_team} onChange={e => {
             const abbr = e.target.value.split(' ').pop().substring(0, 3).toUpperCase();
             onChange(g => ({ ...g, home_team: e.target.value, home_team_abbr: abbr }));
@@ -557,19 +333,19 @@ function AddGameForm({ game, onChange, onSave, onCancel, teams }) {
           </select>
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>HOME ABBR</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Home abbr</label>
           <input placeholder="KC" maxLength={3} value={game.home_team_abbr} onChange={e => onChange(g => ({ ...g, home_team_abbr: e.target.value.toUpperCase() }))} />
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>GAME TIME</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Game time</label>
           <input type="datetime-local" value={game.game_time} onChange={e => onChange(g => ({ ...g, game_time: e.target.value }))} />
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>SPREAD (optional)</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Spread (optional)</label>
           <input type="number" step="0.5" placeholder="-3.5" value={game.actual_spread} onChange={e => onChange(g => ({ ...g, actual_spread: e.target.value }))} />
         </div>
         <div>
-          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>BOOKMAKER</label>
+          <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Bookmaker</label>
           <select value={game.bookmaker} onChange={e => onChange(g => ({ ...g, bookmaker: e.target.value }))}>
             <option value="DraftKings">DraftKings</option>
             <option value="FanDuel">FanDuel</option>

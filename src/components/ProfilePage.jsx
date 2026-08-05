@@ -21,7 +21,6 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [recentPicks, setRecentPicks] = useState([]);
-  const [recentOffseasonPicks, setRecentOffseasonPicks] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -33,22 +32,13 @@ export default function ProfilePage() {
 
   async function fetchRecentPicks() {
     if (!user) return;
-    const [{ data: weekly }, { data: offseason }] = await Promise.all([
-      supabase
-        .from('predictions')
-        .select('*, games(home_team, away_team, home_team_abbr, away_team_abbr, actual_spread, status, home_score, away_score)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10),
-      supabase
-        .from('offseason_predictions')
-        .select('*, offseason_props(description, team, line, actual_result, is_locked, category)')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(10),
-    ]);
+    const { data: weekly } = await supabase
+      .from('predictions')
+      .select('*, games(home_team, away_team, home_team_abbr, away_team_abbr, actual_spread, status, home_score, away_score)')
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(10);
     setRecentPicks(weekly || []);
-    setRecentOffseasonPicks(offseason || []);
   }
 
   async function handleSave() {
@@ -156,100 +146,45 @@ export default function ProfilePage() {
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: 17, textTransform: 'none' }}>Recent picks</h3>
             </div>
-            {recentPicks.length === 0 && recentOffseasonPicks.length === 0 ? (
+            {recentPicks.length === 0 ? (
               <div style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>
                 No predictions yet. Make your first picks!
               </div>
             ) : (
-              <>
-                {recentOffseasonPicks.length > 0 && (
-                  <>
-                    <div className="eyebrow" style={{ padding: '8px 20px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--border)' }}>
-                      Offseason props
+              recentPicks.map(p => {
+                const g = p.games;
+                const diff = g?.actual_spread !== null && g?.actual_spread !== undefined
+                  ? Math.abs(p.predicted_spread - g.actual_spread) : null;
+                return (
+                  <div key={p.id} style={{
+                    padding: '14px 20px', borderBottom: '1px solid var(--border)',
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 600 }}>
+                        {g ? `${g.away_team_abbr} @ ${g.home_team_abbr}` : 'Game'}
+                        <span style={{ fontSize: 11, color: 'var(--ink-soft)', marginLeft: 8 }}>Wk {p.week}</span>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
+                        Your pick: <span style={{ color: 'var(--ink)' }}>{formatSpread(p.predicted_spread)}</span>
+                        {g?.actual_spread !== null && g?.actual_spread !== undefined && (
+                          <> · Actual: <span style={{ color: 'var(--ink)' }}>{formatSpread(g.actual_spread)}</span></>
+                        )}
+                      </div>
                     </div>
-                    {recentOffseasonPicks.map(p => {
-                      const prop = p.offseason_props;
-                      const diff = prop?.actual_result !== null && prop?.actual_result !== undefined
-                        ? Math.abs(p.predicted_value - prop.actual_result) : null;
-                      return (
-                        <div key={p.id} style={{
-                          padding: '14px 20px', borderBottom: '1px solid var(--border)',
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
-                        }}>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: 14, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {prop?.team || prop?.description || 'Offseason Prop'}
-                              <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 8, fontFamily: 'Barlow Condensed' }}>
-                                {prop?.category === 'win_total' ? 'Win total' : 'Draft'}
-                              </span>
-                            </div>
-                            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
-                              Your pick: <span style={{ color: 'var(--ink)' }}>{p.predicted_value}</span>
-                              {prop?.is_locked && prop?.actual_result !== null && prop?.actual_result !== undefined && (
-                                <> · Vegas: <span style={{ color: 'var(--ink)' }}>{prop.line}</span>
-                                   · Result: <span style={{ color: 'var(--ink)' }}>{prop.actual_result}</span></>
-                              )}
-                              {!prop?.is_locked && (
-                                <> · <span style={{ color: 'var(--accent)', fontStyle: 'italic' }}>Vegas line hidden</span></>
-                              )}
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            {diff !== null ? (
-                              <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
-                                Δ {diff.toFixed(1)}
-                              </div>
-                            ) : (
-                              <span className="badge badge-lime" style={{ fontSize: 10 }}>Pending</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-                {recentPicks.length > 0 && (
-                  <>
-                    <div className="eyebrow" style={{ padding: '8px 20px', background: 'var(--accent-soft)', borderBottom: '1px solid var(--border)' }}>
-                      Weekly picks
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      {diff !== null ? (
+                        <>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>Δ {diff.toFixed(1)}</div>
+                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 2 }}>×{p.confidence_points}</div>
+                        </>
+                      ) : (
+                        <span className="badge badge-lime" style={{ fontSize: 10 }}>Pending</span>
+                      )}
                     </div>
-                    {recentPicks.map(p => {
-                      const g = p.games;
-                      const diff = g?.actual_spread !== null && g?.actual_spread !== undefined
-                        ? Math.abs(p.predicted_spread - g.actual_spread) : null;
-                      return (
-                        <div key={p.id} style={{
-                          padding: '14px 20px', borderBottom: '1px solid var(--border)',
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
-                        }}>
-                          <div>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>
-                              {g ? `${g.away_team_abbr} @ ${g.home_team_abbr}` : 'Game'}
-                              <span style={{ fontSize: 11, color: 'var(--ink-soft)', marginLeft: 8 }}>Wk {p.week}</span>
-                            </div>
-                            <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
-                              Your pick: <span style={{ color: 'var(--ink)' }}>{formatSpread(p.predicted_spread)}</span>
-                              {g?.actual_spread !== null && g?.actual_spread !== undefined && (
-                                <> · Actual: <span style={{ color: 'var(--ink)' }}>{formatSpread(g.actual_spread)}</span></>
-                              )}
-                            </div>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            {diff !== null ? (
-                              <>
-                                <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>Δ {diff.toFixed(1)}</div>
-                                <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 2 }}>×{p.confidence_points}</div>
-                              </>
-                            ) : (
-                              <span className="badge badge-lime" style={{ fontSize: 10 }}>Pending</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
