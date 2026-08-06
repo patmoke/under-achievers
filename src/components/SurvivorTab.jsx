@@ -37,10 +37,12 @@ function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
 export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries, maxCapacity }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
-  const [weekGames, setWeekGames] = useState([]);
+  const [buybacks, setBuybacks] = useState([]);
+  const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
 
+  const weekGames = allGames.filter(g => g.week === currentWeek);
   const buybacksAllowed = buybackDeadlineWeek != null && maxBuybacks != null;
   const entryCap = maxEntries != null ? maxEntries : 1;
   const seasonStarted = currentWeek > 1 || weekGames.some(isGameLocked);
@@ -64,17 +66,23 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         .select('*, games(home_team_abbr, away_team_abbr, home_team, away_team, game_time, status, home_score, away_score)')
         .in('entry_id', entryIds);
       setPicks(picksData || []);
+
+      const { data: buybacksData } = await supabase
+        .from('survivor_entry_buybacks')
+        .select('*')
+        .in('entry_id', entryIds);
+      setBuybacks(buybacksData || []);
     } else {
       setPicks([]);
+      setBuybacks([]);
     }
 
     const { data: gamesData } = await supabase
       .from('games')
       .select('*')
-      .eq('week', currentWeek)
       .eq('season', season)
       .order('game_time');
-    setWeekGames(gamesData || []);
+    setAllGames(gamesData || []);
 
     setLoading(false);
   }
@@ -88,8 +96,17 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return picks.filter(p => p.entry_id === entryId);
   }
 
+  function entryBuybacks(entryId) {
+    return buybacks.filter(b => b.entry_id === entryId).sort((a, b) => a.week - b.week);
+  }
+
   function computeStatus(entry) {
-    const entryPicks = picksForEntry(entry.id).sort((a, b) => a.week - b.week);
+    // Picks before the entry's current start_week belong to a life that was
+    // already forgiven by a buyback — a loss or miss from before a rebuy
+    // shouldn't keep re-eliminating the same entry.
+    const entryPicks = picksForEntry(entry.id)
+      .filter(p => p.week >= (entry.start_week || 1))
+      .sort((a, b) => a.week - b.week);
 
     for (const pick of entryPicks) {
       const g = pick.games;
@@ -101,11 +118,19 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       }
     }
 
-    // Missed-pick check: only evaluated prospectively for the current week,
-    // once every game that week has kicked off with no pick on record.
-    const hasCurrentWeekPick = entryPicks.some(p => p.week === currentWeek);
-    if (!hasCurrentWeekPick && weekGames.length > 0 && weekGames.every(isGameLocked)) {
-      return { status: 'eliminated', week: currentWeek, reason: 'missed' };
+    // Missed-pick check: find the EARLIEST week (not just the one currently
+    // being viewed) where every game had kicked off with no pick on record.
+    // currentWeek can lag behind real time — an override for testing, or
+    // simply someone not opening the app for a few weeks — so scanning only
+    // `currentWeek` would misreport a miss from week 2 as happening in
+    // whatever week is being looked at right now.
+    const pickedWeeks = new Set(entryPicks.map(p => p.week));
+    for (let w = entry.start_week || 1; w <= currentWeek; w++) {
+      if (pickedWeeks.has(w)) continue;
+      const gamesForWeek = allGames.filter(g => g.week === w);
+      if (gamesForWeek.length > 0 && gamesForWeek.every(isGameLocked)) {
+        return { status: 'eliminated', week: w, reason: 'missed' };
+      }
     }
 
     return { status: 'alive', week: null, reason: null };
@@ -121,7 +146,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   }
 
   function myBuybackCount(userId) {
-    return entries.filter(e => e.user_id === userId && e.is_buyback).length;
+    const myEntryIds = new Set(entries.filter(e => e.user_id === userId).map(e => e.id));
+    return buybacks.filter(b => myEntryIds.has(b.entry_id)).length;
   }
 
   function myEntryCount(userId) {
@@ -156,14 +182,12 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function buyBackIn() {
+  async function buyBackIn(entry) {
     if (!canBuyBack()) return;
-    if (!confirm('Buy back in with a new entry?')) return;
-    const mine = entries.filter(e => e.user_id === currentUserId);
-    const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
-    const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum, is_buyback: true });
+    if (!confirm(`Buy back in? Entry #${entry.entry_number} will resume from Week ${currentWeek}.`)) return;
+    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: currentWeek });
     if (error) { toast.error(error.message); return; }
-    toast.success(`Bought back in! Entry #${nextNum} is live.`);
+    toast.success(`Bought back in! Entry #${entry.entry_number} is live again.`);
     fetchAll();
   }
 
@@ -218,12 +242,27 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const historyWeeks = Array.from(new Set(picks.map(p => p.week))).sort((a, b) => a - b);
 
   function renderHistoryCell(entry, week) {
+    const rebought = entryBuybacks(entry.id).some(b => b.week === week);
+    const rebuyMarker = rebought && (
+      <RotateCcw size={10} style={{ color: 'var(--gold)', marginRight: 4 }} aria-label={`Bought back in Week ${week}`} />
+    );
+
     const pick = picksForEntry(entry.id).find(p => p.week === week);
-    if (!pick) return <span style={{ color: 'var(--ink-faint)' }}>—</span>;
+    if (!pick) {
+      return (
+        <span title={rebought ? `Bought back in this week` : undefined} style={{ display: 'inline-flex', alignItems: 'center' }}>
+          {rebuyMarker}<span style={{ color: 'var(--ink-faint)' }}>—</span>
+        </span>
+      );
+    }
 
     const isMe = entry.user_id === currentUserId;
     if (!isMe && !isGameLocked(pick.games)) {
-      return <span style={{ color: 'var(--ink-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><EyeOff size={11} /></span>;
+      return (
+        <span title={rebought ? 'Bought back in this week' : undefined} style={{ color: 'var(--ink-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          {rebuyMarker}<EyeOff size={11} />
+        </span>
+      );
     }
 
     const g = pick.games;
@@ -235,12 +274,15 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     }
 
     return (
-      <span style={{
-        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-        color: outcome === 'win' ? 'var(--success)' : outcome === 'loss' ? 'var(--danger)' : 'var(--ink)',
-        textDecoration: outcome === 'loss' ? 'line-through' : 'none',
-      }}>
-        {pick.team_abbr}
+      <span title={rebought ? `Bought back in Week ${week}` : undefined} style={{ display: 'inline-flex', alignItems: 'center' }}>
+        {rebuyMarker}
+        <span style={{
+          fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+          color: outcome === 'win' ? 'var(--success)' : outcome === 'loss' ? 'var(--danger)' : 'var(--ink)',
+          textDecoration: outcome === 'loss' ? 'line-through' : 'none',
+        }}>
+          {pick.team_abbr}
+        </span>
       </span>
     );
   }
@@ -291,7 +333,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                       <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
                         {myEntries.length > 1 ? `Entry #${entry.entry_number}` : 'Your pick'}
                       </div>
-                      {entry.is_buyback && <span className="badge badge-gold">Buyback</span>}
+                      {entryBuybacks(entry.id).map(b => (
+                        <span key={b.id} className="badge badge-gold" title={`Bought back in during Week ${b.week}`}>
+                          <RotateCcw size={9} style={{ marginRight: 3 }} />Rebought Wk {b.week}
+                        </span>
+                      ))}
                       {entry.paid
                         ? <span className="badge badge-green"><CheckIcon size={9} style={{ marginRight: 3 }} />Paid</span>
                         : <span className="badge" style={{ background: 'var(--surface-alt)', color: 'var(--ink-faint)', border: '1px solid var(--border)' }}>Unpaid</span>
@@ -318,7 +364,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                       Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
                       {' '}
                       {eligible ? (
-                        <button onClick={buyBackIn} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                           <RotateCcw size={12} /> Buy back in
                         </button>
                       ) : buybacksAllowed ? (
@@ -406,7 +452,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                       {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
                         <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}> #{entry.entry_number}</span>
                       )}
-                      {entry.is_buyback && <span style={{ color: 'var(--gold)', fontSize: 11, marginLeft: 6 }}>buyback</span>}
+                      {entryBuybacks(entry.id).map(b => (
+                        <span key={b.id} style={{ color: 'var(--gold)', fontSize: 11, marginLeft: 6 }} title={`Bought back in during Week ${b.week}`}>
+                          rebought wk {b.week}
+                        </span>
+                      ))}
                       {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
                     </div>
                     {entry.status === 'eliminated' && (

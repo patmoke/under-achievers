@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy } from 'lucide-react';
+import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy, Share2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const LEAGUE_TYPES = [
@@ -392,6 +392,7 @@ export default function LeaguesPage() {
 
 function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) {
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const isSurvivor = league.compete_on === 'survivor';
   const memberCount = league.league_members?.[0]?.count || 0;
   const entryCount = league.survivor_entries?.[0]?.count || 0;
@@ -405,6 +406,14 @@ function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) 
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast.success('Join code copied!');
+  }
+
+  function shareLink(e) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(`${window.location.origin}/join/${league.join_code}`);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+    toast.success('Invite link copied!');
   }
 
   return (
@@ -429,6 +438,11 @@ function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) 
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexShrink: 0 }}>
+        {showJoinCode && (
+          <button onClick={shareLink} className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }} title="Copy invite link">
+            {linkCopied ? <Check size={13} /> : <Share2 size={13} />}
+          </button>
+        )}
         {showJoinCode && (
           <button onClick={copyCode} className="btn btn-secondary" style={{ padding: '8px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
             {copied ? <Check size={13} /> : <Copy size={13} />}
