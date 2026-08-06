@@ -334,8 +334,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         {myEntries.length > 1 ? `Entry #${entry.entry_number}` : 'Your pick'}
                       </div>
                       {entryBuybacks(entry.id).map(b => (
-                        <span key={b.id} className="badge badge-gold" title={`Bought back in during Week ${b.week}`}>
-                          <RotateCcw size={9} style={{ marginRight: 3 }} />Rebought Wk {b.week}
+                        <span key={b.id} title={`Bought back in Week ${b.week}`} style={{ display: 'inline-flex' }}>
+                          <RotateCcw size={13} style={{ color: 'var(--gold)' }} aria-label={`Bought back in Week ${b.week}`} />
                         </span>
                       ))}
                       {entry.paid
@@ -453,8 +453,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}> #{entry.entry_number}</span>
                       )}
                       {entryBuybacks(entry.id).map(b => (
-                        <span key={b.id} style={{ color: 'var(--gold)', fontSize: 11, marginLeft: 6 }} title={`Bought back in during Week ${b.week}`}>
-                          rebought wk {b.week}
+                        <span key={b.id} title={`Bought back in Week ${b.week}`} style={{ display: 'inline-flex', marginLeft: 6 }}>
+                          <RotateCcw size={11} style={{ color: 'var(--gold)' }} aria-label={`Bought back in Week ${b.week}`} />
                         </span>
                       ))}
                       {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
