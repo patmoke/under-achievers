@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 function formatGameTime(iso) {
@@ -34,7 +34,7 @@ function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
   );
 }
 
-export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries }) {
+export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries, maxCapacity }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
   const [weekGames, setWeekGames] = useState([]);
@@ -128,19 +128,26 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return entries.filter(e => e.user_id === userId).length;
   }
 
+  function leagueFull() {
+    return maxCapacity != null && entries.length >= maxCapacity;
+  }
+
   function canAddEntry() {
     if (seasonStarted) return false;
+    if (leagueFull()) return false;
     return myEntryCount(currentUserId) < entryCap;
   }
 
   function canBuyBack() {
     if (!buybacksAllowed) return false;
     if (currentWeek > buybackDeadlineWeek) return false;
+    if (leagueFull()) return false;
     return myBuybackCount(currentUserId) < maxBuybacks;
   }
 
   async function addEntry() {
     if (!canAddEntry()) return;
+    if (!confirm('Buy an additional entry for this survivor pool?')) return;
     const mine = entries.filter(e => e.user_id === currentUserId);
     const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
     const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum });
@@ -151,11 +158,28 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
   async function buyBackIn() {
     if (!canBuyBack()) return;
+    if (!confirm('Buy back in with a new entry?')) return;
     const mine = entries.filter(e => e.user_id === currentUserId);
     const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
     const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum, is_buyback: true });
     if (error) { toast.error(error.message); return; }
     toast.success(`Bought back in! Entry #${nextNum} is live.`);
+    fetchAll();
+  }
+
+  async function deleteMyEntry(entry) {
+    if (!confirm(`Remove entry #${entry.entry_number}? This can't be undone.`)) return;
+    const { error } = await supabase.from('survivor_entries').delete().eq('id', entry.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success('Entry removed');
+    fetchAll();
+  }
+
+  async function ownerRemoveEntry(entry) {
+    if (!confirm(`Remove ${entry.profiles?.username}'s entry #${entry.entry_number}? This can't be undone.`)) return;
+    const { error } = await supabase.rpc('owner_remove_entry', { p_entry_id: entry.id });
+    if (error) { toast.error(error.message); return; }
+    toast.success('Entry removed');
     fetchAll();
   }
 
@@ -231,7 +255,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               className="btn btn-secondary"
               onClick={addEntry}
               disabled={myEntries.length > 0 && !canAddEntry()}
-              title={seasonStarted ? 'Entries closed — the season has started' : entryCap <= myEntryCount(currentUserId) ? `Max ${entryCap} entries per person` : undefined}
+              title={seasonStarted ? 'Entries closed — the season has started' : leagueFull() ? 'This league is full' : entryCap <= myEntryCount(currentUserId) ? `Max ${entryCap} entries per person` : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13 }}
             >
               <Plus size={14} /> {myEntries.length === 0 ? 'Add entry' : 'Buy additional entry'}
@@ -272,9 +296,20 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         : <span className="badge" style={{ background: 'var(--surface-alt)', color: 'var(--ink-faint)', border: '1px solid var(--border)' }}>Unpaid</span>
                       }
                     </div>
-                    <span className={status === 'alive' ? 'badge badge-lime' : 'badge badge-red'}>
-                      {status === 'alive' ? 'Alive' : 'Eliminated'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span className={status === 'alive' ? 'badge badge-lime' : 'badge badge-red'}>
+                        {status === 'alive' ? 'Alive' : 'Eliminated'}
+                      </span>
+                      {entryPicks.length === 0 && (
+                        <button
+                          onClick={() => deleteMyEntry(entry)}
+                          title="Remove this entry — added by mistake"
+                          style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', display: 'flex', padding: 2 }}
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {status === 'eliminated' ? (
@@ -391,6 +426,15 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                   <span className={entry.status === 'alive' ? 'badge badge-lime' : 'badge badge-red'} style={{ fontSize: 10 }}>
                     {entry.status === 'alive' ? 'Alive' : 'Out'}
                   </span>
+                  {isOwner && (
+                    <button
+                      onClick={() => ownerRemoveEntry(entry)}
+                      title={`Remove ${entry.profiles?.username}'s entry #${entry.entry_number}`}
+                      style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', display: 'flex', padding: 2 }}
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
             );
