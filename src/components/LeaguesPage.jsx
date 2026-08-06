@@ -31,7 +31,7 @@ export default function LeaguesPage() {
     description: '',
     is_public: false,
     compete_on: 'weekly',
-    max_members: 20,
+    max_capacity: 20,
     allow_buybacks: false,
     buyback_deadline_week: 4,
     max_buybacks: 1,
@@ -57,7 +57,7 @@ export default function LeaguesPage() {
     if (myIds.length > 0) {
       const { data } = await supabase
         .from('leagues')
-        .select('*, league_members(count)')
+        .select('*, league_members(count), survivor_entries(count)')
         .in('id', myIds)
         .order('created_at', { ascending: false });
       setMyLeagues(data || []);
@@ -68,7 +68,7 @@ export default function LeaguesPage() {
     // Public leagues (not already a member)
     let pubQuery = supabase
       .from('leagues')
-      .select('*, league_members(count)')
+      .select('*, league_members(count), survivor_entries(count)')
       .eq('is_public', true)
       .order('created_at', { ascending: false })
       .limit(20);
@@ -97,7 +97,7 @@ export default function LeaguesPage() {
           description: form.description.trim() || null,
           is_public: form.is_public,
           compete_on: form.compete_on,
-          max_members: form.max_members,
+          max_capacity: form.max_capacity,
           join_code: joinCode,
           created_by: user.id,
           season: 2026,
@@ -128,7 +128,7 @@ export default function LeaguesPage() {
 
       toast.success('League created!');
       setShowCreate(false);
-      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_members: 20, allow_buybacks: false, buyback_deadline_week: 4, max_buybacks: 1, allow_multi_entry: false, max_entries: 2 });
+      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_capacity: 20, allow_buybacks: false, buyback_deadline_week: 4, max_buybacks: 1, allow_multi_entry: false, max_entries: 2 });
       navigate(`/leagues/${league.id}`);
     } catch (err) {
       toast.error(err.message);
@@ -141,43 +141,13 @@ export default function LeaguesPage() {
     if (!joinCode.trim()) { toast.error('Enter a join code'); return; }
     setJoining(true);
     try {
-      const { data: league, error } = await supabase
-        .from('leagues')
-        .select('*')
-        .eq('join_code', joinCode.trim().toUpperCase())
-        .single();
-
-      if (error || !league) { toast.error('League not found — check the code'); setJoining(false); return; }
-
-      // Check member count
-      const { count } = await supabase
-        .from('league_members')
-        .select('*', { count: 'exact', head: true })
-        .eq('league_id', league.id);
-
-      if (count >= league.max_members) { toast.error('This league is full'); setJoining(false); return; }
-
-      const { error: joinError } = await supabase.from('league_members').insert({
-        league_id: league.id,
-        user_id: user.id,
-        role: 'member',
-      });
-
-      if (joinError) {
-        if (joinError.code === '23505') toast.error('You\'re already in this league');
-        else throw joinError;
-      } else {
-        if (league.compete_on === 'survivor') {
-          await supabase.from('survivor_entries').insert({
-            league_id: league.id,
-            user_id: user.id,
-            entry_number: 1,
-          });
-        }
-        toast.success(`Joined "${league.name}"!`);
-        setJoinCode('');
-        navigate(`/leagues/${league.id}`);
-      }
+      // Private leagues aren't visible to non-members via a plain select, so
+      // the lookup + join happens server-side in one RPC call.
+      const { data: league, error } = await supabase.rpc('join_league_by_code', { p_code: joinCode.trim().toUpperCase() });
+      if (error) throw error;
+      toast.success(`Joined "${league.name}"!`);
+      setJoinCode('');
+      navigate(`/leagues/${league.id}`);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -188,21 +158,10 @@ export default function LeaguesPage() {
   async function joinPublicLeague(league) {
     setJoining(true);
     try {
-      const { error } = await supabase.from('league_members').insert({
-        league_id: league.id,
-        user_id: user.id,
-        role: 'member',
-      });
+      const { data: joined, error } = await supabase.rpc('join_league_by_code', { p_code: league.join_code });
       if (error) throw error;
-      if (league.compete_on === 'survivor') {
-        await supabase.from('survivor_entries').insert({
-          league_id: league.id,
-          user_id: user.id,
-          entry_number: 1,
-        });
-      }
-      toast.success(`Joined "${league.name}"!`);
-      navigate(`/leagues/${league.id}`);
+      toast.success(`Joined "${joined.name}"!`);
+      navigate(`/leagues/${joined.id}`);
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -319,8 +278,15 @@ export default function LeaguesPage() {
               <input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="What's this league about?" maxLength={200} />
             </div>
             <div>
-              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max members</label>
-              <input type="number" min={2} max={100} value={form.max_members} onChange={e => setForm(f => ({ ...f, max_members: parseInt(e.target.value) }))} />
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>
+                {form.compete_on === 'survivor' ? 'Max entries' : 'Max members'}
+              </label>
+              <input type="number" min={2} max={2000} value={form.max_capacity} onChange={e => setForm(f => ({ ...f, max_capacity: parseInt(e.target.value) }))} />
+              {form.compete_on === 'survivor' && (
+                <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>
+                  Total entries across everyone in the pool, including extra buy-ins.
+                </div>
+              )}
             </div>
             <div>
               <label className="label-muted" style={{ display: 'block', marginBottom: 12 }}>Visibility</label>
@@ -426,7 +392,9 @@ export default function LeaguesPage() {
 
 function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) {
   const [copied, setCopied] = useState(false);
+  const isSurvivor = league.compete_on === 'survivor';
   const memberCount = league.league_members?.[0]?.count || 0;
+  const entryCount = league.survivor_entries?.[0]?.count || 0;
   const isOwner = league.created_by === userId;
   const typeInfo = leagueTypeInfo(league.compete_on);
   const TypeIcon = typeInfo.icon;
@@ -453,7 +421,10 @@ function LeagueCard({ league, onClick, showJoinCode, onJoin, joining, userId }) 
         </div>
         {league.description && <p style={{ fontSize: 13, color: 'var(--ink-soft)', marginBottom: 6 }}>{league.description}</p>}
         <div style={{ display: 'flex', gap: 16, fontSize: 12, color: 'var(--ink-soft)', flexWrap: 'wrap' }}>
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Users size={11} />{memberCount} / {league.max_members} members</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Users size={11} />
+            {isSurvivor ? `${entryCount} / ${league.max_capacity} entries` : `${memberCount} / ${league.max_capacity} members`}
+          </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><TypeIcon size={11} />{typeInfo.label}</span>
         </div>
       </div>

@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
@@ -25,6 +25,11 @@ export default function LeaguePage() {
   const [weeklyTab, setWeeklyTab] = useState(CURRENT_WEEK);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [entryCount, setEntryCount] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsForm, setSettingsForm] = useState(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [removingMember, setRemovingMember] = useState(null);
 
   const [weekAllSubmitted, setWeekAllSubmitted] = useState(false);
   const [weeklyPicks, setWeeklyPicks] = useState([]);
@@ -54,6 +59,23 @@ export default function LeaguePage() {
       return;
     }
     setLeague(leagueData);
+    setSettingsForm({
+      name: leagueData.name,
+      description: leagueData.description || '',
+      is_public: leagueData.is_public,
+      max_capacity: leagueData.max_capacity,
+      survivor_buyback_deadline_week: leagueData.survivor_buyback_deadline_week,
+      survivor_max_buybacks: leagueData.survivor_max_buybacks,
+      survivor_max_entries: leagueData.survivor_max_entries,
+    });
+
+    if (leagueData.compete_on === 'survivor') {
+      const { count } = await supabase
+        .from('survivor_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('league_id', id);
+      setEntryCount(count || 0);
+    }
 
     const { data: membersData } = await supabase
       .from('league_members')
@@ -114,6 +136,48 @@ export default function LeaguePage() {
     await supabase.from('leagues').delete().eq('id', id);
     toast.success('League deleted');
     navigate('/leagues');
+  }
+
+  async function saveSettings() {
+    if (!settingsForm.name.trim()) { toast.error('League name is required'); return; }
+    setSavingSettings(true);
+    try {
+      const update = {
+        name: settingsForm.name.trim(),
+        description: settingsForm.description.trim() || null,
+        is_public: settingsForm.is_public,
+        max_capacity: settingsForm.max_capacity,
+      };
+      if (isSurvivor) {
+        update.survivor_buyback_deadline_week = settingsForm.survivor_buyback_deadline_week;
+        update.survivor_max_buybacks = settingsForm.survivor_max_buybacks;
+        update.survivor_max_entries = settingsForm.survivor_max_entries;
+      }
+      const { error } = await supabase.from('leagues').update(update).eq('id', id);
+      if (error) throw error;
+      toast.success('Settings saved');
+      setShowSettings(false);
+      fetchLeague();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function removeMember(member) {
+    if (!confirm(`Remove ${member.profiles?.username} from this league? Their entries will be deleted too.`)) return;
+    setRemovingMember(member.user_id);
+    try {
+      const { error } = await supabase.rpc('owner_remove_member', { p_league_id: id, p_user_id: member.user_id });
+      if (error) throw error;
+      toast.success(`Removed ${member.profiles?.username}`);
+      fetchLeague();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setRemovingMember(null);
+    }
   }
 
   function copyCode() {
@@ -180,7 +244,10 @@ export default function LeaguePage() {
             </div>
             {league.description && <p style={{ color: 'var(--ink-soft)', fontSize: 14, marginBottom: 12 }}>{league.description}</p>}
             <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--ink-soft)', flexWrap: 'wrap' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Users size={13} />{members.length} / {league.max_members} members</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                <Users size={13} />
+                {isSurvivor ? `${entryCount} / ${league.max_capacity} entries` : `${members.length} / ${league.max_capacity} members`}
+              </span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><TypeIcon size={13} />{TYPE_LABEL[competeOn] || competeOn}</span>
               <span>2026 Season</span>
               {isSurvivor && (
@@ -210,6 +277,11 @@ export default function LeaguePage() {
               </button>
             )}
             {isOwner && (
+              <button onClick={() => setShowSettings(s => !s)} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <Settings size={14} /> Settings
+              </button>
+            )}
+            {isOwner && (
               <button onClick={deleteLeague} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--danger)', borderColor: 'var(--danger)' }}>
                 Delete
               </button>
@@ -217,6 +289,78 @@ export default function LeaguePage() {
           </div>
         </div>
       </div>
+
+      {/* Owner settings panel */}
+      {isOwner && showSettings && settingsForm && (
+        <div className="card" style={{ padding: 28, marginBottom: 24 }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+            <h3 style={{ fontSize: 20, textTransform: 'none' }}>League settings</h3>
+            <button onClick={() => setShowSettings(false)} aria-label="Close" style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer' }}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>League name *</label>
+              <input value={settingsForm.name} onChange={e => setSettingsForm(f => ({ ...f, name: e.target.value }))} maxLength={50} />
+            </div>
+            <div style={{ gridColumn: '1 / -1' }}>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Description</label>
+              <input value={settingsForm.description} onChange={e => setSettingsForm(f => ({ ...f, description: e.target.value }))} maxLength={200} />
+            </div>
+            <div>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>
+                {isSurvivor ? 'Max entries' : 'Max members'}
+              </label>
+              <input type="number" min={isSurvivor ? entryCount : members.length} max={2000} value={settingsForm.max_capacity} onChange={e => setSettingsForm(f => ({ ...f, max_capacity: parseInt(e.target.value) }))} />
+            </div>
+            <div>
+              <label className="label-muted" style={{ display: 'block', marginBottom: 12 }}>Visibility</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {[{ val: false, label: 'Private' }, { val: true, label: 'Public' }].map(opt => (
+                  <button key={String(opt.val)} onClick={() => setSettingsForm(f => ({ ...f, is_public: opt.val }))} style={{
+                    flex: 1, padding: '10px 12px', border: `1px solid ${settingsForm.is_public === opt.val ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 'var(--radius-sm)',
+                    background: settingsForm.is_public === opt.val ? 'var(--accent-soft)' : 'transparent',
+                    color: settingsForm.is_public === opt.val ? 'var(--accent-dark)' : 'var(--ink-soft)',
+                    cursor: 'pointer', fontWeight: 700, fontSize: 13,
+                  }}>{opt.label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {isSurvivor && (
+            <div style={{ marginBottom: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max entries per person</label>
+                  <input type="number" min={1} max={20} value={settingsForm.survivor_max_entries ?? 1} onChange={e => setSettingsForm(f => ({ ...f, survivor_max_entries: parseInt(e.target.value) }))} />
+                </div>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Buyback deadline (week)</label>
+                  <input type="number" min={1} max={18} value={settingsForm.survivor_buyback_deadline_week ?? ''} placeholder="Off" onChange={e => setSettingsForm(f => ({ ...f, survivor_buyback_deadline_week: e.target.value ? parseInt(e.target.value) : null }))} />
+                </div>
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per person</label>
+                  <input type="number" min={1} max={10} value={settingsForm.survivor_max_buybacks ?? ''} placeholder="Off" onChange={e => setSettingsForm(f => ({ ...f, survivor_max_buybacks: e.target.value ? parseInt(e.target.value) : null }))} />
+                </div>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 10 }}>
+                Leave buyback fields blank to turn buybacks off.
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button className="btn btn-primary" onClick={saveSettings} disabled={savingSettings}>
+              {savingSettings ? 'Saving…' : 'Save settings'}
+            </button>
+            <button className="btn btn-secondary" onClick={() => setShowSettings(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
 
       {/* Blind Picks Banner (not applicable to survivor pools) */}
       {!isSurvivor && <BlindPicksBanner weekAllSubmitted={weekAllSubmitted} weeklyTab={weeklyTab} />}
@@ -246,6 +390,7 @@ export default function LeaguePage() {
           buybackDeadlineWeek={league.survivor_buyback_deadline_week}
           maxBuybacks={league.survivor_max_buybacks}
           maxEntries={league.survivor_max_entries}
+          maxCapacity={league.max_capacity}
         />
       )}
 
@@ -372,6 +517,17 @@ export default function LeaguePage() {
                     <div style={{ color: 'var(--accent)', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17 }}>{member.profiles?.total_points || 0} pts</div>
                     <div style={{ color: 'var(--ink-soft)' }}>{member.profiles?.total_predictions || 0} picks</div>
                   </div>
+                )}
+                {isOwner && member.role !== 'owner' && (
+                  <button
+                    onClick={() => removeMember(member)}
+                    disabled={removingMember === member.user_id}
+                    title={`Remove ${member.profiles?.username}`}
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 10px', fontSize: 12, color: 'var(--danger)', borderColor: 'var(--danger)', display: 'flex', alignItems: 'center', gap: 5 }}
+                  >
+                    <UserMinus size={13} /> Remove
+                  </button>
                 )}
               </div>
             </div>
