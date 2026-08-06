@@ -23,8 +23,13 @@ export default function LeaguePage() {
   // if it were a different week, since currentWeek is otherwise derived
   // purely from real time — there's no way to walk through a season's
   // eliminations/buybacks without waiting for actual Sundays to pass.
+  // Capped at 99 (not 18) so a scratch/QA league can seed games on
+  // out-of-range week numbers (90+) that can't collide with the real
+  // season's weeks 1-18 — games aren't league-scoped, so a synthetic game
+  // sharing a real week number would pollute every other league's
+  // "has this week fully kicked off" checks too.
   const weekOverrideRaw = profile?.is_admin ? parseInt(searchParams.get('week'), 10) : NaN;
-  const weekOverride = Number.isFinite(weekOverrideRaw) && weekOverrideRaw >= 1 && weekOverrideRaw <= 18 ? weekOverrideRaw : null;
+  const weekOverride = Number.isFinite(weekOverrideRaw) && weekOverrideRaw >= 1 && weekOverrideRaw <= 99 ? weekOverrideRaw : null;
   const effectiveWeek = weekOverride ?? CURRENT_WEEK;
 
   const [league, setLeague] = useState(null);
