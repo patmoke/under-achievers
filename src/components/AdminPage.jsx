@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Unlock, Plus, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { Lock, Unlock, Plus, Save, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const CURRENT_SEASON = 2026;
@@ -27,6 +27,7 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   // New game form
   const [newGame, setNewGame] = useState({ week: '', home_team: '', home_team_abbr: '', away_team: '', away_team_abbr: '', game_time: '', actual_spread: '', bookmaker: 'DraftKings' });
@@ -106,6 +107,22 @@ export default function AdminPage() {
     }
   }
 
+  async function syncGames() {
+    setSyncing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-games', { method: 'POST' });
+      if (error) throw error;
+      const errCount = data?.errors?.length || 0;
+      toast.success(`Synced ${data?.synced ?? 0} games${errCount ? ` (${errCount} errors)` : ''}`);
+      if (errCount) console.warn('sync-games errors:', data.errors);
+      fetchAll();
+    } catch (err) {
+      toast.error(err.message || 'Sync failed');
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   // Loading / access guard
   if (!profile) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-soft)' }}>Loading...</div>;
   if (!profile.is_admin) return null;
@@ -127,9 +144,14 @@ export default function AdminPage() {
         </div>
         <div style={{ display: 'flex', gap: 12 }}>
           {activeTab === 'games' && (
-            <button className="btn btn-primary" onClick={() => setShowAddGame(!showAddGame)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={16} /> Add game
-            </button>
+            <>
+              <button className="btn btn-secondary" onClick={syncGames} disabled={syncing} title="Pull the season schedule, lines, and results from nflverse" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <RefreshCw size={16} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} /> {syncing ? 'Syncing…' : 'Sync games'}
+              </button>
+              <button className="btn btn-primary" onClick={() => setShowAddGame(!showAddGame)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Plus size={16} /> Add game
+              </button>
+            </>
           )}
         </div>
       </div>
