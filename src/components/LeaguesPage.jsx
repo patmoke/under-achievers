@@ -32,6 +32,9 @@ export default function LeaguesPage() {
     is_public: false,
     compete_on: 'weekly',
     max_members: 20,
+    allow_buybacks: false,
+    buyback_deadline_week: 4,
+    max_buybacks: 1,
   });
   const [creating, setCreating] = useState(false);
 
@@ -96,6 +99,8 @@ export default function LeaguesPage() {
           join_code: joinCode,
           created_by: user.id,
           season: 2026,
+          survivor_buyback_deadline_week: form.compete_on === 'survivor' && form.allow_buybacks ? form.buyback_deadline_week : null,
+          survivor_max_buybacks: form.compete_on === 'survivor' && form.allow_buybacks ? form.max_buybacks : null,
         })
         .select()
         .single();
@@ -120,7 +125,7 @@ export default function LeaguesPage() {
 
       toast.success('League created!');
       setShowCreate(false);
-      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_members: 20 });
+      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_members: 20, allow_buybacks: false, buyback_deadline_week: 4, max_buybacks: 1 });
       navigate(`/leagues/${league.id}`);
     } catch (err) {
       toast.error(err.message);
@@ -249,6 +254,33 @@ export default function LeaguesPage() {
               })}
             </div>
           </div>
+
+          {form.compete_on === 'survivor' && (
+            <div style={{ marginBottom: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: form.allow_buybacks ? 14 : 0 }}>
+                <input
+                  type="checkbox"
+                  checked={form.allow_buybacks}
+                  onChange={e => setForm(f => ({ ...f, allow_buybacks: e.target.checked }))}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Allow buybacks</span>
+                <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>— eliminated players can re-enter with a fresh entry</span>
+              </label>
+              {form.allow_buybacks && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 16 }}>
+                  <div>
+                    <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Buyback deadline (week)</label>
+                    <input type="number" min={1} max={18} value={form.buyback_deadline_week} onChange={e => setForm(f => ({ ...f, buyback_deadline_week: parseInt(e.target.value) }))} />
+                  </div>
+                  <div>
+                    <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per person</label>
+                    <input type="number" min={1} max={10} value={form.max_buybacks} onChange={e => setForm(f => ({ ...f, max_buybacks: parseInt(e.target.value) }))} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 20 }}>
             <div style={{ gridColumn: '1 / -1' }}>

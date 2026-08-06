@@ -1,14 +1,16 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, RotateCcw, Lock } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek }) {
+export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
   const [weekGames, setWeekGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
+
+  const buybacksAllowed = buybackDeadlineWeek != null && maxBuybacks != null;
 
   useEffect(() => { fetchAll(); }, [leagueId]);
 
@@ -54,22 +56,26 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   }
 
   function computeStatus(entry) {
-    const entryPicks = picksForEntry(entry.id);
-    const cutoff = entry.reactivated_at ? new Date(entry.reactivated_at) : null;
-    const relevant = entryPicks
-      .filter(p => !cutoff || (p.games?.game_time && new Date(p.games.game_time) > cutoff))
-      .sort((a, b) => a.week - b.week);
+    const entryPicks = picksForEntry(entry.id).sort((a, b) => a.week - b.week);
 
-    for (const pick of relevant) {
+    for (const pick of entryPicks) {
       const g = pick.games;
       if (g?.status === 'final' && g.home_score !== null && g.away_score !== null) {
         const tie = g.home_score === g.away_score;
         const pickedHome = pick.team_abbr === g.home_team_abbr;
         const won = !tie && (pickedHome ? g.home_score > g.away_score : g.away_score > g.home_score);
-        if (!won) return { status: 'eliminated', week: pick.week };
+        if (!won) return { status: 'eliminated', week: pick.week, reason: 'loss' };
       }
     }
-    return { status: 'alive', week: null };
+
+    // Missed-pick check: only evaluated prospectively for the current week,
+    // once every game that week has kicked off with no pick on record.
+    const hasCurrentWeekPick = entryPicks.some(p => p.week === currentWeek);
+    if (!hasCurrentWeekPick && weekGames.length > 0 && weekGames.every(isGameLocked)) {
+      return { status: 'eliminated', week: currentWeek, reason: 'missed' };
+    }
+
+    return { status: 'alive', week: null, reason: null };
   }
 
   function usedTeams(entry) {
@@ -81,6 +87,16 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     );
   }
 
+  function myBuybackCount(userId) {
+    return entries.filter(e => e.user_id === userId && e.is_buyback).length;
+  }
+
+  function canBuyBack() {
+    if (!buybacksAllowed) return false;
+    if (currentWeek > buybackDeadlineWeek) return false;
+    return myBuybackCount(currentUserId) < maxBuybacks;
+  }
+
   async function addEntry() {
     const mine = entries.filter(e => e.user_id === currentUserId);
     const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
@@ -88,6 +104,22 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     if (error) { toast.error(error.message); return; }
     toast.success(`Entry #${nextNum} added!`);
     fetchAll();
+  }
+
+  async function buyBackIn() {
+    if (!canBuyBack()) return;
+    const mine = entries.filter(e => e.user_id === currentUserId);
+    const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
+    const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum, is_buyback: true });
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Bought back in! Entry #${nextNum} is live.`);
+    fetchAll();
+  }
+
+  async function togglePaid(entry) {
+    const { error } = await supabase.from('survivor_entries').update({ paid: !entry.paid }).eq('id', entry.id);
+    if (error) { toast.error(error.message); return; }
+    setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, paid: !e.paid } : e));
   }
 
   async function submitPick(entryId, game, teamAbbr) {
@@ -98,14 +130,6 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     setSubmitting(s => ({ ...s, [entryId]: false }));
     if (error) { toast.error(error.message); return; }
     toast.success('Pick locked in!');
-    fetchAll();
-  }
-
-  async function reactivate(entryId) {
-    if (!confirm("Reactivate this entry? It rejoins starting next week's pick.")) return;
-    const { error } = await supabase.from('survivor_entries').update({ reactivated_at: new Date().toISOString() }).eq('id', entryId);
-    if (error) { toast.error(error.message); return; }
-    toast.success('Entry reactivated!');
     fetchAll();
   }
 
@@ -137,17 +161,25 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         ) : (
           <div style={{ display: 'grid', gap: 12 }}>
             {myEntries.map(entry => {
-              const { status, week: outWeek } = computeStatus(entry);
+              const { status, week: outWeek, reason } = computeStatus(entry);
               const entryPicks = picksForEntry(entry.id);
               const thisWeekPick = entryPicks.find(p => p.week === currentWeek);
               const locked = thisWeekPick && isGameLocked(thisWeekPick.games);
               const used = usedTeams(entry);
+              const eligible = canBuyBack();
 
               return (
                 <div key={entry.id} className="card" style={{ padding: 20, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                    <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
-                      {myEntries.length > 1 ? `Entry #${entry.entry_number}` : 'Your pick'}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
+                        {myEntries.length > 1 ? `Entry #${entry.entry_number}` : 'Your pick'}
+                      </div>
+                      {entry.is_buyback && <span className="badge badge-gold">Buyback</span>}
+                      {entry.paid
+                        ? <span className="badge badge-green"><CheckIcon size={9} style={{ marginRight: 3 }} />Paid</span>
+                        : <span className="badge" style={{ background: 'var(--surface-alt)', color: 'var(--ink-faint)', border: '1px solid var(--border)' }}>Unpaid</span>
+                      }
                     </div>
                     <span className={status === 'alive' ? 'badge badge-lime' : 'badge badge-red'}>
                       {status === 'alive' ? 'Alive' : 'Eliminated'}
@@ -156,7 +188,19 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
                   {status === 'eliminated' ? (
                     <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                      Out since Week {outWeek}. {isOwner ? 'You can reactivate below.' : 'Waiting on the commissioner…'}
+                      Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
+                      {' '}
+                      {eligible ? (
+                        <button onClick={buyBackIn} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <RotateCcw size={12} /> Buy back in
+                        </button>
+                      ) : buybacksAllowed ? (
+                        currentWeek > buybackDeadlineWeek
+                          ? `Buyback window closed after Week ${buybackDeadlineWeek}.`
+                          : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
+                      ) : (
+                        'Buybacks are not enabled for this league.'
+                      )}
                     </div>
                   ) : thisWeekPick && locked ? (
                     <div style={{ fontSize: 14 }}>
@@ -212,7 +256,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       </div>
 
       {/* STANDINGS */}
-      <div>
+      <div style={{ marginBottom: isOwner ? 32 : 0 }}>
         <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none' }}>Standings</h3>
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {sorted.map((entry, idx) => {
@@ -237,10 +281,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                       {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
                         <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}> #{entry.entry_number}</span>
                       )}
+                      {entry.is_buyback && <span style={{ color: 'var(--gold)', fontSize: 11, marginLeft: 6 }}>buyback</span>}
                       {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
                     </div>
                     {entry.status === 'eliminated' && (
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Out — Week {entry.week}</div>
+                      <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Out — Week {entry.week}{entry.reason === 'missed' ? ' (missed pick)' : ''}</div>
                     )}
                   </div>
                 </div>
@@ -257,17 +302,43 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                   <span className={entry.status === 'alive' ? 'badge badge-lime' : 'badge badge-red'} style={{ fontSize: 10 }}>
                     {entry.status === 'alive' ? 'Alive' : 'Out'}
                   </span>
-                  {isOwner && entry.status === 'eliminated' && (
-                    <button onClick={() => reactivate(entry.id)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <RotateCcw size={12} /> Revive
-                    </button>
-                  )}
                 </div>
               </div>
             );
           })}
         </div>
       </div>
+
+      {/* PAYMENT TRACKER (owner only) */}
+      {isOwner && (
+        <div>
+          <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <DollarSign size={18} style={{ color: 'var(--accent)' }} /> Payment tracker
+          </h3>
+          <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+            {entries.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)' }}>No entries yet.</div>
+            ) : (
+              [...entries].sort((a, b) => (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number).map((entry, idx, arr) => (
+                <div key={entry.id} style={{
+                  padding: '12px 20px', borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border)',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
+                }}>
+                  <div style={{ fontSize: 14 }}>
+                    <strong>{entry.profiles?.username}</strong>
+                    {entries.filter(e => e.user_id === entry.user_id).length > 1 && <span style={{ color: 'var(--ink-soft)' }}> #{entry.entry_number}</span>}
+                    {entry.is_buyback && <span className="badge badge-gold" style={{ marginLeft: 8, fontSize: 10 }}>Buyback</span>}
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: entry.paid ? 'var(--success)' : 'var(--ink-soft)', fontWeight: 600 }}>
+                    <input type="checkbox" checked={!!entry.paid} onChange={() => togglePaid(entry)} style={{ width: 16, height: 16 }} />
+                    {entry.paid ? 'Paid' : 'Unpaid'}
+                  </label>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
