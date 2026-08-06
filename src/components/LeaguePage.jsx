@@ -183,6 +183,13 @@ export default function LeaguePage() {
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><Users size={13} />{members.length} / {league.max_members} members</span>
               <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}><TypeIcon size={13} />{TYPE_LABEL[competeOn] || competeOn}</span>
               <span>2026 Season</span>
+              {isSurvivor && (
+                <span>
+                  {league.survivor_buyback_deadline_week != null
+                    ? `Buybacks: up to ${league.survivor_max_buybacks} through Week ${league.survivor_buyback_deadline_week}`
+                    : 'Buybacks: not allowed'}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -229,6 +236,8 @@ export default function LeaguePage() {
           isOwner={isOwner}
           season={CURRENT_SEASON}
           currentWeek={CURRENT_WEEK}
+          buybackDeadlineWeek={league.survivor_buyback_deadline_week}
+          maxBuybacks={league.survivor_max_buybacks}
         />
       )}
 
