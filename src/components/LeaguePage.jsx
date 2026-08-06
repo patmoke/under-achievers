@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
@@ -25,6 +25,7 @@ export default function LeaguePage() {
   const [weeklyTab, setWeeklyTab] = useState(CURRENT_WEEK);
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [entryCount, setEntryCount] = useState(0);
   const [showSettings, setShowSettings] = useState(false);
   const [settingsForm, setSettingsForm] = useState(null);
@@ -187,6 +188,14 @@ export default function LeaguePage() {
     toast.success('Join code copied!');
   }
 
+  function shareLink() {
+    const url = `${window.location.origin}/join/${league.join_code}`;
+    navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+    toast.success('Invite link copied!');
+  }
+
   function buildWeeklyLeaderboard() {
     const userMap = {};
     members.forEach(m => {
@@ -267,6 +276,10 @@ export default function LeaguePage() {
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <button onClick={shareLink} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {linkCopied ? <Check size={14} /> : <Share2 size={14} />}
+              {linkCopied ? 'Link copied' : 'Share'}
+            </button>
             <button onClick={copyCode} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'Barlow Condensed', letterSpacing: '0.06em' }}>
               {copied ? <Check size={14} /> : <Copy size={14} />}
               {league.join_code}
