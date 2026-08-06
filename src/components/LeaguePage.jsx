@@ -190,6 +190,13 @@ export default function LeaguePage() {
                     : 'Buybacks: not allowed'}
                 </span>
               )}
+              {isSurvivor && (
+                <span>
+                  {league.survivor_max_entries != null
+                    ? `Entries: up to ${league.survivor_max_entries} per person`
+                    : 'Entries: 1 per person'}
+                </span>
+              )}
             </div>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -238,6 +245,7 @@ export default function LeaguePage() {
           currentWeek={CURRENT_WEEK}
           buybackDeadlineWeek={league.survivor_buyback_deadline_week}
           maxBuybacks={league.survivor_max_buybacks}
+          maxEntries={league.survivor_max_entries}
         />
       )}
 
