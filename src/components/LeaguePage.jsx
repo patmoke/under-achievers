@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2 } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
@@ -15,8 +15,17 @@ const TYPE_LABEL = { weekly: 'Weekly Picks', survivor: 'Survivor Pool' };
 
 export default function LeaguePage() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Admin-only testing aid: ?week=N lets an admin view the survivor pool as
+  // if it were a different week, since currentWeek is otherwise derived
+  // purely from real time — there's no way to walk through a season's
+  // eliminations/buybacks without waiting for actual Sundays to pass.
+  const weekOverrideRaw = profile?.is_admin ? parseInt(searchParams.get('week'), 10) : NaN;
+  const weekOverride = Number.isFinite(weekOverrideRaw) && weekOverrideRaw >= 1 && weekOverrideRaw <= 18 ? weekOverrideRaw : null;
+  const effectiveWeek = weekOverride ?? CURRENT_WEEK;
 
   const [league, setLeague] = useState(null);
   const [members, setMembers] = useState([]);
@@ -392,6 +401,12 @@ export default function LeaguePage() {
         ))}
       </div>
 
+      {weekOverride && (
+        <div style={{ marginBottom: 20, padding: '10px 16px', background: 'var(--warning-soft)', border: '1px solid rgba(184,114,11,0.25)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <FlaskConical size={14} /> Admin test view — viewing this league as Week {weekOverride} (real week is {CURRENT_WEEK}). Remove <code>?week=</code> from the URL to see it live.
+        </div>
+      )}
+
       {/* SURVIVOR (primary content for survivor-type leagues) */}
       {isSurvivor && tab === 'survivor' && (
         <SurvivorTab
@@ -399,7 +414,7 @@ export default function LeaguePage() {
           currentUserId={user.id}
           isOwner={isOwner}
           season={CURRENT_SEASON}
-          currentWeek={CURRENT_WEEK}
+          currentWeek={effectiveWeek}
           buybackDeadlineWeek={league.survivor_buyback_deadline_week}
           maxBuybacks={league.survivor_max_buybacks}
           maxEntries={league.survivor_max_entries}

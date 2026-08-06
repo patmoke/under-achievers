@@ -37,10 +37,11 @@ function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
 export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries, maxCapacity }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
-  const [weekGames, setWeekGames] = useState([]);
+  const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
 
+  const weekGames = allGames.filter(g => g.week === currentWeek);
   const buybacksAllowed = buybackDeadlineWeek != null && maxBuybacks != null;
   const entryCap = maxEntries != null ? maxEntries : 1;
   const seasonStarted = currentWeek > 1 || weekGames.some(isGameLocked);
@@ -71,10 +72,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     const { data: gamesData } = await supabase
       .from('games')
       .select('*')
-      .eq('week', currentWeek)
       .eq('season', season)
       .order('game_time');
-    setWeekGames(gamesData || []);
+    setAllGames(gamesData || []);
 
     setLoading(false);
   }
@@ -101,11 +101,19 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       }
     }
 
-    // Missed-pick check: only evaluated prospectively for the current week,
-    // once every game that week has kicked off with no pick on record.
-    const hasCurrentWeekPick = entryPicks.some(p => p.week === currentWeek);
-    if (!hasCurrentWeekPick && weekGames.length > 0 && weekGames.every(isGameLocked)) {
-      return { status: 'eliminated', week: currentWeek, reason: 'missed' };
+    // Missed-pick check: find the EARLIEST week (not just the one currently
+    // being viewed) where every game had kicked off with no pick on record.
+    // currentWeek can lag behind real time — an override for testing, or
+    // simply someone not opening the app for a few weeks — so scanning only
+    // `currentWeek` would misreport a miss from week 2 as happening in
+    // whatever week is being looked at right now.
+    const pickedWeeks = new Set(entryPicks.map(p => p.week));
+    for (let w = entry.start_week || 1; w <= currentWeek; w++) {
+      if (pickedWeeks.has(w)) continue;
+      const gamesForWeek = allGames.filter(g => g.week === w);
+      if (gamesForWeek.length > 0 && gamesForWeek.every(isGameLocked)) {
+        return { status: 'eliminated', week: w, reason: 'missed' };
+      }
     }
 
     return { status: 'alive', week: null, reason: null };
@@ -161,7 +169,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     if (!confirm('Buy back in with a new entry?')) return;
     const mine = entries.filter(e => e.user_id === currentUserId);
     const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
-    const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum, is_buyback: true });
+    const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum, is_buyback: true, start_week: currentWeek });
     if (error) { toast.error(error.message); return; }
     toast.success(`Bought back in! Entry #${nextNum} is live.`);
     fetchAll();
