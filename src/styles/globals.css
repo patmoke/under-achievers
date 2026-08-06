@@ -205,6 +205,10 @@ textarea:focus-visible,
   transform: none;
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 /* Inputs */
 input, textarea, select {
   font-family: 'DM Sans', sans-serif;
