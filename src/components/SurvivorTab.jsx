@@ -1,7 +1,38 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
+
+function formatGameTime(iso) {
+  const d = new Date(iso);
+  const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  return `${day} · ${time}`;
+}
+
+function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
+  return (
+    <button
+      disabled={disabled}
+      onClick={onClick}
+      title={isUsed ? `${name} — already used` : name}
+      style={{
+        flex: 1,
+        padding: '10px 12px',
+        borderRadius: 'var(--radius-sm)',
+        background: isSelected ? 'var(--accent)' : isUsed ? 'var(--surface-alt)' : 'var(--surface)',
+        border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border-strong)'}`,
+        color: isSelected ? 'var(--accent-ink)' : isUsed ? 'var(--ink-faint)' : 'var(--ink)',
+        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
+        cursor: isUsed ? 'not-allowed' : 'pointer',
+        opacity: isUsed ? 0.6 : 1,
+        textDecoration: isUsed ? 'line-through' : 'none',
+      }}
+    >
+      {abbr}
+    </button>
+  );
+}
 
 export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries }) {
   const [entries, setEntries] = useState([]);
@@ -156,6 +187,39 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return 0;
   });
 
+  const historyEntries = [...entries].sort((a, b) =>
+    (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number
+  );
+  const historyWeeks = Array.from(new Set(picks.map(p => p.week))).sort((a, b) => a - b);
+
+  function renderHistoryCell(entry, week) {
+    const pick = picksForEntry(entry.id).find(p => p.week === week);
+    if (!pick) return <span style={{ color: 'var(--ink-faint)' }}>—</span>;
+
+    const isMe = entry.user_id === currentUserId;
+    if (!isMe && !isGameLocked(pick.games)) {
+      return <span style={{ color: 'var(--ink-faint)', display: 'inline-flex', alignItems: 'center', gap: 4 }}><EyeOff size={11} /></span>;
+    }
+
+    const g = pick.games;
+    let outcome = null;
+    if (g?.status === 'final' && g.home_score !== null && g.away_score !== null) {
+      const tie = g.home_score === g.away_score;
+      const pickedHome = pick.team_abbr === g.home_team_abbr;
+      outcome = tie ? 'tie' : (pickedHome ? g.home_score > g.away_score : g.away_score > g.home_score) ? 'win' : 'loss';
+    }
+
+    return (
+      <span style={{
+        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+        color: outcome === 'win' ? 'var(--success)' : outcome === 'loss' ? 'var(--danger)' : 'var(--ink)',
+        textDecoration: outcome === 'loss' ? 'line-through' : 'none',
+      }}>
+        {pick.team_abbr}
+      </span>
+    );
+  }
+
   return (
     <div>
       {/* YOUR ENTRIES */}
@@ -240,35 +304,33 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                       <div className="label-muted" style={{ marginBottom: 10 }}>
                         Pick a team to win — Week {currentWeek}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {weekGames.filter(g => !isGameLocked(g)).flatMap(g => [
-                          { abbr: g.away_team_abbr, name: g.away_team, game: g },
-                          { abbr: g.home_team_abbr, name: g.home_team, game: g },
-                        ]).map(({ abbr, name, game }) => {
-                          const isUsed = used.has(abbr);
-                          const isSelected = thisWeekPick?.team_abbr === abbr;
-                          return (
-                            <button
-                              key={abbr}
-                              disabled={isUsed || submitting[entry.id]}
-                              onClick={() => submitPick(entry.id, game, abbr)}
-                              title={isUsed ? `${name} — already used` : name}
-                              style={{
-                                padding: '10px 16px',
-                                borderRadius: 'var(--radius-sm)',
-                                background: isSelected ? 'var(--accent)' : isUsed ? 'var(--surface-alt)' : 'var(--surface)',
-                                border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--border-strong)'}`,
-                                color: isSelected ? 'var(--accent-ink)' : isUsed ? 'var(--ink-faint)' : 'var(--ink)',
-                                fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15,
-                                cursor: isUsed ? 'not-allowed' : 'pointer',
-                                opacity: isUsed ? 0.6 : 1,
-                                textDecoration: isUsed ? 'line-through' : 'none',
-                              }}
-                            >
-                              {abbr}
-                            </button>
-                          );
-                        })}
+                      <div style={{ display: 'grid', gap: 10 }}>
+                        {weekGames.filter(g => !isGameLocked(g)).map(game => (
+                          <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                            <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                              <Clock size={11} /> {formatGameTime(game.game_time)}
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <TeamButton
+                                abbr={game.away_team_abbr}
+                                name={game.away_team}
+                                isUsed={used.has(game.away_team_abbr)}
+                                isSelected={thisWeekPick?.team_abbr === game.away_team_abbr}
+                                disabled={used.has(game.away_team_abbr) || submitting[entry.id]}
+                                onClick={() => submitPick(entry.id, game, game.away_team_abbr)}
+                              />
+                              <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>
+                              <TeamButton
+                                abbr={game.home_team_abbr}
+                                name={game.home_team}
+                                isUsed={used.has(game.home_team_abbr)}
+                                isSelected={thisWeekPick?.team_abbr === game.home_team_abbr}
+                                disabled={used.has(game.home_team_abbr) || submitting[entry.id]}
+                                onClick={() => submitPick(entry.id, game, game.home_team_abbr)}
+                              />
+                            </div>
+                          </div>
+                        ))}
                       </div>
                       {weekGames.filter(g => !isGameLocked(g)).length === 0 && (
                         <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>All of this week's games have started.</div>
@@ -335,6 +397,45 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
           })}
         </div>
       </div>
+
+      {/* PICK HISTORY */}
+      {picks.length > 0 && (
+        <div style={{ marginBottom: isOwner ? 32 : 0 }}>
+          <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none' }}>Pick history</h3>
+          <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--border)' }}>
+                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Week</th>
+                  {historyEntries.map(entry => (
+                    <th key={entry.id} style={{
+                      textAlign: 'center', padding: '10px 16px', whiteSpace: 'nowrap',
+                      color: entry.user_id === currentUserId ? 'var(--accent-dark)' : 'var(--ink-soft)', fontWeight: 600,
+                    }}>
+                      {entry.profiles?.username}
+                      {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
+                        <span style={{ fontWeight: 400 }}> #{entry.entry_number}</span>
+                      )}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {historyWeeks.map((week, idx) => (
+                  <tr key={week} style={{ borderBottom: idx === historyWeeks.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                    <td style={{ padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Week {week}</td>
+                    {historyEntries.map(entry => (
+                      <td key={entry.id} style={{ textAlign: 'center', padding: '10px 16px' }}>
+                        {renderHistoryCell(entry, week)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* PAYMENT TRACKER (owner only) */}
       {isOwner && (
