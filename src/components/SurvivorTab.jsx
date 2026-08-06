@@ -211,9 +211,10 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return 0;
   });
 
-  const historyEntries = [...entries].sort((a, b) =>
-    (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number
-  );
+  const historyEntries = [...withStatus].sort((a, b) => {
+    if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
+    return (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number;
+  });
   const historyWeeks = Array.from(new Set(picks.map(p => p.week))).sort((a, b) => a - b);
 
   function renderHistoryCell(entry, week) {
@@ -450,26 +451,31 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Week</th>
-                  {historyEntries.map(entry => (
-                    <th key={entry.id} style={{
-                      textAlign: 'center', padding: '10px 16px', whiteSpace: 'nowrap',
-                      color: entry.user_id === currentUserId ? 'var(--accent-dark)' : 'var(--ink-soft)', fontWeight: 600,
-                    }}>
-                      {entry.profiles?.username}
-                      {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
-                        <span style={{ fontWeight: 400 }}> #{entry.entry_number}</span>
-                      )}
+                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Entry</th>
+                  {historyWeeks.map(week => (
+                    <th key={week} style={{ textAlign: 'center', padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      Wk {week}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {historyWeeks.map((week, idx) => (
-                  <tr key={week} style={{ borderBottom: idx === historyWeeks.length - 1 ? 'none' : '1px solid var(--border)' }}>
-                    <td style={{ padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Week {week}</td>
-                    {historyEntries.map(entry => (
-                      <td key={entry.id} style={{ textAlign: 'center', padding: '10px 16px' }}>
+                {historyEntries.map((entry, idx) => (
+                  <tr key={entry.id} style={{
+                    borderBottom: idx === historyEntries.length - 1 ? 'none' : '1px solid var(--border)',
+                    opacity: entry.status === 'eliminated' ? 0.6 : 1,
+                  }}>
+                    <td style={{
+                      padding: '10px 16px', whiteSpace: 'nowrap', fontWeight: 600,
+                      color: entry.user_id === currentUserId ? 'var(--accent-dark)' : 'var(--ink)',
+                    }}>
+                      {entry.profiles?.username}
+                      {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
+                        <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}> #{entry.entry_number}</span>
+                      )}
+                    </td>
+                    {historyWeeks.map(week => (
+                      <td key={week} style={{ textAlign: 'center', padding: '10px 16px' }}>
                         {renderHistoryCell(entry, week)}
                       </td>
                     ))}
