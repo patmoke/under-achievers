@@ -35,6 +35,8 @@ export default function LeaguesPage() {
     allow_buybacks: false,
     buyback_deadline_week: 4,
     max_buybacks: 1,
+    allow_multi_entry: false,
+    max_entries: 2,
   });
   const [creating, setCreating] = useState(false);
 
@@ -101,6 +103,7 @@ export default function LeaguesPage() {
           season: 2026,
           survivor_buyback_deadline_week: form.compete_on === 'survivor' && form.allow_buybacks ? form.buyback_deadline_week : null,
           survivor_max_buybacks: form.compete_on === 'survivor' && form.allow_buybacks ? form.max_buybacks : null,
+          survivor_max_entries: form.compete_on === 'survivor' && form.allow_multi_entry ? form.max_entries : null,
         })
         .select()
         .single();
@@ -125,7 +128,7 @@ export default function LeaguesPage() {
 
       toast.success('League created!');
       setShowCreate(false);
-      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_members: 20, allow_buybacks: false, buyback_deadline_week: 4, max_buybacks: 1 });
+      setForm({ name: '', description: '', is_public: false, compete_on: 'weekly', max_members: 20, allow_buybacks: false, buyback_deadline_week: 4, max_buybacks: 1, allow_multi_entry: false, max_entries: 2 });
       navigate(`/leagues/${league.id}`);
     } catch (err) {
       toast.error(err.message);
@@ -276,6 +279,30 @@ export default function LeaguesPage() {
                   <div>
                     <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per person</label>
                     <input type="number" min={1} max={10} value={form.max_buybacks} onChange={e => setForm(f => ({ ...f, max_buybacks: parseInt(e.target.value) }))} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {form.compete_on === 'survivor' && (
+            <div style={{ marginBottom: 20, padding: 16, border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginBottom: form.allow_multi_entry ? 14 : 0 }}>
+                <input
+                  type="checkbox"
+                  checked={form.allow_multi_entry}
+                  onChange={e => setForm(f => ({ ...f, allow_multi_entry: e.target.checked }))}
+                  style={{ width: 16, height: 16 }}
+                />
+                <span style={{ fontWeight: 700, fontSize: 14 }}>Allow multiple entries per person</span>
+                <span style={{ fontSize: 12, color: 'var(--ink-soft)' }}>— buy in more than one entry before the season starts</span>
+              </label>
+              {form.allow_multi_entry && (
+                <div>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max entries per person</label>
+                  <input type="number" min={2} max={20} value={form.max_entries} onChange={e => setForm(f => ({ ...f, max_entries: parseInt(e.target.value) }))} style={{ maxWidth: 160 }} />
+                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 6 }}>
+                    Additional entries can only be bought before Week 1 kicks off — never mid-season.
                   </div>
                 </div>
               )}

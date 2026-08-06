@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks }) {
+export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
   const [weekGames, setWeekGames] = useState([]);
@@ -11,6 +11,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [submitting, setSubmitting] = useState({});
 
   const buybacksAllowed = buybackDeadlineWeek != null && maxBuybacks != null;
+  const entryCap = maxEntries != null ? maxEntries : 1;
+  const seasonStarted = currentWeek > 1 || weekGames.some(isGameLocked);
 
   useEffect(() => { fetchAll(); }, [leagueId]);
 
@@ -91,6 +93,15 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return entries.filter(e => e.user_id === userId && e.is_buyback).length;
   }
 
+  function myEntryCount(userId) {
+    return entries.filter(e => e.user_id === userId).length;
+  }
+
+  function canAddEntry() {
+    if (seasonStarted) return false;
+    return myEntryCount(currentUserId) < entryCap;
+  }
+
   function canBuyBack() {
     if (!buybacksAllowed) return false;
     if (currentWeek > buybackDeadlineWeek) return false;
@@ -98,6 +109,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   }
 
   async function addEntry() {
+    if (!canAddEntry()) return;
     const mine = entries.filter(e => e.user_id === currentUserId);
     const nextNum = mine.length > 0 ? Math.max(...mine.map(e => e.entry_number)) + 1 : 1;
     const { error } = await supabase.from('survivor_entries').insert({ league_id: leagueId, user_id: currentUserId, entry_number: nextNum });
@@ -148,12 +160,27 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     <div>
       {/* YOUR ENTRIES */}
       <div style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
           <h3 style={{ fontSize: 20, textTransform: 'none' }}>Your entries</h3>
-          <button className="btn btn-secondary" onClick={addEntry} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13 }}>
-            <Plus size={14} /> Add entry
-          </button>
+          {(myEntries.length === 0 || entryCap > 1) && (
+            <button
+              className="btn btn-secondary"
+              onClick={addEntry}
+              disabled={myEntries.length > 0 && !canAddEntry()}
+              title={seasonStarted ? 'Entries closed — the season has started' : entryCap <= myEntryCount(currentUserId) ? `Max ${entryCap} entries per person` : undefined}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13 }}
+            >
+              <Plus size={14} /> {myEntries.length === 0 ? 'Add entry' : 'Buy additional entry'}
+            </button>
+          )}
         </div>
+        {myEntries.length > 0 && entryCap > 1 && (
+          <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 16 }}>
+            {seasonStarted
+              ? 'Entries are closed — the season has started.'
+              : `${myEntryCount(currentUserId)} / ${entryCap} entries used.`}
+          </div>
+        )}
         {myEntries.length === 0 ? (
           <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>
             No entries yet. Add one to start picking.
