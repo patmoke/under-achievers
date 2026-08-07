@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -18,13 +18,7 @@ export default function UserProfilePage() {
   const [recentWeekly, setRecentWeekly] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Redirect to own profile page if viewing yourself
-    if (id === user.id) { navigate('/profile', { replace: true }); return; }
-    fetchProfile();
-  }, [id]);
-
-  async function fetchProfile() {
+  const fetchProfile = useCallback(async () => {
     setLoading(true);
     const [{ data: prof }, { data: followRow }] = await Promise.all([
       supabase.from('profiles').select('*').eq('id', id).single(),
@@ -47,7 +41,13 @@ export default function UserProfilePage() {
 
     setRecentWeekly(weekly || []);
     setLoading(false);
-  }
+  }, [id, user.id, navigate]);
+
+  useEffect(() => {
+    // Viewing yourself belongs on the editable own-profile page.
+    if (id === user.id) { navigate('/profile', { replace: true }); return; }
+    fetchProfile();
+  }, [id, user.id, navigate, fetchProfile]);
 
   async function toggleFollow() {
     if (isFollowing) {

@@ -74,4 +74,8 @@ export function AuthProvider({ children }) {
   );
 }
 
+// Colocated with the provider on purpose. Splitting it into its own module
+// would satisfy fast refresh but scatter the auth surface across two files for
+// a dev-only nicety.
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(AuthContext);

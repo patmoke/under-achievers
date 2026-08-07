@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -36,7 +36,10 @@ export default function LeaguePage() {
   const [league, setLeague] = useState(null);
   const [members, setMembers] = useState([]);
   const [myMembership, setMyMembership] = useState(null);
-  const [tab, setTab] = useState(null);
+  // Default tab depends on the league type, which isn't known until the league
+  // loads. Derived during render rather than assigned from an effect, so there
+  // is no extra render pass and no null-tab window to guard against.
+  const [tabOverride, setTabOverride] = useState(null);
   // null until the user picks a week, so the tab follows the derived current
   // week once it resolves instead of being frozen at the initial estimate.
   const [weeklyTabOverride, setWeeklyTabOverride] = useState(null);
@@ -58,17 +61,7 @@ export default function LeaguePage() {
 
   const isSurvivor = league?.compete_on === 'survivor';
 
-  useEffect(() => { fetchLeague(); }, [id, user]);
-
-  useEffect(() => {
-    if (league && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
-  }, [league, members, weeklyTab]);
-
-  useEffect(() => {
-    if (league && tab === null) setTab(isSurvivor ? 'survivor' : 'leaderboard');
-  }, [league]);
-
-  async function fetchLeague() {
+  const fetchLeague = useCallback(async () => {
     setLoading(true);
     const { data: leagueData, error: leagueError } = await supabase
       .from('leagues').select('*').eq('id', id).single();
@@ -113,15 +106,9 @@ export default function LeaguePage() {
       return;
     }
     setLoading(false);
-  }
+  }, [id, user, navigate]);
 
-  async function checkAllSubmittedThenFetch() {
-    const { data: weekResult } = await supabase.rpc('league_week_all_locked', { p_league_id: id, p_week: weeklyTab, p_season: CURRENT_SEASON });
-    setWeekAllSubmitted(!!weekResult);
-    await fetchPicks(!!weekResult);
-  }
-
-  async function fetchPicks(weekAllDone) {
+  const fetchPicks = useCallback(async (weekAllDone) => {
     const memberIds = members.map(m => m.user_id);
 
     const { data: myWeek } = await supabase
@@ -141,7 +128,19 @@ export default function LeaguePage() {
         .in('user_id', memberIds).eq('week', weeklyTab).eq('season', CURRENT_SEASON);
       setWeeklyPicks(allWeek || []);
     }
-  }
+  }, [members, user, weeklyTab]);
+
+  const checkAllSubmittedThenFetch = useCallback(async () => {
+    const { data: weekResult } = await supabase.rpc('league_week_all_locked', { p_league_id: id, p_week: weeklyTab, p_season: CURRENT_SEASON });
+    setWeekAllSubmitted(!!weekResult);
+    await fetchPicks(!!weekResult);
+  }, [id, weeklyTab, fetchPicks]);
+
+  useEffect(() => { fetchLeague(); }, [fetchLeague]);
+
+  useEffect(() => {
+    if (league && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
+  }, [league, members, isSurvivor, checkAllSubmittedThenFetch]);
 
   async function leaveLeague() {
     if (myMembership?.role === 'owner') { toast.error('Transfer ownership or delete the league before leaving'); return; }
@@ -235,27 +234,29 @@ export default function LeaguePage() {
       .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null }));
   }
 
-  if (loading || tab === null) return (
+  if (loading || !league) return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       <div className="skeleton card" style={{ height: 200 }} />
     </div>
   );
 
+  // Validated against the league type, not just defaulted: carrying a
+  // 'leaderboard' selection from a weekly league into a survivor one would
+  // otherwise match no tab and render an empty page.
+  const availableTabs = isSurvivor ? ['survivor', 'members'] : ['leaderboard', 'weekly', 'members'];
+  const tab = availableTabs.includes(tabOverride) ? tabOverride : availableTabs[0];
   const isOwner = myMembership?.role === 'owner';
   const weeklyBoard = isSurvivor ? [] : buildWeeklyLeaderboard();
   const competeOn = league.compete_on;
   const TypeIcon = TYPE_ICON[competeOn] || Calendar;
 
-  const TABS = isSurvivor
-    ? [
-        { key: 'survivor', label: 'Survivor pool' },
-        { key: 'members', label: `Members (${members.length})` },
-      ]
-    : [
-        { key: 'leaderboard', label: 'Leaderboard' },
-        { key: 'weekly', label: 'Weekly picks' },
-        { key: 'members', label: `Members (${members.length})` },
-      ];
+  const TAB_LABELS = {
+    survivor: 'Survivor pool',
+    leaderboard: 'Leaderboard',
+    weekly: 'Weekly picks',
+    members: `Members (${members.length})`,
+  };
+  const TABS = availableTabs.map(key => ({ key, label: TAB_LABELS[key] }));
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -400,7 +401,7 @@ export default function LeaguePage() {
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
+          <button key={t.key} onClick={() => setTabOverride(t.key)} style={{
             background: 'none', border: 'none', whiteSpace: 'nowrap',
             borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
             color: tab === t.key ? 'var(--accent)' : 'var(--ink-soft)',

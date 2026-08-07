@@ -24,13 +24,12 @@ export default [
       ...js.configs.recommended.rules,
       ...(reactHooks.configs?.recommended?.rules ?? {}),
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
-      // These two react-hooks v7 rules flag long-standing patterns across the
-      // existing components (function declarations used in an effect above
-      // their definition, and setState called directly in an effect). They're
-      // worth cleaning up, but as a deliberate refactor rather than a blocker
-      // on every future lint run — kept visible as warnings until then.
-      'react-hooks/immutability': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
+      // Every remaining hit is setLoading(true/false) inside an async fetch
+      // that an effect kicks off — the ordinary "load data on mount" pattern.
+      // Satisfying this rule means moving data loading to Suspense or a query
+      // library, which is a deliberate architectural change, not a lint fix.
+      // Off rather than 'warn' so the warning list stays meaningful.
+      'react-hooks/set-state-in-effect': 'off',
       // JSX-only identifiers read as unused to base ESLint; ignore intentional
       // throwaways too (e.g. destructuring off a field we don't need).
       'no-unused-vars': ['error', { varsIgnorePattern: '^[A-Z_]', argsIgnorePattern: '^_' }],

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, TrendingUp, Award } from 'lucide-react';
@@ -21,35 +21,9 @@ export default function LeaderboardPage() {
   const selectedWeek = selectedWeekOverride ?? currentWeek;
   const setSelectedWeek = setSelectedWeekOverride;
 
-  async function fetchLeaderboards() {
-    setLoading(true);
-    if (tab === 'weekly') {
-      const { data } = await supabase
-        .from('weekly_leaderboards')
-        .select('*, profiles(username, display_name)')
-        .eq('week', selectedWeek)
-        .eq('season', CURRENT_SEASON)
-        .order('rank');
-      if (data && data.length > 0) {
-        setWeeklyData(data);
-        setLoading(false);
-      } else {
-        // Fall through to live predictions if leaderboard table is empty
-        await fetchFromPredictions();
-      }
-    } else {
-      const { data } = await supabase
-        .from('season_leaderboards')
-        .select('*, profiles(username, display_name)')
-        .eq('season', CURRENT_SEASON)
-        .order('rank');
-      setSeasonData(data || []);
-      setLoading(false);
-    }
-  }
-
-  // Build from predictions if leaderboard table is empty
-  async function fetchFromPredictions() {
+  // Declared before fetchLeaderboards, which falls back to it when the
+  // precomputed weekly_leaderboards table has no rows for the week.
+  const fetchFromPredictions = useCallback(async () => {
     setLoading(true);
     const { data } = await supabase
       .from('predictions')
@@ -86,11 +60,36 @@ export default function LeaderboardPage() {
 
     setWeeklyData(rows);
     setLoading(false);
-  }
+  }, [selectedWeek]);
 
-  useEffect(() => {
-    fetchLeaderboards();
-  }, [tab, selectedWeek]);
+  const fetchLeaderboards = useCallback(async () => {
+    setLoading(true);
+    if (tab === 'weekly') {
+      const { data } = await supabase
+        .from('weekly_leaderboards')
+        .select('*, profiles(username, display_name)')
+        .eq('week', selectedWeek)
+        .eq('season', CURRENT_SEASON)
+        .order('rank');
+      if (data && data.length > 0) {
+        setWeeklyData(data);
+        setLoading(false);
+      } else {
+        // Fall back to live predictions when the leaderboard table is empty
+        await fetchFromPredictions();
+      }
+    } else {
+      const { data } = await supabase
+        .from('season_leaderboards')
+        .select('*, profiles(username, display_name)')
+        .eq('season', CURRENT_SEASON)
+        .order('rank');
+      setSeasonData(data || []);
+      setLoading(false);
+    }
+  }, [tab, selectedWeek, fetchFromPredictions]);
+
+  useEffect(() => { fetchLeaderboards(); }, [fetchLeaderboards]);
 
   const displayData = tab === 'weekly' ? weeklyData : seasonData;
 

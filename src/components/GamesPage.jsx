@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { calculatePoints, formatSpread, getAccuracyColor } from '../lib/scoring';
@@ -23,12 +23,7 @@ export default function GamesPage() {
   const selectedWeek = selectedWeekOverride ?? currentWeek;
   const setSelectedWeek = setSelectedWeekOverride;
 
-  useEffect(() => {
-    fetchGames();
-    fetchUserPredictions();
-  }, [selectedWeek, user]);
-
-  async function fetchGames() {
+  const fetchGames = useCallback(async () => {
     setLoading(true);
     const { data, error } = await supabase
       .from('games')
@@ -38,9 +33,9 @@ export default function GamesPage() {
       .order('game_time');
     if (!error) setGames(data || []);
     setLoading(false);
-  }
+  }, [selectedWeek]);
 
-  async function fetchUserPredictions() {
+  const fetchUserPredictions = useCallback(async () => {
     if (!user) return;
     const { data } = await supabase
       .from('predictions')
@@ -59,7 +54,12 @@ export default function GamesPage() {
       setPredictions(predMap);
       setConfidence(confMap);
     }
-  }
+  }, [selectedWeek, user]);
+
+  useEffect(() => {
+    fetchGames();
+    fetchUserPredictions();
+  }, [fetchGames, fetchUserPredictions]);
 
   async function submitPredictions() {
     if (!user) return;

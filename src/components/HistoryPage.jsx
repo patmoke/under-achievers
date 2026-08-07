@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, calculatePoints } from '../lib/scoring';
@@ -13,9 +13,7 @@ export default function HistoryPage() {
   const [loading, setLoading] = useState(true);
   const [availableWeeks, setAvailableWeeks] = useState([]);
 
-  useEffect(() => { fetchHistory(); }, [user]);
-
-  async function fetchHistory() {
+  const fetchHistory = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     const { data: weekly } = await supabase.from('predictions')
@@ -30,7 +28,9 @@ export default function HistoryPage() {
       if (weeks.length > 0) setSelectedWeek(weeks[0]);
     }
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => { fetchHistory(); }, [fetchHistory]);
 
   function getWeekSummary(picks) {
     const withResults = picks.filter(p => p.games?.actual_spread !== null && p.games?.actual_spread !== undefined);

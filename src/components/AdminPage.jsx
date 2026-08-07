@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -32,16 +32,8 @@ export default function AdminPage() {
   // New game form
   const [newGame, setNewGame] = useState({ week: '', home_team: '', home_team_abbr: '', away_team: '', away_team_abbr: '', game_time: '', actual_spread: '', bookmaker: 'DraftKings' });
 
-  useEffect(() => {
-    // Guard: redirect non-admins
-    if (profile && !profile.is_admin) {
-      navigate('/games');
-      return;
-    }
-    if (profile?.is_admin) fetchAll();
-  }, [profile]);
 
-  async function fetchAll() {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     const [gamesRes, usersRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
@@ -50,7 +42,13 @@ export default function AdminPage() {
     setGames(gamesRes.data || []);
     setUsers(usersRes.data || []);
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    if (!profile) return;
+    if (!profile.is_admin) { navigate('/games'); return; }
+    fetchAll();
+  }, [profile, navigate, fetchAll]);
 
   // --- GAMES ---
   async function toggleGameLock(game) {

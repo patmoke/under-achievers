@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Edit2, Save, X, Target, Trophy, Zap, TrendingUp } from 'lucide-react';
@@ -23,14 +23,7 @@ export default function ProfilePage() {
   const [recentPicks, setRecentPicks] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (profile) {
-      setForm({ display_name: profile.display_name || '', bio: profile.bio || '', favorite_team: profile.favorite_team || '' });
-    }
-    fetchRecentPicks();
-  }, [profile]);
-
-  async function fetchRecentPicks() {
+  const fetchRecentPicks = useCallback(async () => {
     if (!user) return;
     const { data: weekly } = await supabase
       .from('predictions')
@@ -39,7 +32,19 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
       .limit(10);
     setRecentPicks(weekly || []);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    if (profile) {
+      setForm({
+        display_name: profile.display_name || '',
+        bio: profile.bio || '',
+        favorite_team: profile.favorite_team || '',
+      });
+    }
+  }, [profile]);
+
+  useEffect(() => { fetchRecentPicks(); }, [fetchRecentPicks]);
 
   async function handleSave() {
     setLoading(true);
