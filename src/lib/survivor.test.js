@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { computeEntryStatus, usedTeams, pickOutcome, isGameLocked } from './survivor';
-import { deriveCurrentWeek } from './scoring';
+import {
+  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread,
+  CONFIDENCE_MIN, CONFIDENCE_MAX,
+} from './scoring';
 
 // A fixed "now" so these tests never depend on the real clock.
 const NOW = new Date('2026-10-15T00:00:00Z');
@@ -227,5 +230,58 @@ describe('deriveCurrentWeek', () => {
   it('returns null with no schedule so callers can fall back', () => {
     expect(deriveCurrentWeek([], NOW)).toBeNull();
     expect(deriveCurrentWeek(undefined, NOW)).toBeNull();
+  });
+});
+
+describe('confidence budget', () => {
+  it('grants two stars per scheduled game', () => {
+    expect(confidenceBudget(16)).toBe(32);
+    expect(confidenceBudget(0)).toBe(0);
+  });
+
+  it('charges only for games actually picked', () => {
+    const conf = { a: 5, b: 3, c: 4 };
+    expect(confidenceSpent(conf, ['a', 'b'])).toBe(8); // c not picked
+  });
+
+  it('charges the minimum for a pick with no explicit confidence', () => {
+    expect(confidenceSpent({}, ['a', 'b'])).toBe(2 * CONFIDENCE_MIN);
+  });
+
+  // The whole point: maxing every game must not fit inside the budget.
+  it('cannot afford max confidence on every game', () => {
+    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
+    const allMax = Object.fromEntries(games.map(g => [g, CONFIDENCE_MAX]));
+    expect(confidenceSpent(allMax, games)).toBeGreaterThan(confidenceBudget(games.length));
+  });
+
+  it('exactly affords the middle confidence on every game', () => {
+    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
+    const allTwo = Object.fromEntries(games.map(g => [g, 2]));
+    expect(confidenceSpent(allTwo, games)).toBe(confidenceBudget(games.length));
+  });
+});
+
+describe('describeSpread', () => {
+  it('reads a negative spread as the home team favoured', () => {
+    expect(describeSpread(-11.5, 'LAC', 'ARI')).toBe('LAC wins by 11.5');
+  });
+
+  it('reads a positive spread as the away team favoured', () => {
+    expect(describeSpread(3, 'LAC', 'ARI')).toBe('ARI wins by 3');
+  });
+
+  it('handles a pick-em', () => {
+    expect(describeSpread(0, 'LAC', 'ARI')).toBe('Even — no favourite');
+  });
+
+  it('accepts the string the number input produces', () => {
+    expect(describeSpread('-7', 'DET', 'NO')).toBe('DET wins by 7');
+  });
+
+  it('returns null when there is nothing to read', () => {
+    expect(describeSpread('', 'LAC', 'ARI')).toBeNull();
+    expect(describeSpread(null, 'LAC', 'ARI')).toBeNull();
+    expect(describeSpread(undefined, 'LAC', 'ARI')).toBeNull();
   });
 });

@@ -52,6 +52,49 @@ export function isNFLSeason(season = 2026) {
   return now >= seasonStart && now <= seasonEnd;
 }
 
+// ─── Confidence budget ──────────────────────────────────────────────────────
+//
+// Confidence multiplies the points a pick earns, and base points are always
+// positive, so an unlimited multiplier makes "max everything" strictly
+// optimal — no decision, and a hidden edge for whoever notices. Instead each
+// week hands out a fixed pool of stars to spread across that week's games.
+//
+// Two stars per game means you could put x2 on everything, or bank x1s to
+// afford a few x5s. Picking fewer games doesn't concentrate the pool, because
+// each game is still capped at CONFIDENCE_MAX.
+
+export const CONFIDENCE_MIN = 1;
+export const CONFIDENCE_MAX = 5;
+
+export function confidenceBudget(gameCount) {
+  return gameCount * 2;
+}
+
+/** Stars committed so far. Only games with an actual pick cost anything. */
+export function confidenceSpent(confidenceByGame, pickedGameIds) {
+  return pickedGameIds.reduce(
+    (sum, id) => sum + (confidenceByGame[id] || CONFIDENCE_MIN),
+    0
+  );
+}
+
+/**
+ * Plain-language reading of a spread.
+ *
+ * Spreads are stored from the home team's perspective in standard odds
+ * notation: negative means the home team is favoured. That convention is
+ * invisible in a bare number field, so the UI echoes this back as the user
+ * types rather than leaving them to guess the sign.
+ */
+export function describeSpread(spread, homeAbbr, awayAbbr) {
+  const n = typeof spread === 'string' ? parseFloat(spread) : spread;
+  if (n === null || n === undefined || Number.isNaN(n)) return null;
+  if (n === 0) return 'Even — no favourite';
+  return n < 0
+    ? `${homeAbbr} wins by ${Math.abs(n)}`
+    : `${awayAbbr} wins by ${n}`;
+}
+
 export function calculatePoints(userPick, actualSpread, confidence = 1) {
   const difference = Math.abs(userPick - actualSpread);
   let basePoints = 0;

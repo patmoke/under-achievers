@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { calculatePoints, formatSpread, getAccuracyColor } from '../lib/scoring';
+import {
+  calculatePoints, formatSpread, getAccuracyColor,
+  CONFIDENCE_MIN, CONFIDENCE_MAX, confidenceBudget, confidenceSpent, describeSpread,
+} from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -81,6 +84,12 @@ export default function GamesPage() {
         return;
       }
 
+      const spend = rows.reduce((sum, r) => sum + r.confidence_points, 0);
+      if (spend > starBudget) {
+        toast.error(`That's ${spend} stars but you only have ${starBudget} this week.`);
+        return;
+      }
+
       const { error } = await supabase.from('predictions').upsert(rows, { onConflict: 'user_id,game_id' });
       if (error) throw error;
 
@@ -96,7 +105,16 @@ export default function GamesPage() {
   }
 
   const unlocked = games.filter(g => !g.is_locked);
-  const picksMade = unlocked.filter(g => predictions[g.id] !== undefined && predictions[g.id] !== '').length;
+  const pickedGameIds = unlocked
+    .filter(g => predictions[g.id] !== undefined && predictions[g.id] !== '')
+    .map(g => g.id);
+  const picksMade = pickedGameIds.length;
+
+  // Stars are a weekly pool, so the budget covers every game on the slate --
+  // including ones already locked, which can no longer be picked.
+  const starBudget = confidenceBudget(games.length);
+  const starsSpent = confidenceSpent(confidence, pickedGameIds);
+  const starsLeft = starBudget - starsSpent;
 
   function formatGameTime(isoString) {
     const d = new Date(isoString);
@@ -139,7 +157,8 @@ export default function GamesPage() {
           {games.map(game => {
             const saved = savedPredictions[game.id];
             const userPick = predictions[game.id];
-            const conf = confidence[game.id] || 1;
+            const conf = confidence[game.id] || CONFIDENCE_MIN;
+            const spreadReading = describeSpread(userPick, game.home_team_abbr, game.away_team_abbr);
 
             return (
               <div key={game.id} className="card" style={{
@@ -153,7 +172,9 @@ export default function GamesPage() {
                     <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
                       <Clock size={12} />
                       {formatGameTime(game.game_time)}
-                      {game.bookmaker && <span style={{ marginLeft: 8, color: 'var(--accent)' }}>· {game.bookmaker}</span>}
+                      {game.bookmaker && game.actual_spread !== null && (
+                        <span style={{ marginLeft: 8, color: 'var(--accent)' }}>· Line: {game.bookmaker}</span>
+                      )}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                       <div style={{ textAlign: 'center' }}>
@@ -176,7 +197,12 @@ export default function GamesPage() {
                       <LockedGame game={game} saved={saved} />
                     ) : (
                       <div>
-                        <div className="label-muted" style={{ marginBottom: 8 }}>Your spread pick</div>
+                        <div className="label-muted" style={{ marginBottom: 2 }}>
+                          {game.home_team_abbr} (home) spread
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--ink-faint)', marginBottom: 8 }}>
+                          Negative favours {game.home_team_abbr}
+                        </div>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
                           <input
                             type="number"
@@ -202,19 +228,42 @@ export default function GamesPage() {
                             </button>
                           </div>
                         </div>
+                        {spreadReading && (
+                          <div style={{
+                            fontSize: 12, color: 'var(--accent-dark)', background: 'var(--accent-soft)',
+                            border: '1px solid rgba(15,122,77,0.18)', borderRadius: 'var(--radius-sm)',
+                            padding: '6px 10px', marginBottom: 12,
+                          }}>
+                            {spreadReading}
+                          </div>
+                        )}
                         <div>
-                          <div className="label-muted" style={{ marginBottom: 6 }}>Confidence (×{conf})</div>
+                          <div className="label-muted" style={{ marginBottom: 6 }}>
+                            Confidence (×{conf}) · {starsLeft} star{starsLeft === 1 ? '' : 's'} left
+                          </div>
                           <div role="group" aria-label="Confidence level" style={{ display: 'flex', gap: 4 }}>
-                            {[1,2,3,4,5].map(n => (
-                              <button key={n} onClick={() => setConfidence(prev => ({ ...prev, [game.id]: n }))}
-                                aria-label={`Set confidence to ${n}`} aria-pressed={conf >= n}
-                                style={{
-                                  width: 28, height: 28, borderRadius: 4, background: conf >= n ? 'var(--accent)' : 'var(--surface-alt)',
-                                  border: `1px solid ${conf >= n ? 'var(--accent)' : 'var(--border)'}`, cursor: 'pointer', fontSize: 14,
-                                  color: conf >= n ? 'var(--accent-ink)' : 'var(--ink-faint)',
-                                  fontWeight: 700, transition: 'all 0.1s'
-                                }}>★</button>
-                            ))}
+                            {Array.from({ length: CONFIDENCE_MAX }, (_, i) => i + CONFIDENCE_MIN).map(n => {
+                              // Raising this game to n costs the difference; a
+                              // game with no pick yet also starts costing its base.
+                              const isPicked = pickedGameIds.includes(game.id);
+                              const extraCost = n - (isPicked ? conf : 0);
+                              const unaffordable = extraCost > starsLeft;
+                              return (
+                                <button key={n}
+                                  onClick={() => setConfidence(prev => ({ ...prev, [game.id]: n }))}
+                                  disabled={unaffordable}
+                                  aria-label={`Set confidence to ${n}`} aria-pressed={conf >= n}
+                                  title={unaffordable ? 'Not enough stars left this week' : `Confidence ×${n}`}
+                                  style={{
+                                    width: 28, height: 28, borderRadius: 4, background: conf >= n ? 'var(--accent)' : 'var(--surface-alt)',
+                                    border: `1px solid ${conf >= n ? 'var(--accent)' : 'var(--border)'}`,
+                                    cursor: unaffordable ? 'not-allowed' : 'pointer', fontSize: 14,
+                                    color: conf >= n ? 'var(--accent-ink)' : 'var(--ink-faint)',
+                                    opacity: unaffordable ? 0.35 : 1,
+                                    fontWeight: 700, transition: 'all 0.1s'
+                                  }}>★</button>
+                              );
+                            })}
                           </div>
                         </div>
                         {saved && (
@@ -242,11 +291,17 @@ export default function GamesPage() {
           flexWrap: 'wrap', gap: 12
         }}>
           <div>
-            <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>{picksMade}</span>
-            <span style={{ color: 'var(--ink-soft)', fontSize: 15 }}> / {unlocked.length} picks made</span>
+            <div>
+              <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>{picksMade}</span>
+              <span style={{ color: 'var(--ink-soft)', fontSize: 15 }}> / {unlocked.length} picks made</span>
+            </div>
+            <div style={{ fontSize: 12, color: starsLeft < 0 ? 'var(--danger)' : 'var(--ink-soft)', marginTop: 2 }}>
+              ★ {starsSpent} / {starBudget} stars used this week
+              {starsLeft < 0 && ` — over by ${-starsLeft}, lower a confidence rating to submit`}
+            </div>
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
-            <button className="btn btn-primary" onClick={submitPredictions} disabled={submitting || picksMade === 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button className="btn btn-primary" onClick={submitPredictions} disabled={submitting || picksMade === 0 || starsLeft < 0} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <Save size={16} /> {submitting ? 'Saving…' : 'Lock in picks'}
             </button>
           </div>
