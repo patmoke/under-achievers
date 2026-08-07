@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, calculatePoints, getCurrentNFLWeek } from '../lib/scoring';
+import { formatSpread, calculatePoints } from '../lib/scoring';
+import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
 const CURRENT_SEASON = 2026;
-const CURRENT_WEEK = getCurrentNFLWeek(CURRENT_SEASON);
 
 const TYPE_ICON = { weekly: Calendar, survivor: Skull };
 const TYPE_LABEL = { weekly: 'Weekly Picks', survivor: 'Survivor Pool' };
@@ -28,15 +28,20 @@ export default function LeaguePage() {
   // season's weeks 1-18 — games aren't league-scoped, so a synthetic game
   // sharing a real week number would pollute every other league's
   // "has this week fully kicked off" checks too.
+  const currentWeek = useCurrentWeek(CURRENT_SEASON);
   const weekOverrideRaw = profile?.is_admin ? parseInt(searchParams.get('week'), 10) : NaN;
   const weekOverride = Number.isFinite(weekOverrideRaw) && weekOverrideRaw >= 1 && weekOverrideRaw <= 99 ? weekOverrideRaw : null;
-  const effectiveWeek = weekOverride ?? CURRENT_WEEK;
+  const effectiveWeek = weekOverride ?? currentWeek;
 
   const [league, setLeague] = useState(null);
   const [members, setMembers] = useState([]);
   const [myMembership, setMyMembership] = useState(null);
   const [tab, setTab] = useState(null);
-  const [weeklyTab, setWeeklyTab] = useState(CURRENT_WEEK);
+  // null until the user picks a week, so the tab follows the derived current
+  // week once it resolves instead of being frozen at the initial estimate.
+  const [weeklyTabOverride, setWeeklyTabOverride] = useState(null);
+  const weeklyTab = weeklyTabOverride ?? currentWeek;
+  const setWeeklyTab = setWeeklyTabOverride;
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
@@ -408,7 +413,7 @@ export default function LeaguePage() {
 
       {weekOverride && (
         <div style={{ marginBottom: 20, padding: '10px 16px', background: 'var(--warning-soft)', border: '1px solid rgba(184,114,11,0.25)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <FlaskConical size={14} /> Admin test view — viewing this league as Week {weekOverride} (real week is {CURRENT_WEEK}). Remove <code>?week=</code> from the URL to see it live.
+          <FlaskConical size={14} /> Admin test view — viewing this league as Week {weekOverride} (real week is {currentWeek}). Remove <code>?week=</code> from the URL to see it live.
         </div>
       )}
 

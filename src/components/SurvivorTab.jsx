@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { isGameLocked, computeEntryStatus, usedTeams as computeUsedTeams, pickOutcome } from '../lib/survivor';
 
 function formatGameTime(iso) {
   const d = new Date(iso);
@@ -45,7 +46,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const weekGames = allGames.filter(g => g.week === currentWeek);
   const buybacksAllowed = buybackDeadlineWeek != null && maxBuybacks != null;
   const entryCap = maxEntries != null ? maxEntries : 1;
-  const seasonStarted = currentWeek > 1 || weekGames.some(isGameLocked);
+  const seasonStarted = currentWeek > 1 || weekGames.some(g => isGameLocked(g));
 
   useEffect(() => { fetchAll(); }, [leagueId]);
 
@@ -87,11 +88,6 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     setLoading(false);
   }
 
-  function isGameLocked(game) {
-    if (!game) return true;
-    return new Date() >= new Date(game.game_time);
-  }
-
   function picksForEntry(entryId) {
     return picks.filter(p => p.entry_id === entryId);
   }
@@ -100,49 +96,13 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return buybacks.filter(b => b.entry_id === entryId).sort((a, b) => a.week - b.week);
   }
 
+  // Rules live in lib/survivor.js so they can be unit tested without React.
   function computeStatus(entry) {
-    // Picks before the entry's current start_week belong to a life that was
-    // already forgiven by a buyback — a loss or miss from before a rebuy
-    // shouldn't keep re-eliminating the same entry.
-    const entryPicks = picksForEntry(entry.id)
-      .filter(p => p.week >= (entry.start_week || 1))
-      .sort((a, b) => a.week - b.week);
-
-    for (const pick of entryPicks) {
-      const g = pick.games;
-      if (g?.status === 'final' && g.home_score !== null && g.away_score !== null) {
-        const tie = g.home_score === g.away_score;
-        const pickedHome = pick.team_abbr === g.home_team_abbr;
-        const won = !tie && (pickedHome ? g.home_score > g.away_score : g.away_score > g.home_score);
-        if (!won) return { status: 'eliminated', week: pick.week, reason: 'loss' };
-      }
-    }
-
-    // Missed-pick check: find the EARLIEST week (not just the one currently
-    // being viewed) where every game had kicked off with no pick on record.
-    // currentWeek can lag behind real time — an override for testing, or
-    // simply someone not opening the app for a few weeks — so scanning only
-    // `currentWeek` would misreport a miss from week 2 as happening in
-    // whatever week is being looked at right now.
-    const pickedWeeks = new Set(entryPicks.map(p => p.week));
-    for (let w = entry.start_week || 1; w <= currentWeek; w++) {
-      if (pickedWeeks.has(w)) continue;
-      const gamesForWeek = allGames.filter(g => g.week === w);
-      if (gamesForWeek.length > 0 && gamesForWeek.every(isGameLocked)) {
-        return { status: 'eliminated', week: w, reason: 'missed' };
-      }
-    }
-
-    return { status: 'alive', week: null, reason: null };
+    return computeEntryStatus({ entry, picks, games: allGames, currentWeek });
   }
 
   function usedTeams(entry) {
-    const entryPicks = picksForEntry(entry.id);
-    return new Set(
-      entryPicks
-        .filter(p => p.week !== currentWeek || isGameLocked(p.games))
-        .map(p => p.team_abbr)
-    );
+    return computeUsedTeams({ entry, picks, currentWeek });
   }
 
   function myBuybackCount(userId) {
@@ -265,21 +225,17 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       );
     }
 
-    const g = pick.games;
-    let outcome = null;
-    if (g?.status === 'final' && g.home_score !== null && g.away_score !== null) {
-      const tie = g.home_score === g.away_score;
-      const pickedHome = pick.team_abbr === g.home_team_abbr;
-      outcome = tie ? 'tie' : (pickedHome ? g.home_score > g.away_score : g.away_score > g.home_score) ? 'win' : 'loss';
-    }
+    const outcome = pickOutcome(pick);
+    // A tie eliminates in this pool, so it has to read as a loss too.
+    const isOut = outcome === 'loss' || outcome === 'tie';
 
     return (
       <span title={rebought ? `Bought back in Week ${week}` : undefined} style={{ display: 'inline-flex', alignItems: 'center' }}>
         {rebuyMarker}
         <span style={{
           fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-          color: outcome === 'win' ? 'var(--success)' : outcome === 'loss' ? 'var(--danger)' : 'var(--ink)',
-          textDecoration: outcome === 'loss' ? 'line-through' : 'none',
+          color: outcome === 'win' ? 'var(--success)' : isOut ? 'var(--danger)' : 'var(--ink)',
+          textDecoration: isOut ? 'line-through' : 'none',
         }}>
           {pick.team_abbr}
         </span>
