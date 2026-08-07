@@ -18,6 +18,31 @@ export function getCurrentNFLWeek(season = 2026) {
   return Math.min(Math.max(week, 1), 18); // Clamp between 1 and 18
 }
 
+/**
+ * Derives the current week from the real schedule instead of counting weeks
+ * off a hardcoded kickoff date.
+ *
+ * The current week is the one containing the next game that hasn't started —
+ * during a Sunday slate the already-kicked-off games are still "this week",
+ * and once the last game of a week ends the next week takes over. Falls back
+ * to null when there's no schedule to read, so callers can use the date-based
+ * estimate instead.
+ *
+ * Pass only regular-season games for the season in question; playoff and
+ * scratch/QA rows carry week numbers outside 1-18 and are ignored.
+ */
+export function deriveCurrentWeek(games, now = new Date()) {
+  const regular = (games || []).filter(g => g.week >= 1 && g.week <= 18 && g.game_time);
+  if (regular.length === 0) return null;
+
+  const upcoming = regular
+    .filter(g => new Date(g.game_time) > now)
+    .sort((a, b) => new Date(a.game_time) - new Date(b.game_time));
+
+  if (upcoming.length > 0) return upcoming[0].week;
+  return Math.max(...regular.map(g => g.week)); // season finished
+}
+
 // Returns true if we're currently in the NFL regular season
 export function isNFLSeason(season = 2026) {
   const seasonStart = NFL_SEASON_START_DATES[season];

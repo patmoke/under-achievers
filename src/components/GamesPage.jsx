@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { calculatePoints, formatSpread, getAccuracyColor, getCurrentNFLWeek } from '../lib/scoring';
+import { calculatePoints, formatSpread, getAccuracyColor } from '../lib/scoring';
+import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const CURRENT_WEEK = getCurrentNFLWeek(2026);
 const CURRENT_SEASON = 2026;
 
 export default function GamesPage() {
@@ -16,7 +16,12 @@ export default function GamesPage() {
   const [confidence, setConfidence] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [selectedWeek, setSelectedWeek] = useState(CURRENT_WEEK);
+  const currentWeek = useCurrentWeek(CURRENT_SEASON);
+  // null until the user chooses, so the selector follows the derived
+  // current week once it resolves instead of freezing at the estimate.
+  const [selectedWeekOverride, setSelectedWeekOverride] = useState(null);
+  const selectedWeek = selectedWeekOverride ?? currentWeek;
+  const setSelectedWeek = setSelectedWeekOverride;
 
   useEffect(() => {
     fetchGames();

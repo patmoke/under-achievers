@@ -3,9 +3,8 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, TrendingUp, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getCurrentNFLWeek } from '../lib/scoring';
+import { useCurrentWeek } from '../lib/useCurrentWeek';
 
-const CURRENT_WEEK = getCurrentNFLWeek(2026);
 const CURRENT_SEASON = 2026;
 
 export default function LeaderboardPage() {
@@ -15,7 +14,12 @@ export default function LeaderboardPage() {
   const [weeklyData, setWeeklyData] = useState([]);
   const [seasonData, setSeasonData] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedWeek, setSelectedWeek] = useState(CURRENT_WEEK);
+  const currentWeek = useCurrentWeek(CURRENT_SEASON);
+  // null until the user chooses, so the selector follows the derived
+  // current week once it resolves instead of freezing at the estimate.
+  const [selectedWeekOverride, setSelectedWeekOverride] = useState(null);
+  const selectedWeek = selectedWeekOverride ?? currentWeek;
+  const setSelectedWeek = setSelectedWeekOverride;
 
   async function fetchLeaderboards() {
     setLoading(true);
