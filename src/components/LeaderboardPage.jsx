@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Trophy, TrendingUp, Award } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
+import { buildStandings } from '../lib/scoring';
 
 const CURRENT_SEASON = 2026;
 
@@ -21,76 +22,33 @@ export default function LeaderboardPage() {
   const selectedWeek = selectedWeekOverride ?? currentWeek;
   const setSelectedWeek = setSelectedWeekOverride;
 
-  async function fetchLeaderboards() {
+  // Both boards are computed from raw predictions rather than the
+  // weekly_leaderboards / season_leaderboards tables. Those hold precomputed
+  // absolute-accuracy totals, which no longer mean anything now that scoring is
+  // relative -- a pick's value depends on who else picked that game. They are
+  // also empty in practice.
+  //
+  // "Global" here is the field of every user: closest of everyone wins the game
+  // and banks their stars. A league board scores the same way over its members.
+  const fetchBoard = useCallback(async () => {
     setLoading(true);
-    if (tab === 'weekly') {
-      const { data } = await supabase
-        .from('weekly_leaderboards')
-        .select('*, profiles(username, display_name)')
-        .eq('week', selectedWeek)
-        .eq('season', CURRENT_SEASON)
-        .order('rank');
-      if (data && data.length > 0) {
-        setWeeklyData(data);
-        setLoading(false);
-      } else {
-        // Fall through to live predictions if leaderboard table is empty
-        await fetchFromPredictions();
-      }
-    } else {
-      const { data } = await supabase
-        .from('season_leaderboards')
-        .select('*, profiles(username, display_name)')
-        .eq('season', CURRENT_SEASON)
-        .order('rank');
-      setSeasonData(data || []);
-      setLoading(false);
-    }
-  }
 
-  // Build from predictions if leaderboard table is empty
-  async function fetchFromPredictions() {
-    setLoading(true);
-    const { data } = await supabase
+    let query = supabase
       .from('predictions')
-      .select('*, profiles(username, display_name), games(actual_spread)')
-      .eq('week', selectedWeek)
-      .eq('season', CURRENT_SEASON)
-      .not('games.actual_spread', 'is', null);
+      .select('user_id, game_id, predicted_spread, confidence_points, profiles(username, display_name), games(actual_spread)')
+      .eq('season', CURRENT_SEASON);
 
-    if (!data) { setLoading(false); return; }
+    if (tab === 'weekly') query = query.eq('week', selectedWeek);
 
-    // Group by user
-    const userMap = {};
-    data.forEach(p => {
-      if (!p.profiles) return;
-      const uid = p.user_id;
-      if (!userMap[uid]) {
-        userMap[uid] = { user_id: uid, username: p.profiles.username, display_name: p.profiles.display_name, picks: [], points: 0 };
-      }
-      const diff = p.games?.actual_spread !== null && p.games?.actual_spread !== undefined
-        ? Math.abs(p.predicted_spread - p.games.actual_spread) : null;
-      userMap[uid].picks.push(diff);
-      userMap[uid].points += p.points_earned || 0;
-    });
+    const { data } = await query;
+    const rows = buildStandings(data || []);
 
-    const rows = Object.values(userMap)
-      .filter(u => u.picks.length > 0)
-      .map(u => {
-        const validDiffs = u.picks.filter(d => d !== null);
-        const avg = validDiffs.length > 0 ? validDiffs.reduce((a, b) => a + b, 0) / validDiffs.length : null;
-        return { ...u, total_predictions: u.picks.length, avg_difference: avg };
-      })
-      .sort((a, b) => (a.avg_difference || 99) - (b.avg_difference || 99))
-      .map((u, i) => ({ ...u, rank: i + 1 }));
-
-    setWeeklyData(rows);
+    if (tab === 'weekly') setWeeklyData(rows);
+    else setSeasonData(rows);
     setLoading(false);
-  }
-
-  useEffect(() => {
-    fetchLeaderboards();
   }, [tab, selectedWeek]);
+
+  useEffect(() => { fetchBoard(); }, [fetchBoard]);
 
   const displayData = tab === 'weekly' ? weeklyData : seasonData;
 
@@ -155,11 +113,11 @@ export default function LeaderboardPage() {
                   {username}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 4 }}>
-                  {entry.points_earned !== undefined ? `${entry.points_earned} pts` : `${entry.total_points || 0} pts`}
+                  {entry.points} pts · {entry.wins} won
                 </div>
-                {entry.avg_difference !== null && entry.avg_difference !== undefined && (
+                {entry.avgDiff !== null && entry.avgDiff !== undefined && (
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
-                    Avg Δ {Number(entry.avg_difference).toFixed(2)}
+                    Avg Δ {entry.avgDiff.toFixed(2)}
                   </div>
                 )}
               </div>
@@ -185,7 +143,7 @@ export default function LeaderboardPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-                  {['Rank', 'Player', 'Picks', tab === 'weekly' ? 'Avg Δ' : 'Accuracy', 'Points'].map(h => (
+                  {['Rank', 'Player', 'Won', 'Avg Δ', 'Points'].map(h => (
                     <th key={h} className="label-muted" style={{
                       padding: '12px 16px', textAlign: h === 'Rank' || h === 'Player' ? 'left' : 'right',
                     }}>{h}</th>
@@ -229,17 +187,16 @@ export default function LeaderboardPage() {
                         </div>
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right', color: 'var(--ink-soft)' }}>
-                        {entry.total_predictions}
+                        {entry.wins} <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>/ {entry.graded}</span>
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        {tab === 'weekly'
-                          ? <span style={{ color: 'var(--success)', fontWeight: 600 }}>{Number(entry.avg_difference || 0).toFixed(2)}</span>
-                          : <span style={{ color: 'var(--success)', fontWeight: 600 }}>{Number(entry.avg_accuracy || 0).toFixed(1)}%</span>
-                        }
+                        {entry.avgDiff === null
+                          ? <span style={{ color: 'var(--ink-faint)' }}>—</span>
+                          : <span style={{ color: 'var(--success)', fontWeight: 600 }}>{entry.avgDiff.toFixed(2)}</span>}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                         <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>
-                          {entry.points_earned || entry.total_points || 0}
+                          {entry.points}
                         </span>
                       </td>
                     </tr>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -40,11 +40,7 @@ export default function LeaguesPage() {
   });
   const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    fetchLeagues();
-  }, [user]);
-
-  async function fetchLeagues() {
+  const fetchLeagues = useCallback(async () => {
     setLoading(true);
     // My leagues
     const { data: memberOf } = await supabase
@@ -80,7 +76,9 @@ export default function LeaguesPage() {
     const { data: pub } = await pubQuery;
     setPublicLeagues(pub || []);
     setLoading(false);
-  }
+  }, [user]);
+
+  useEffect(() => { fetchLeagues(); }, [fetchLeagues]);
 
   async function createLeague() {
     if (!form.name.trim()) { toast.error('League name is required'); return; }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -48,9 +48,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const entryCap = maxEntries != null ? maxEntries : 1;
   const seasonStarted = currentWeek > 1 || weekGames.some(g => isGameLocked(g));
 
-  useEffect(() => { fetchAll(); }, [leagueId]);
-
-  async function fetchAll() {
+  const fetchAll = useCallback(async () => {
     setLoading(true);
     const { data: entriesData } = await supabase
       .from('survivor_entries')
@@ -86,7 +84,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     setAllGames(gamesData || []);
 
     setLoading(false);
-  }
+  }, [leagueId, season]);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
 
   function picksForEntry(entryId) {
     return picks.filter(p => p.entry_id === entryId);

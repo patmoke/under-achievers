@@ -1,10 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, calculatePoints } from '../lib/scoring';
+import { formatSpread, confidenceBudget, buildStandings } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
@@ -36,7 +36,10 @@ export default function LeaguePage() {
   const [league, setLeague] = useState(null);
   const [members, setMembers] = useState([]);
   const [myMembership, setMyMembership] = useState(null);
-  const [tab, setTab] = useState(null);
+  // Default tab depends on the league type, which isn't known until the league
+  // loads. Derived during render rather than assigned from an effect, so there
+  // is no extra render pass and no null-tab window to guard against.
+  const [tabOverride, setTabOverride] = useState(null);
   // null until the user picks a week, so the tab follows the derived current
   // week once it resolves instead of being frozen at the initial estimate.
   const [weeklyTabOverride, setWeeklyTabOverride] = useState(null);
@@ -58,17 +61,7 @@ export default function LeaguePage() {
 
   const isSurvivor = league?.compete_on === 'survivor';
 
-  useEffect(() => { fetchLeague(); }, [id, user]);
-
-  useEffect(() => {
-    if (league && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
-  }, [league, members, weeklyTab]);
-
-  useEffect(() => {
-    if (league && tab === null) setTab(isSurvivor ? 'survivor' : 'leaderboard');
-  }, [league]);
-
-  async function fetchLeague() {
+  const fetchLeague = useCallback(async () => {
     setLoading(true);
     const { data: leagueData, error: leagueError } = await supabase
       .from('leagues').select('*').eq('id', id).single();
@@ -113,15 +106,9 @@ export default function LeaguePage() {
       return;
     }
     setLoading(false);
-  }
+  }, [id, user, navigate]);
 
-  async function checkAllSubmittedThenFetch() {
-    const { data: weekResult } = await supabase.rpc('league_week_all_locked', { p_league_id: id, p_week: weeklyTab, p_season: CURRENT_SEASON });
-    setWeekAllSubmitted(!!weekResult);
-    await fetchPicks(!!weekResult);
-  }
-
-  async function fetchPicks(weekAllDone) {
+  const fetchPicks = useCallback(async (weekAllDone) => {
     const memberIds = members.map(m => m.user_id);
 
     const { data: myWeek } = await supabase
@@ -141,7 +128,19 @@ export default function LeaguePage() {
         .in('user_id', memberIds).eq('week', weeklyTab).eq('season', CURRENT_SEASON);
       setWeeklyPicks(allWeek || []);
     }
-  }
+  }, [members, user, weeklyTab]);
+
+  const checkAllSubmittedThenFetch = useCallback(async () => {
+    const { data: weekResult } = await supabase.rpc('league_week_all_locked', { p_league_id: id, p_week: weeklyTab, p_season: CURRENT_SEASON });
+    setWeekAllSubmitted(!!weekResult);
+    await fetchPicks(!!weekResult);
+  }, [id, weeklyTab, fetchPicks]);
+
+  useEffect(() => { fetchLeague(); }, [fetchLeague]);
+
+  useEffect(() => {
+    if (league && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
+  }, [league, members, isSurvivor, checkAllSubmittedThenFetch]);
 
   async function leaveLeague() {
     if (myMembership?.role === 'owner') { toast.error('Transfer ownership or delete the league before leaving'); return; }
@@ -216,46 +215,51 @@ export default function LeaguePage() {
   }
 
   function buildWeeklyLeaderboard() {
-    const userMap = {};
-    members.forEach(m => {
-      userMap[m.user_id] = { user_id: m.user_id, username: m.profiles?.username || 'Unknown', picks: 0, points: 0, diffs: [] };
-    });
-    const picks = weekAllSubmitted ? weeklyPicks : myWeekPicks;
-    picks.forEach(p => {
-      if (!userMap[p.user_id]) return;
-      userMap[p.user_id].picks++;
-      if (p.games?.actual_spread !== null && p.games?.actual_spread !== undefined) {
-        const diff = Math.abs(Number(p.predicted_spread) - Number(p.games.actual_spread));
-        userMap[p.user_id].diffs.push(diff);
-        userMap[p.user_id].points += calculatePoints(p.predicted_spread, p.games.actual_spread, p.confidence_points || 1);
-      }
-    });
-    return Object.values(userMap)
-      .sort((a, b) => b.points - a.points || a.diffs.reduce((s,d)=>s+d,0) - b.diffs.reduce((s,d)=>s+d,0))
-      .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null }));
+    const players = members.map(m => ({
+      user_id: m.user_id,
+      username: m.profiles?.username || 'Unknown',
+    }));
+
+    // Scoring is relative, so it needs the whole field. Until every member has
+    // submitted we only hold our own picks, and scoring those alone would show
+    // us winning every game. Show pick counts and withhold points instead.
+    if (!weekAllSubmitted) {
+      const mine = new Set(myWeekPicks.map(p => p.user_id));
+      return players
+        .map(pl => ({
+          ...pl,
+          picks: mine.has(pl.user_id) ? myWeekPicks.length : 0,
+          points: null, wins: null, avgDiff: null,
+        }))
+        .map((pl, i) => ({ ...pl, rank: i + 1 }));
+    }
+
+    return buildStandings(weeklyPicks, players);
   }
 
-  if (loading || tab === null) return (
+  if (loading || !league) return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
       <div className="skeleton card" style={{ height: 200 }} />
     </div>
   );
 
+  // Validated against the league type, not just defaulted: carrying a
+  // 'leaderboard' selection from a weekly league into a survivor one would
+  // otherwise match no tab and render an empty page.
+  const availableTabs = isSurvivor ? ['survivor', 'members'] : ['leaderboard', 'weekly', 'members'];
+  const tab = availableTabs.includes(tabOverride) ? tabOverride : availableTabs[0];
   const isOwner = myMembership?.role === 'owner';
   const weeklyBoard = isSurvivor ? [] : buildWeeklyLeaderboard();
   const competeOn = league.compete_on;
   const TypeIcon = TYPE_ICON[competeOn] || Calendar;
 
-  const TABS = isSurvivor
-    ? [
-        { key: 'survivor', label: 'Survivor pool' },
-        { key: 'members', label: `Members (${members.length})` },
-      ]
-    : [
-        { key: 'leaderboard', label: 'Leaderboard' },
-        { key: 'weekly', label: 'Weekly picks' },
-        { key: 'members', label: `Members (${members.length})` },
-      ];
+  const TAB_LABELS = {
+    survivor: 'Survivor pool',
+    leaderboard: 'Leaderboard',
+    weekly: 'Weekly picks',
+    members: `Members (${members.length})`,
+  };
+  const TABS = availableTabs.map(key => ({ key, label: TAB_LABELS[key] }));
 
   return (
     <div style={{ maxWidth: 900, margin: '0 auto', padding: '32px 20px' }}>
@@ -395,12 +399,21 @@ export default function LeaguePage() {
       )}
 
       {/* Blind Picks Banner (not applicable to survivor pools) */}
+      {!isSurvivor && weeklyTab === currentWeek && (
+        <WeeklyPicksHub
+          week={weeklyTab}
+          myPicks={myWeekPicks}
+          weekGames={games}
+          onGoToPicks={() => navigate('/games')}
+        />
+      )}
+
       {!isSurvivor && <BlindPicksBanner weekAllSubmitted={weekAllSubmitted} weeklyTab={weeklyTab} />}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
+          <button key={t.key} onClick={() => setTabOverride(t.key)} style={{
             background: 'none', border: 'none', whiteSpace: 'nowrap',
             borderBottom: tab === t.key ? '2px solid var(--accent)' : '2px solid transparent',
             color: tab === t.key ? 'var(--accent)' : 'var(--ink-soft)',
@@ -550,12 +563,6 @@ export default function LeaguePage() {
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 {member.role === 'owner' && <span className="badge badge-gold">Owner</span>}
-                {!isSurvivor && (
-                  <div style={{ textAlign: 'right', fontSize: 13 }}>
-                    <div style={{ color: 'var(--accent)', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17 }}>{member.profiles?.total_points || 0} pts</div>
-                    <div style={{ color: 'var(--ink-soft)' }}>{member.profiles?.total_predictions || 0} picks</div>
-                  </div>
-                )}
                 {isOwner && member.role !== 'owner' && (
                   <button
                     onClick={() => removeMember(member)}
@@ -589,7 +596,10 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-        {['#', 'Player', 'Picks', 'Pts', 'Avg Δ'].map((h, i) => (
+        {/* Games won matters more than games entered once scoring is
+            competitive, but until picks are revealed there is nothing to win
+            yet, so the column falls back to the pick count. */}
+        {['#', 'Player', revealed ? 'Won' : 'Picks', 'Pts', 'Avg Δ'].map((h, i) => (
           <div key={i} className="label-muted" style={{ textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
         ))}
       </div>
@@ -614,10 +624,10 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
               {!showData && !isMe && <span style={{ fontSize: 11, color: 'var(--ink-faint)', marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}><EyeOff size={10} /> hidden</span>}
             </div>
             <div style={{ color: 'var(--ink-soft)', fontSize: 14, textAlign: 'right' }}>
-              {showData ? entry.picks : '—'}
+              {!showData ? '—' : revealed ? (entry.wins ?? '—') : entry.picks}
             </div>
             <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)', textAlign: 'right' }}>
-              {showData ? entry.points : '—'}
+              {showData && entry.points !== null && entry.points !== undefined ? entry.points : '—'}
             </div>
             <div style={{ fontSize: 14, textAlign: 'right', color: showData && entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--ink-faint)' }}>
               {showData && entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}
@@ -625,6 +635,52 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Weekly Picks Hub ───────────────────────────────────────────────────────
+//
+// A weekly league shows standings but has no route to the thing that produces
+// them: picking lives under its own nav item because picks are global, not
+// league-scoped. That made the league page a dead end. This card closes the
+// loop and is also the only place that states the non-obvious part of the
+// model — one set of picks counts in every weekly league you're in.
+
+function WeeklyPicksHub({ week, myPicks, weekGames, onGoToPicks }) {
+  const submitted = myPicks.length;
+  const total = weekGames.length;
+  const starsUsed = myPicks.reduce((sum, p) => sum + (p.confidence_points || 1), 0);
+  const budget = confidenceBudget(total);
+  const none = submitted === 0;
+
+  if (total === 0) return null;
+
+  return (
+    <div className="card" style={{
+      padding: '16px 20px', marginBottom: 20,
+      borderLeft: `3px solid ${none ? 'var(--warning)' : 'var(--accent)'}`,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      gap: 16, flexWrap: 'wrap',
+    }}>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>
+          {none
+            ? `You haven't made your Week ${week} picks yet`
+            : `Week ${week} picks: ${submitted} of ${total} submitted`}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+          {!none && <>★ {starsUsed} / {budget} stars used · </>}
+          Your picks count in every weekly league you're in.
+        </div>
+      </div>
+      <button
+        className={none ? 'btn btn-primary' : 'btn btn-secondary'}
+        onClick={onGoToPicks}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+      >
+        <PenLine size={14} /> {none ? 'Make picks' : 'Review picks'} <ChevronRight size={14} />
+      </button>
     </div>
   );
 }

@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { computeEntryStatus, usedTeams, pickOutcome, isGameLocked } from './survivor';
-import { deriveCurrentWeek } from './scoring';
+import {
+  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
+  CONFIDENCE_MIN, CONFIDENCE_MAX,
+} from './scoring';
 
 // A fixed "now" so these tests never depend on the real clock.
 const NOW = new Date('2026-10-15T00:00:00Z');
@@ -227,5 +230,182 @@ describe('deriveCurrentWeek', () => {
   it('returns null with no schedule so callers can fall back', () => {
     expect(deriveCurrentWeek([], NOW)).toBeNull();
     expect(deriveCurrentWeek(undefined, NOW)).toBeNull();
+  });
+});
+
+describe('confidence budget', () => {
+  it('grants two stars per scheduled game', () => {
+    expect(confidenceBudget(16)).toBe(32);
+    expect(confidenceBudget(0)).toBe(0);
+  });
+
+  it('charges only for games actually picked', () => {
+    const conf = { a: 5, b: 3, c: 4 };
+    expect(confidenceSpent(conf, ['a', 'b'])).toBe(8); // c not picked
+  });
+
+  it('charges the minimum for a pick with no explicit confidence', () => {
+    expect(confidenceSpent({}, ['a', 'b'])).toBe(2 * CONFIDENCE_MIN);
+  });
+
+  // The whole point: maxing every game must not fit inside the budget.
+  it('cannot afford max confidence on every game', () => {
+    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
+    const allMax = Object.fromEntries(games.map(g => [g, CONFIDENCE_MAX]));
+    expect(confidenceSpent(allMax, games)).toBeGreaterThan(confidenceBudget(games.length));
+  });
+
+  it('exactly affords the middle confidence on every game', () => {
+    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
+    const allTwo = Object.fromEntries(games.map(g => [g, 2]));
+    expect(confidenceSpent(allTwo, games)).toBe(confidenceBudget(games.length));
+  });
+});
+
+describe('describeSpread', () => {
+  it('reads a negative spread as the home team favoured', () => {
+    expect(describeSpread(-11.5, 'LAC', 'ARI')).toBe('LAC wins by 11.5');
+  });
+
+  it('reads a positive spread as the away team favoured', () => {
+    expect(describeSpread(3, 'LAC', 'ARI')).toBe('ARI wins by 3');
+  });
+
+  it('handles a pick-em', () => {
+    expect(describeSpread(0, 'LAC', 'ARI')).toBe('Even — no favourite');
+  });
+
+  it('accepts the string the number input produces', () => {
+    expect(describeSpread('-7', 'DET', 'NO')).toBe('DET wins by 7');
+  });
+
+  it('returns null when there is nothing to read', () => {
+    expect(describeSpread('', 'LAC', 'ARI')).toBeNull();
+    expect(describeSpread(null, 'LAC', 'ARI')).toBeNull();
+    expect(describeSpread(undefined, 'LAC', 'ARI')).toBeNull();
+  });
+});
+
+describe('buildStandings — competitive scoring', () => {
+  // Actual line is -7. Closest wins the game and banks their stars.
+  const g1 = { actual_spread: -7 };
+  const g2 = { actual_spread: -3 };
+
+  const p = (user, game, spread, conf, actual) => ({
+    user_id: user, game_id: game, predicted_spread: spread,
+    confidence_points: conf, games: actual,
+  });
+
+  it('awards the closest player their stars, and others nothing', () => {
+    const rows = buildStandings([
+      p('a', 'g1', -7.5, 3, g1),  // 0.5 off  -> wins, +3
+      p('b', 'g1', -10, 5, g1),   // 3 off
+      p('c', 'g1', -1, 5, g1),    // 6 off
+    ]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.a.points).toBe(3);
+    expect(by.b.points).toBe(0);
+    expect(by.c.points).toBe(0);
+  });
+
+  it('gives every tied player the point, each times their own stars', () => {
+    const rows = buildStandings([
+      p('a', 'g1', -6, 2, g1),  // 1 off
+      p('b', 'g1', -8, 4, g1),  // 1 off — tie
+      p('c', 'g1', -9, 5, g1),  // 2 off
+    ]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.a.points).toBe(2);
+    expect(by.b.points).toBe(4);
+    expect(by.c.points).toBe(0);
+  });
+
+  it('scores an exact hit as a win, not as extra points', () => {
+    const rows = buildStandings([p('a', 'g1', -7, 1, g1), p('b', 'g1', -7.5, 5, g1)]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.a.points).toBe(1); // exact, but only 1 star
+    expect(by.b.points).toBe(0); // more stars, still lost
+  });
+
+  it('makes wasted stars cost the player', () => {
+    // Same accuracy across two games, opposite star placement.
+    const picks = [
+      p('saver', 'g1', -7, 1, g1), p('saver', 'g2', -20, 5, g2),
+      p('waster', 'g1', -20, 5, g1), p('waster', 'g2', -3, 1, g2),
+    ];
+    const by = Object.fromEntries(buildStandings(picks).map(r => [r.user_id, r]));
+    expect(by.saver.points).toBe(1);  // won g1 with 1 star, lost g2
+    expect(by.waster.points).toBe(1); // lost g1 despite 5 stars, won g2 with 1
+  });
+
+  it('ignores games that are not graded yet', () => {
+    const rows = buildStandings([p('a', 'gX', -7, 5, { actual_spread: null })]);
+    expect(rows[0].points).toBe(0);
+    expect(rows[0].graded).toBe(0);
+    expect(rows[0].picks).toBe(1);
+  });
+
+  it('awards the point when only one player picked the game', () => {
+    const rows = buildStandings([p('a', 'g1', -20, 2, g1)]);
+    expect(rows[0].points).toBe(2);
+  });
+
+  it('includes players who never picked, at zero', () => {
+    const rows = buildStandings([p('a', 'g1', -7, 1, g1)], [
+      { user_id: 'a', username: 'ana' }, { user_id: 'z', username: 'zed' },
+    ]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.z.points).toBe(0);
+    expect(by.z.picks).toBe(0);
+  });
+
+  it('ranks on points, breaking ties on average accuracy', () => {
+    const rows = buildStandings([
+      p('a', 'g1', -7, 1, g1), p('a', 'g2', -3.5, 1, g2),
+      p('b', 'g1', -9, 1, g1), p('b', 'g2', -3, 1, g2),
+    ]);
+    // a wins g1, b wins g2 -> 1 point each; a's average diff is smaller.
+    expect(rows[0].points).toBe(rows[1].points);
+    expect(rows[0].user_id).toBe('a');
+    expect(rows.map(r => r.rank)).toEqual([1, 2]);
+  });
+
+  it("caps a player's week at their star budget", () => {
+    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
+    const picks = games.map(id => p('a', id, -7, 2, g1)); // wins all 16 at x2
+    const total = buildStandings(picks)[0].points;
+    expect(total).toBe(confidenceBudget(16));
+  });
+});
+
+describe('starsAvailable — compulsory minimums', () => {
+  const budget = confidenceBudget(16); // 32
+
+  it('holds back one star for each game still to be picked', () => {
+    // Nothing picked yet: 16 games each owe a star, so half the budget is spoken for.
+    expect(starsAvailable({ budget, spent: 0, unpickedCount: 16 })).toBe(16);
+  });
+
+  it('frees up the reserve as games get picked', () => {
+    // 8 picked at the minimum, 8 outstanding.
+    expect(starsAvailable({ budget, spent: 8, unpickedCount: 8 })).toBe(16);
+  });
+
+  it('leaves nothing spare once every star is committed', () => {
+    expect(starsAvailable({ budget, spent: 32, unpickedCount: 0 })).toBe(0);
+  });
+
+  // The dead end this exists to prevent: without the reserve, spending big
+  // early leaves you unable to afford games you are still required to pick.
+  it('stops an early spending spree from stranding later games', () => {
+    // 6 games at x5 = 30 spent, 10 games still to pick.
+    const free = starsAvailable({ budget, spent: 30, unpickedCount: 10 });
+    expect(free).toBeLessThan(0); // flagged as over budget rather than silently stranding
+    // The naive check would have said 2 stars were still spendable.
+    expect(budget - 30).toBe(2);
+  });
+
+  it('reports the overspend when a player is over budget', () => {
+    expect(starsAvailable({ budget, spent: 40, unpickedCount: 0 })).toBe(-8);
   });
 });

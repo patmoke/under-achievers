@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Edit2, Save, X, Target, Trophy, Zap, TrendingUp } from 'lucide-react';
+import { Edit2, Save, X, Target, Trophy, TrendingUp } from 'lucide-react';
 import { formatSpread } from '../lib/scoring';
 import toast from 'react-hot-toast';
 
@@ -23,14 +23,7 @@ export default function ProfilePage() {
   const [recentPicks, setRecentPicks] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    if (profile) {
-      setForm({ display_name: profile.display_name || '', bio: profile.bio || '', favorite_team: profile.favorite_team || '' });
-    }
-    fetchRecentPicks();
-  }, [profile]);
-
-  async function fetchRecentPicks() {
+  const fetchRecentPicks = useCallback(async () => {
     if (!user) return;
     const { data: weekly } = await supabase
       .from('predictions')
@@ -39,7 +32,19 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
       .limit(10);
     setRecentPicks(weekly || []);
-  }
+  }, [user]);
+
+  useEffect(() => {
+    if (profile) {
+      setForm({
+        display_name: profile.display_name || '',
+        bio: profile.bio || '',
+        favorite_team: profile.favorite_team || '',
+      });
+    }
+  }, [profile]);
+
+  useEffect(() => { fetchRecentPicks(); }, [fetchRecentPicks]);
 
   async function handleSave() {
     setLoading(true);
@@ -57,7 +62,6 @@ export default function ProfilePage() {
   const stats = [
     { label: 'Total picks', value: profile?.total_predictions || 0, icon: <Target size={18} />, color: 'var(--accent)' },
     { label: 'Season rank', value: profile?.season_rank ? `#${profile.season_rank}` : '—', icon: <Trophy size={18} />, color: 'var(--gold)' },
-    { label: 'Total points', value: profile?.total_points || 0, icon: <Zap size={18} />, color: 'var(--accent)' },
     { label: 'Weeks won', value: profile?.weekly_wins || 0, icon: <TrendingUp size={18} />, color: 'var(--gold)' },
   ];
 

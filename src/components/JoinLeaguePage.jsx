@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
@@ -13,11 +13,12 @@ export default function JoinLeaguePage() {
   const [authMode, setAuthMode] = useState(null);
   const [joining, setJoining] = useState(false);
 
-  useEffect(() => {
-    if (!loading && user && !joining) join();
-  }, [loading, user]);
+  // Joining must fire exactly once. A ref rather than the `joining` state
+  // because state updates are async — a re-render before the flag lands could
+  // otherwise fire a second join.
+  const hasAttempted = useRef(false);
 
-  async function join() {
+  const join = useCallback(async () => {
     setJoining(true);
     const normalized = code.trim().toUpperCase();
     const { data, error } = await supabase.rpc('join_league_by_code', { p_code: normalized });
@@ -38,7 +39,13 @@ export default function JoinLeaguePage() {
 
     toast.error(error.message);
     navigate('/leagues', { replace: true });
-  }
+  }, [code, navigate]);
+
+  useEffect(() => {
+    if (loading || !user || hasAttempted.current) return;
+    hasAttempted.current = true;
+    join();
+  }, [loading, user, join]);
 
   if (loading || (user && joining)) {
     return (
