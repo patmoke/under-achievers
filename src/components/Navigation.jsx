@@ -12,7 +12,7 @@ export default function Navigation() {
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
   const navItems = [
-    { path: '/games', label: 'This Week', icon: <Calendar size={16} /> },
+    { path: '/games', label: 'Make Picks', icon: <Calendar size={16} /> },
     { path: '/leagues', label: 'Leagues', icon: <Trophy size={16} /> },
     { path: '/leaderboard', label: 'Leaderboard', icon: <BarChart2 size={16} /> },
     { path: '/history', label: 'History', icon: <History size={16} /> },

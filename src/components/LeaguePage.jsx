@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, calculatePoints } from '../lib/scoring';
+import { formatSpread, calculatePoints, confidenceBudget } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
@@ -396,6 +396,15 @@ export default function LeaguePage() {
       )}
 
       {/* Blind Picks Banner (not applicable to survivor pools) */}
+      {!isSurvivor && weeklyTab === currentWeek && (
+        <WeeklyPicksHub
+          week={weeklyTab}
+          myPicks={myWeekPicks}
+          weekGames={games}
+          onGoToPicks={() => navigate('/games')}
+        />
+      )}
+
       {!isSurvivor && <BlindPicksBanner weekAllSubmitted={weekAllSubmitted} weeklyTab={weeklyTab} />}
 
       {/* Tabs */}
@@ -626,6 +635,52 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+// ─── Weekly Picks Hub ───────────────────────────────────────────────────────
+//
+// A weekly league shows standings but has no route to the thing that produces
+// them: picking lives under its own nav item because picks are global, not
+// league-scoped. That made the league page a dead end. This card closes the
+// loop and is also the only place that states the non-obvious part of the
+// model — one set of picks counts in every weekly league you're in.
+
+function WeeklyPicksHub({ week, myPicks, weekGames, onGoToPicks }) {
+  const submitted = myPicks.length;
+  const total = weekGames.length;
+  const starsUsed = myPicks.reduce((sum, p) => sum + (p.confidence_points || 1), 0);
+  const budget = confidenceBudget(total);
+  const none = submitted === 0;
+
+  if (total === 0) return null;
+
+  return (
+    <div className="card" style={{
+      padding: '16px 20px', marginBottom: 20,
+      borderLeft: `3px solid ${none ? 'var(--warning)' : 'var(--accent)'}`,
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+      gap: 16, flexWrap: 'wrap',
+    }}>
+      <div>
+        <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 2 }}>
+          {none
+            ? `You haven't made your Week ${week} picks yet`
+            : `Week ${week} picks: ${submitted} of ${total} submitted`}
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+          {!none && <>★ {starsUsed} / {budget} stars used · </>}
+          Your picks count in every weekly league you're in.
+        </div>
+      </div>
+      <button
+        className={none ? 'btn btn-primary' : 'btn btn-secondary'}
+        onClick={onGoToPicks}
+        style={{ display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+      >
+        <PenLine size={14} /> {none ? 'Make picks' : 'Review picks'} <ChevronRight size={14} />
+      </button>
     </div>
   );
 }
