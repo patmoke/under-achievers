@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { computeEntryStatus, usedTeams, pickOutcome, isGameLocked } from './survivor';
 import {
-  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread,
+  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings,
   CONFIDENCE_MIN, CONFIDENCE_MAX,
 } from './scoring';
 
@@ -283,5 +283,97 @@ describe('describeSpread', () => {
     expect(describeSpread('', 'LAC', 'ARI')).toBeNull();
     expect(describeSpread(null, 'LAC', 'ARI')).toBeNull();
     expect(describeSpread(undefined, 'LAC', 'ARI')).toBeNull();
+  });
+});
+
+describe('buildStandings — competitive scoring', () => {
+  // Actual line is -7. Closest wins the game and banks their stars.
+  const g1 = { actual_spread: -7 };
+  const g2 = { actual_spread: -3 };
+
+  const p = (user, game, spread, conf, actual) => ({
+    user_id: user, game_id: game, predicted_spread: spread,
+    confidence_points: conf, games: actual,
+  });
+
+  it('awards the closest player their stars, and others nothing', () => {
+    const rows = buildStandings([
+      p('a', 'g1', -7.5, 3, g1),  // 0.5 off  -> wins, +3
+      p('b', 'g1', -10, 5, g1),   // 3 off
+      p('c', 'g1', -1, 5, g1),    // 6 off
+    ]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.a.points).toBe(3);
+    expect(by.b.points).toBe(0);
+    expect(by.c.points).toBe(0);
+  });
+
+  it('gives every tied player the point, each times their own stars', () => {
+    const rows = buildStandings([
+      p('a', 'g1', -6, 2, g1),  // 1 off
+      p('b', 'g1', -8, 4, g1),  // 1 off — tie
+      p('c', 'g1', -9, 5, g1),  // 2 off
+    ]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.a.points).toBe(2);
+    expect(by.b.points).toBe(4);
+    expect(by.c.points).toBe(0);
+  });
+
+  it('scores an exact hit as a win, not as extra points', () => {
+    const rows = buildStandings([p('a', 'g1', -7, 1, g1), p('b', 'g1', -7.5, 5, g1)]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.a.points).toBe(1); // exact, but only 1 star
+    expect(by.b.points).toBe(0); // more stars, still lost
+  });
+
+  it('makes wasted stars cost the player', () => {
+    // Same accuracy across two games, opposite star placement.
+    const picks = [
+      p('saver', 'g1', -7, 1, g1), p('saver', 'g2', -20, 5, g2),
+      p('waster', 'g1', -20, 5, g1), p('waster', 'g2', -3, 1, g2),
+    ];
+    const by = Object.fromEntries(buildStandings(picks).map(r => [r.user_id, r]));
+    expect(by.saver.points).toBe(1);  // won g1 with 1 star, lost g2
+    expect(by.waster.points).toBe(1); // lost g1 despite 5 stars, won g2 with 1
+  });
+
+  it('ignores games that are not graded yet', () => {
+    const rows = buildStandings([p('a', 'gX', -7, 5, { actual_spread: null })]);
+    expect(rows[0].points).toBe(0);
+    expect(rows[0].graded).toBe(0);
+    expect(rows[0].picks).toBe(1);
+  });
+
+  it('awards the point when only one player picked the game', () => {
+    const rows = buildStandings([p('a', 'g1', -20, 2, g1)]);
+    expect(rows[0].points).toBe(2);
+  });
+
+  it('includes players who never picked, at zero', () => {
+    const rows = buildStandings([p('a', 'g1', -7, 1, g1)], [
+      { user_id: 'a', username: 'ana' }, { user_id: 'z', username: 'zed' },
+    ]);
+    const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
+    expect(by.z.points).toBe(0);
+    expect(by.z.picks).toBe(0);
+  });
+
+  it('ranks on points, breaking ties on average accuracy', () => {
+    const rows = buildStandings([
+      p('a', 'g1', -7, 1, g1), p('a', 'g2', -3.5, 1, g2),
+      p('b', 'g1', -9, 1, g1), p('b', 'g2', -3, 1, g2),
+    ]);
+    // a wins g1, b wins g2 -> 1 point each; a's average diff is smaller.
+    expect(rows[0].points).toBe(rows[1].points);
+    expect(rows[0].user_id).toBe('a');
+    expect(rows.map(r => r.rank)).toEqual([1, 2]);
+  });
+
+  it("caps a player's week at their star budget", () => {
+    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
+    const picks = games.map(id => p('a', id, -7, 2, g1)); // wins all 16 at x2
+    const total = buildStandings(picks)[0].points;
+    expect(total).toBe(confidenceBudget(16));
   });
 });

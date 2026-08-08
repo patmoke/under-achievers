@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, calculatePoints, confidenceBudget } from '../lib/scoring';
+import { formatSpread, confidenceBudget, buildStandings } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -215,23 +215,26 @@ export default function LeaguePage() {
   }
 
   function buildWeeklyLeaderboard() {
-    const userMap = {};
-    members.forEach(m => {
-      userMap[m.user_id] = { user_id: m.user_id, username: m.profiles?.username || 'Unknown', picks: 0, points: 0, diffs: [] };
-    });
-    const picks = weekAllSubmitted ? weeklyPicks : myWeekPicks;
-    picks.forEach(p => {
-      if (!userMap[p.user_id]) return;
-      userMap[p.user_id].picks++;
-      if (p.games?.actual_spread !== null && p.games?.actual_spread !== undefined) {
-        const diff = Math.abs(Number(p.predicted_spread) - Number(p.games.actual_spread));
-        userMap[p.user_id].diffs.push(diff);
-        userMap[p.user_id].points += calculatePoints(p.predicted_spread, p.games.actual_spread, p.confidence_points || 1);
-      }
-    });
-    return Object.values(userMap)
-      .sort((a, b) => b.points - a.points || a.diffs.reduce((s,d)=>s+d,0) - b.diffs.reduce((s,d)=>s+d,0))
-      .map((u, i) => ({ ...u, rank: i + 1, avgDiff: u.diffs.length ? u.diffs.reduce((a, b) => a + b, 0) / u.diffs.length : null }));
+    const players = members.map(m => ({
+      user_id: m.user_id,
+      username: m.profiles?.username || 'Unknown',
+    }));
+
+    // Scoring is relative, so it needs the whole field. Until every member has
+    // submitted we only hold our own picks, and scoring those alone would show
+    // us winning every game. Show pick counts and withhold points instead.
+    if (!weekAllSubmitted) {
+      const mine = new Set(myWeekPicks.map(p => p.user_id));
+      return players
+        .map(pl => ({
+          ...pl,
+          picks: mine.has(pl.user_id) ? myWeekPicks.length : 0,
+          points: null, wins: null, avgDiff: null,
+        }))
+        .map((pl, i) => ({ ...pl, rank: i + 1 }));
+    }
+
+    return buildStandings(weeklyPicks, players);
   }
 
   if (loading || !league) return (
@@ -560,12 +563,6 @@ export default function LeaguePage() {
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
                 {member.role === 'owner' && <span className="badge badge-gold">Owner</span>}
-                {!isSurvivor && (
-                  <div style={{ textAlign: 'right', fontSize: 13 }}>
-                    <div style={{ color: 'var(--accent)', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17 }}>{member.profiles?.total_points || 0} pts</div>
-                    <div style={{ color: 'var(--ink-soft)' }}>{member.profiles?.total_predictions || 0} picks</div>
-                  </div>
-                )}
                 {isOwner && member.role !== 'owner' && (
                   <button
                     onClick={() => removeMember(member)}
@@ -599,7 +596,10 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
   return (
     <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
       <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-        {['#', 'Player', 'Picks', 'Pts', 'Avg Δ'].map((h, i) => (
+        {/* Games won matters more than games entered once scoring is
+            competitive, but until picks are revealed there is nothing to win
+            yet, so the column falls back to the pick count. */}
+        {['#', 'Player', revealed ? 'Won' : 'Picks', 'Pts', 'Avg Δ'].map((h, i) => (
           <div key={i} className="label-muted" style={{ textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
         ))}
       </div>
@@ -624,10 +624,10 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
               {!showData && !isMe && <span style={{ fontSize: 11, color: 'var(--ink-faint)', marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}><EyeOff size={10} /> hidden</span>}
             </div>
             <div style={{ color: 'var(--ink-soft)', fontSize: 14, textAlign: 'right' }}>
-              {showData ? entry.picks : '—'}
+              {!showData ? '—' : revealed ? (entry.wins ?? '—') : entry.picks}
             </div>
             <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)', textAlign: 'right' }}>
-              {showData ? entry.points : '—'}
+              {showData && entry.points !== null && entry.points !== undefined ? entry.points : '—'}
             </div>
             <div style={{ fontSize: 14, textAlign: 'right', color: showData && entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--ink-faint)' }}>
               {showData && entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}

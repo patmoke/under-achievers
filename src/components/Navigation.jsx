@@ -102,7 +102,6 @@ export default function Navigation() {
               }}>
                 <div style={{ padding: '12px 16px', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{profile?.display_name || profile?.username}</div>
-                  <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>{profile?.total_points || 0} total points</div>
                 </div>
                 {profile?.is_admin && (
                   <button role="menuitem" onClick={() => { navigate('/admin'); setDropdownOpen(false); }} style={{
@@ -163,7 +162,6 @@ export default function Navigation() {
               </div>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 14 }}>{profile?.display_name || profile?.username}</div>
-                <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>{profile?.total_points || 0} pts</div>
               </div>
             </div>
 

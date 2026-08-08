@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { UserPlus, UserCheck, ArrowLeft, Target, Trophy, Zap, Users } from 'lucide-react';
+import { UserPlus, UserCheck, ArrowLeft, Target, Users } from 'lucide-react';
 import { formatSpread } from '../lib/scoring';
 import toast from 'react-hot-toast';
 
@@ -75,7 +75,6 @@ export default function UserProfilePage() {
 
   const stats = [
     { label: 'Total picks', value: profile.total_predictions || 0, icon: <Target size={16} />, color: 'var(--accent)' },
-    { label: 'Total points', value: profile.total_points || 0, icon: <Zap size={16} />, color: 'var(--accent)' },
     { label: 'Followers', value: profile.follower_count || 0, icon: <Users size={16} />, color: 'var(--ink-soft)' },
     { label: 'Following', value: profile.following_count || 0, icon: <UserCheck size={16} />, color: 'var(--ink-soft)' },
   ];
@@ -124,7 +123,7 @@ export default function UserProfilePage() {
         </div>
 
         {/* Stats row */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginTop: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: 12, marginTop: 24 }}>
           {stats.map(s => (
             <div key={s.label} style={{ textAlign: 'center', padding: '12px 8px', borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
               <div style={{ color: s.color, fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 26 }}>{s.value}</div>

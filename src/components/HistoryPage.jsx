@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, calculatePoints } from '../lib/scoring';
+import { formatSpread } from '../lib/scoring';
 import { History, ChevronDown } from 'lucide-react';
 
 const CURRENT_SEASON = 2026;
@@ -34,10 +34,10 @@ export default function HistoryPage() {
 
   function getWeekSummary(picks) {
     const withResults = picks.filter(p => p.games?.actual_spread !== null && p.games?.actual_spread !== undefined);
-    const totalPoints = withResults.reduce((sum, p) => sum + calculatePoints(p.predicted_spread, p.games.actual_spread, p.confidence_points), 0);
+    const stars = picks.reduce((sum, p) => sum + (p.confidence_points || 1), 0);
     const avgDiff = withResults.length > 0
       ? withResults.reduce((sum, p) => sum + Math.abs(p.predicted_spread - p.games.actual_spread), 0) / withResults.length : null;
-    return { totalPoints, avgDiff, total: picks.length, graded: withResults.length };
+    return { stars, avgDiff, total: picks.length, graded: withResults.length };
   }
 
   if (loading) return (
@@ -63,7 +63,7 @@ export default function HistoryPage() {
         <div style={{ display: 'grid', gap: 20 }}>
           {availableWeeks.map(week => {
             const picks = history[week] || [];
-            const { totalPoints, avgDiff, total, graded } = getWeekSummary(picks);
+            const { stars, avgDiff, total, graded } = getWeekSummary(picks);
             const isOpen = selectedWeek === week;
             return (
               <div key={week} className="card" style={{ overflow: 'hidden' }}>
@@ -74,9 +74,11 @@ export default function HistoryPage() {
                       <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'left' }}>{total} pick{total !== 1 ? 's' : ''} · {graded} graded</div>
                     </div>
                     <div style={{ display: 'flex', gap: 24 }}>
+                      {/* Stars spent, not points: points depend on the field
+                          you were scored against, so they live in standings. */}
                       <div>
-                        <div className="label-muted">Points</div>
-                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 22, color: 'var(--accent)' }}>{totalPoints}</div>
+                        <div className="label-muted">Stars</div>
+                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 22, color: 'var(--accent)' }}>{stars}</div>
                       </div>
                       {avgDiff !== null && (
                         <div>
@@ -94,7 +96,6 @@ export default function HistoryPage() {
                       const g = p.games;
                       const hasResult = g?.actual_spread !== null && g?.actual_spread !== undefined;
                       const diff = hasResult ? Math.abs(p.predicted_spread - g.actual_spread) : null;
-                      const pts = diff !== null ? calculatePoints(p.predicted_spread, g.actual_spread, p.confidence_points) : null;
                       return (
                         <div key={p.id} style={{ padding: '16px 24px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
                           <div>
@@ -114,7 +115,6 @@ export default function HistoryPage() {
                                 <div style={{ fontSize: 11, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>Δ {diff?.toFixed(1)}</div>
                               </div>
                             )}
-                            {pts !== null && <div style={{ padding: '8px 16px', borderRadius: 'var(--radius-sm)', background: 'var(--accent-soft)', fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 20, color: 'var(--accent-dark)' }}>+{pts}</div>}
                             {!hasResult && <span className="badge badge-gold">Pending</span>}
                           </div>
                         </div>

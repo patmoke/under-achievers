@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import {
-  calculatePoints, formatSpread, getAccuracyColor,
+  formatSpread, getAccuracyColor,
   CONFIDENCE_MIN, CONFIDENCE_MAX, confidenceBudget, confidenceSpent, describeSpread,
 } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
@@ -12,7 +12,7 @@ import toast from 'react-hot-toast';
 const CURRENT_SEASON = 2026;
 
 export default function GamesPage() {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [games, setGames] = useState([]);
   const [predictions, setPredictions] = useState({});
   const [savedPredictions, setSavedPredictions] = useState({});
@@ -92,8 +92,6 @@ export default function GamesPage() {
 
       const { error } = await supabase.from('predictions').upsert(rows, { onConflict: 'user_id,game_id' });
       if (error) throw error;
-
-      await supabase.from('profiles').update({ total_predictions: (profile?.total_predictions || 0) + rows.length }).eq('id', user.id);
 
       toast.success(`${rows.length} prediction${rows.length !== 1 ? 's' : ''} locked in!`);
       fetchUserPredictions();
@@ -327,7 +325,6 @@ function LockedGame({ game, saved }) {
   }
 
   const diff = game.actual_spread !== null ? Math.abs(saved.predicted_spread - game.actual_spread) : null;
-  const pts = diff !== null ? calculatePoints(saved.predicted_spread, game.actual_spread, saved.confidence_points) : null;
 
   return (
     <div style={{ textAlign: 'right' }}>
@@ -348,9 +345,12 @@ function LockedGame({ game, saved }) {
           </div>
         )}
       </div>
-      {pts !== null && (
-        <div className="gradient-win" style={{ marginTop: 12, padding: '8px 12px', display: 'inline-block' }}>
-          <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent-dark)' }}>+{pts} pts</span>
+      {/* No points here: scoring is relative, so a pick is only worth
+          something once it is compared against a field. The same pick can win
+          one league and lose another, so points live in the standings. */}
+      {diff !== null && (
+        <div style={{ marginTop: 12, fontSize: 11, color: 'var(--ink-faint)' }}>
+          Points are awarded in each league's standings
         </div>
       )}
     </div>
