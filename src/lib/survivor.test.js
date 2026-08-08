@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { computeEntryStatus, usedTeams, pickOutcome, isGameLocked } from './survivor';
 import {
-  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings,
+  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
   CONFIDENCE_MIN, CONFIDENCE_MAX,
 } from './scoring';
 
@@ -375,5 +375,37 @@ describe('buildStandings — competitive scoring', () => {
     const picks = games.map(id => p('a', id, -7, 2, g1)); // wins all 16 at x2
     const total = buildStandings(picks)[0].points;
     expect(total).toBe(confidenceBudget(16));
+  });
+});
+
+describe('starsAvailable — compulsory minimums', () => {
+  const budget = confidenceBudget(16); // 32
+
+  it('holds back one star for each game still to be picked', () => {
+    // Nothing picked yet: 16 games each owe a star, so half the budget is spoken for.
+    expect(starsAvailable({ budget, spent: 0, unpickedCount: 16 })).toBe(16);
+  });
+
+  it('frees up the reserve as games get picked', () => {
+    // 8 picked at the minimum, 8 outstanding.
+    expect(starsAvailable({ budget, spent: 8, unpickedCount: 8 })).toBe(16);
+  });
+
+  it('leaves nothing spare once every star is committed', () => {
+    expect(starsAvailable({ budget, spent: 32, unpickedCount: 0 })).toBe(0);
+  });
+
+  // The dead end this exists to prevent: without the reserve, spending big
+  // early leaves you unable to afford games you are still required to pick.
+  it('stops an early spending spree from stranding later games', () => {
+    // 6 games at x5 = 30 spent, 10 games still to pick.
+    const free = starsAvailable({ budget, spent: 30, unpickedCount: 10 });
+    expect(free).toBeLessThan(0); // flagged as over budget rather than silently stranding
+    // The naive check would have said 2 stars were still spendable.
+    expect(budget - 30).toBe(2);
+  });
+
+  it('reports the overspend when a player is over budget', () => {
+    expect(starsAvailable({ budget, spent: 40, unpickedCount: 0 })).toBe(-8);
   });
 });

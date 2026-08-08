@@ -79,6 +79,19 @@ export function confidenceSpent(confidenceByGame, pickedGameIds) {
 }
 
 /**
+ * Stars free to spend above the compulsory minimums.
+ *
+ * Every game has to be picked, and a pick costs at least one star, so the
+ * games still outstanding have a claim on the budget before anything else
+ * does. Without holding that back, someone could pour the whole budget into
+ * the first few games and then be unable to afford the games they're still
+ * required to pick.
+ */
+export function starsAvailable({ budget, spent, unpickedCount }) {
+  return budget - spent - unpickedCount * CONFIDENCE_MIN;
+}
+
+/**
  * Plain-language reading of a spread.
  *
  * Spreads are stored from the home team's perspective in standard odds
