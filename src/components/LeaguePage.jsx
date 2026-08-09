@@ -92,7 +92,7 @@ export default function LeaguePage() {
 
     const { data: membersData } = await supabase
       .from('league_members')
-      .select('*, profiles(username, display_name, total_points, total_predictions)')
+      .select('*, profiles(username, display_name)')
       .eq('league_id', id)
       .order('joined_at');
 

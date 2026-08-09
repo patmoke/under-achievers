@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { UserPlus, UserCheck, ArrowLeft, Target, Users } from 'lucide-react';
-import { formatSpread } from '../lib/scoring';
+import { formatSpread, summarisePicks } from '../lib/scoring';
 import toast from 'react-hot-toast';
 
 const CURRENT_SEASON = 2026;
@@ -16,6 +16,7 @@ export default function UserProfilePage() {
   const [profile, setProfile] = useState(null);
   const [isFollowing, setIsFollowing] = useState(false);
   const [recentWeekly, setRecentWeekly] = useState([]);
+  const [record, setRecord] = useState({ picks: 0, graded: 0, avgDiff: null });
   const [loading, setLoading] = useState(true);
 
   const fetchProfile = useCallback(async () => {
@@ -40,6 +41,15 @@ export default function UserProfilePage() {
       .limit(10);
 
     setRecentWeekly(weekly || []);
+
+    // Counted, not read from the stale cached columns.
+    const { data: all } = await supabase
+      .from('predictions')
+      .select('predicted_spread, games(actual_spread)')
+      .eq('user_id', id)
+      .eq('season', CURRENT_SEASON);
+    setRecord(summarisePicks(all || []));
+
     setLoading(false);
   }, [id, user.id, navigate]);
 
@@ -74,7 +84,8 @@ export default function UserProfilePage() {
   if (!profile) return null;
 
   const stats = [
-    { label: 'Total picks', value: profile.total_predictions || 0, icon: <Target size={16} />, color: 'var(--accent)' },
+    { label: 'Picks made', value: record.picks, icon: <Target size={16} />, color: 'var(--accent)' },
+    { label: 'Avg Δ', value: record.avgDiff === null ? '—' : record.avgDiff.toFixed(1), icon: <Target size={16} />, color: 'var(--gold)' },
     { label: 'Followers', value: profile.follower_count || 0, icon: <Users size={16} />, color: 'var(--ink-soft)' },
     { label: 'Following', value: profile.following_count || 0, icon: <UserCheck size={16} />, color: 'var(--ink-soft)' },
   ];
