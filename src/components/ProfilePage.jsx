@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { Edit2, Save, X, Target, CheckCircle2, Crosshair } from 'lucide-react';
 import { summarisePicks } from '../lib/scoring';
+import NotificationSettings from './NotificationSettings';
 
 const CURRENT_SEASON = 2026;
 import { formatSpread } from '../lib/scoring';
@@ -209,6 +210,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <NotificationSettings userId={user?.id} />
 
       {/* Responsive fix */}
       <style>{`

@@ -11,6 +11,11 @@ export default defineConfig({
       // reload to the app rather than swapping assets under a user mid-pick.
       // See ReloadPrompt: it waits for an explicit "Update".
       registerType: 'prompt',
+      // injectManifest rather than generateSW: the service worker needs push
+      // and notificationclick handlers, which a generated worker can't carry.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       includeAssets: ['icon.svg', 'apple-touch-icon.png'],
       manifest: {
         name: 'Under Achievers — NFL Prediction League',
@@ -33,30 +38,8 @@ export default defineConfig({
           { src: '/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        // The app shell can be cached, but everything that matters is live
-        // data. Supabase calls must never be served from cache -- a stale
-        // leaderboard or a stale lock state is worse than a slow one.
-        navigateFallbackDenylist: [/^\/rest\//, /^\/auth\//, /^\/functions\//],
-        runtimeCaching: [
-          {
-            urlPattern: ({ url }) => url.origin === 'https://fonts.googleapis.com'
-              || url.origin === 'https://fonts.gstatic.com',
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Supabase: always go to the network. Listed explicitly so no
-            // future default starts caching picks or standings.
-            urlPattern: ({ url }) => url.hostname.endsWith('.supabase.co'),
-            handler: 'NetworkOnly',
-          },
-        ],
       },
     }),
   ],
