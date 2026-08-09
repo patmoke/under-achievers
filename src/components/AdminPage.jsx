@@ -213,8 +213,8 @@ export default function AdminPage() {
           {/* ── USERS ── */}
           {activeTab === 'users' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr', gap: 12 }}>
-                {['Username', 'Email', 'Picks', 'Points', 'Admin'].map(h => (
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 12 }}>
+                {['Username', 'Email', 'Admin'].map(h => (
                   <div key={h} className="label-muted">{h}</div>
                 ))}
               </div>
@@ -222,15 +222,13 @@ export default function AdminPage() {
                 <div key={u.id} style={{
                   padding: '14px 20px',
                   borderBottom: idx === users.length - 1 ? 'none' : '1px solid var(--border)',
-                  display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 1fr', gap: 12, alignItems: 'center'
+                  display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 12, alignItems: 'center'
                 }}>
                   <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
                     {u.username}
                     {u.is_admin && <span className="badge badge-lime" style={{ marginLeft: 8 }}>Admin</span>}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
-                  <div style={{ fontSize: 14 }}>{u.total_predictions || 0}</div>
-                  <div style={{ fontSize: 14, color: 'var(--accent)', fontFamily: 'Barlow Condensed', fontWeight: 700 }}>{u.total_points || 0}</div>
                   <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
                     {u.is_admin ? '✓ Admin' : '—'}
                   </div>

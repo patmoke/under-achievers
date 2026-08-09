@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { computeEntryStatus, usedTeams, pickOutcome, isGameLocked } from './survivor';
 import {
   deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
+  summarisePicks,
   CONFIDENCE_MIN, CONFIDENCE_MAX,
 } from './scoring';
 
@@ -407,5 +408,41 @@ describe('starsAvailable — compulsory minimums', () => {
 
   it('reports the overspend when a player is over budget', () => {
     expect(starsAvailable({ budget, spent: 40, unpickedCount: 0 })).toBe(-8);
+  });
+});
+
+describe('summarisePicks', () => {
+  const graded = (spread, actual) => ({ predicted_spread: spread, games: { actual_spread: actual } });
+  const pending = spread => ({ predicted_spread: spread, games: { actual_spread: null } });
+
+  it('counts every pick, graded or not', () => {
+    expect(summarisePicks([graded(-7, -7), pending(-3)]).picks).toBe(2);
+  });
+
+  it('counts only graded picks as graded', () => {
+    expect(summarisePicks([graded(-7, -7), pending(-3)]).graded).toBe(1);
+  });
+
+  it('averages accuracy over graded picks only', () => {
+    // 1 off and 3 off -> average 2. The pending pick must not dilute it.
+    const s = summarisePicks([graded(-6, -7), graded(-10, -7), pending(-3)]);
+    expect(s.avgDiff).toBe(2);
+  });
+
+  it('reports no average when nothing is graded', () => {
+    expect(summarisePicks([pending(-3)]).avgDiff).toBeNull();
+  });
+
+  it('handles a player with no picks', () => {
+    expect(summarisePicks([])).toEqual({ picks: 0, graded: 0, avgDiff: null });
+    expect(summarisePicks()).toEqual({ picks: 0, graded: 0, avgDiff: null });
+  });
+
+  // The bug this replaced: a counter incremented on each submit, so
+  // re-submitting a week inflated it. Counting can't drift that way.
+  it('reflects the picks themselves rather than a running tally', () => {
+    const picks = [graded(-7, -7)];
+    expect(summarisePicks(picks).picks).toBe(1);
+    expect(summarisePicks(picks).picks).toBe(1); // recounting never grows
   });
 });

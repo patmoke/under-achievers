@@ -6,6 +6,7 @@ import {
   CONFIDENCE_MIN, CONFIDENCE_MAX, confidenceBudget, confidenceSpent, describeSpread, starsAvailable,
 } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
+import { useUnsavedWork } from '../lib/unsavedWork';
 import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -117,6 +118,19 @@ export default function GamesPage() {
   // for each game still to be picked.
   const starsFree = starsAvailable({ budget: starBudget, spent: starsSpent, unpickedCount });
   const allPicked = unpickedCount === 0;
+
+  // A week of spreads and stars lives in component state until it's submitted,
+  // so a service-worker reload here would throw it away. Declaring it lets the
+  // update hold off until the week is in.
+  const hasUnsavedEdits = unlocked.some(g => {
+    const entered = predictions[g.id];
+    if (entered === undefined || entered === '') return false;
+    const saved = savedPredictions[g.id];
+    if (!saved) return true;
+    return Number(entered) !== Number(saved.predicted_spread)
+      || (confidence[g.id] || CONFIDENCE_MIN) !== saved.confidence_points;
+  });
+  useUnsavedWork('weekly-picks', hasUnsavedEdits);
 
   function formatGameTime(isoString) {
     const d = new Date(isoString);

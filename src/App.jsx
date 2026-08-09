@@ -13,6 +13,7 @@ import LeaguePage from './components/LeaguePage';
 import JoinLeaguePage from './components/JoinLeaguePage';
 import UserProfilePage from './components/UserProfilePage';
 import Footer from './components/Footer';
+import ReloadPrompt from './components/ReloadPrompt';
 import './styles/globals.css';
 
 function ProtectedLayout({ children }) {
@@ -66,6 +67,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <AppRoutes />
+        <ReloadPrompt />
         <Toaster
           position="top-right"
           toastOptions={{

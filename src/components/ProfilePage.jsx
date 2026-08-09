@@ -1,7 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Edit2, Save, X, Target, Trophy, TrendingUp } from 'lucide-react';
+import { Edit2, Save, X, Target, CheckCircle2, Crosshair } from 'lucide-react';
+import { summarisePicks } from '../lib/scoring';
+import NotificationSettings from './NotificationSettings';
+
+const CURRENT_SEASON = 2026;
 import { formatSpread } from '../lib/scoring';
 import toast from 'react-hot-toast';
 
@@ -21,6 +25,7 @@ export default function ProfilePage() {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [recentPicks, setRecentPicks] = useState([]);
+  const [record, setRecord] = useState({ picks: 0, graded: 0, avgDiff: null });
   const [loading, setLoading] = useState(false);
 
   const fetchRecentPicks = useCallback(async () => {
@@ -32,6 +37,16 @@ export default function ProfilePage() {
       .order('created_at', { ascending: false })
       .limit(10);
     setRecentPicks(weekly || []);
+
+    // Counted from the picks themselves. The cached profile columns this
+    // replaces had drifted badly — one profile claimed 39 picks against a
+    // single real row.
+    const { data: all } = await supabase
+      .from('predictions')
+      .select('predicted_spread, games(actual_spread)')
+      .eq('user_id', user.id)
+      .eq('season', CURRENT_SEASON);
+    setRecord(summarisePicks(all || []));
   }, [user]);
 
   useEffect(() => {
@@ -60,9 +75,11 @@ export default function ProfilePage() {
   }
 
   const stats = [
-    { label: 'Total picks', value: profile?.total_predictions || 0, icon: <Target size={18} />, color: 'var(--accent)' },
-    { label: 'Season rank', value: profile?.season_rank ? `#${profile.season_rank}` : '—', icon: <Trophy size={18} />, color: 'var(--gold)' },
-    { label: 'Weeks won', value: profile?.weekly_wins || 0, icon: <TrendingUp size={18} />, color: 'var(--gold)' },
+    // Rank and weeks won need the whole field under competitive scoring, so
+    // they live on the leaderboard rather than here.
+    { label: 'Picks made', value: record.picks, icon: <Target size={18} />, color: 'var(--accent)' },
+    { label: 'Graded', value: record.graded, icon: <CheckCircle2 size={18} />, color: 'var(--accent)' },
+    { label: 'Avg Δ', value: record.avgDiff === null ? '—' : record.avgDiff.toFixed(1), icon: <Crosshair size={18} />, color: 'var(--gold)' },
   ];
 
   return (
@@ -193,6 +210,8 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+
+      <NotificationSettings userId={user?.id} />
 
       {/* Responsive fix */}
       <style>{`

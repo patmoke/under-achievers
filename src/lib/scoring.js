@@ -108,6 +108,33 @@ export function describeSpread(spread, homeAbbr, awayAbbr) {
     : `${awayAbbr} wins by ${n}`;
 }
 
+/**
+ * A player's own pick record, counted from their picks rather than read from a
+ * cached column.
+ *
+ * The profile columns these replace (total_predictions, season_rank,
+ * weekly_wins) were precomputed and never reconciled: total_predictions was
+ * incremented by the submit handler, so re-submitting a week counted it again,
+ * and profiles ended up claiming dozens of picks against a handful of real
+ * rows. Counting from `predictions` cannot drift.
+ *
+ * Deliberately limited to what a player's own picks can answer. Rank and weeks
+ * won depend on the whole field under competitive scoring, so they belong to
+ * the leaderboard, which already loads the field.
+ */
+export function summarisePicks(picks = []) {
+  const graded = picks.filter(p => {
+    const actual = p?.games?.actual_spread;
+    return actual !== null && actual !== undefined && !Number.isNaN(Number(p.predicted_spread));
+  });
+
+  const avgDiff = graded.length
+    ? graded.reduce((sum, p) => sum + Math.abs(Number(p.predicted_spread) - Number(p.games.actual_spread)), 0) / graded.length
+    : null;
+
+  return { picks: picks.length, graded: graded.length, avgDiff };
+}
+
 // ─── Competitive scoring ────────────────────────────────────────────────────
 //
 // Scoring is relative, not absolute: for each graded game, whoever in the
