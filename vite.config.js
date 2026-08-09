@@ -7,9 +7,10 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      // Ship a new service worker on every deploy, but hand control of the
-      // reload to the app rather than swapping assets under a user mid-pick.
-      // See ReloadPrompt: it waits for an explicit "Update".
+      // 'prompt' hands the decision to the app rather than reloading on its
+      // own. ReloadPrompt then applies updates silently wherever a reload
+      // costs nothing and only asks when there are unsaved picks — neither
+      // 'autoUpdate' nor an always-visible prompt can express that.
       registerType: 'prompt',
       // injectManifest rather than generateSW: the service worker needs push
       // and notificationclick handlers, which a generated worker can't carry.
