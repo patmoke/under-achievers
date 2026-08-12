@@ -46,6 +46,26 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  /**
+   * Hands off to Google or Apple and comes back to whatever page we left from.
+   *
+   * There's no session to wait for here — the browser navigates away, and the
+   * session is picked up from the URL on return by detectSessionInUrl, which
+   * fires onAuthStateChange above.
+   */
+  async function signInWithProvider(provider) {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.href,
+        // Shared laptops are a real thing in a friends league; without this
+        // Google silently reuses whichever account signed in last.
+        queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined,
+      },
+    });
+    if (error) throw error;
+  }
+
   async function signIn(email, password) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -63,7 +83,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateProfile, fetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithProvider, signOut, updateProfile, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   );
