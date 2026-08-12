@@ -10,7 +10,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: true,
     // Pinned rather than left to the library default, which is still
     // 'implicit'. PKCE keeps the tokens out of the URL fragment on the way
-    // back from Google or Apple — the fragment survives in history and in
+    // back from the OAuth provider — the fragment survives in history and in
     // anything that logs referrers.
     flowType: 'pkce'
   }

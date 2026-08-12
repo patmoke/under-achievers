@@ -47,7 +47,7 @@ export function AuthProvider({ children }) {
   }
 
   /**
-   * Hands off to Google or Apple and comes back to whatever page we left from.
+   * Hands off to the provider and comes back to whatever page we left from.
    *
    * There's no session to wait for here — the browser navigates away, and the
    * session is picked up from the URL on return by detectSessionInUrl, which
@@ -60,7 +60,7 @@ export function AuthProvider({ children }) {
         redirectTo: window.location.href,
         // Shared laptops are a real thing in a friends league; without this
         // Google silently reuses whichever account signed in last.
-        queryParams: provider === 'google' ? { prompt: 'select_account' } : undefined,
+        queryParams: { prompt: 'select_account' },
       },
     });
     if (error) throw error;

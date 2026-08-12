@@ -3,15 +3,16 @@ import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 
 /**
- * Sign in with Google / Apple.
+ * Sign in with Google.
  *
  * Which buttons appear is driven by VITE_AUTH_PROVIDERS rather than hardcoded,
  * because a provider has to be switched on in the Supabase dashboard before it
- * works — and Apple additionally needs a paid developer account. A button that
- * only ever produces "provider is not enabled" is worse than no button, and
- * this way turning one on or off is an env var in Vercel, not a code change.
+ * works. A button that only ever produces "provider is not enabled" is worse
+ * than no button, so turning one off is an env var in Vercel, not a code
+ * change — which is also what makes adding a second provider later a small
+ * change rather than a rewrite.
  */
-const ENABLED = (import.meta.env.VITE_AUTH_PROVIDERS ?? 'google,apple')
+const ENABLED = (import.meta.env.VITE_AUTH_PROVIDERS ?? 'google')
   .split(',')
   .map(s => s.trim().toLowerCase())
   .filter(Boolean);
@@ -72,8 +73,8 @@ export default function ProviderButtons({ mode }) {
   );
 }
 
-// Both marks are drawn inline rather than pulled from an icon set: Google and
-// Apple both require their own artwork, and lucide only ships generic shapes.
+// Drawn inline rather than pulled from an icon set: Google requires its own
+// artwork, and lucide only ships generic shapes.
 function GoogleMark() {
   return (
     <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
@@ -85,27 +86,13 @@ function GoogleMark() {
   );
 }
 
-function AppleMark() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true">
-      <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z" />
-    </svg>
-  );
-}
-
-// Colours follow each vendor's branding rules: Google wants its mark on white
-// with a visible border, Apple wants solid black or solid white.
+// Colours follow Google's branding rules: its mark on white, with a visible
+// border so the button still reads as a button.
 const PROVIDERS = [
   {
     id: 'google',
     label: 'Google',
     mark: <GoogleMark />,
     style: { background: '#fff', color: '#1f1f1f', border: '1px solid var(--border-strong)' },
-  },
-  {
-    id: 'apple',
-    label: 'Apple',
-    mark: <AppleMark />,
-    style: { background: '#000', color: '#fff', border: '1px solid #000' },
   },
 ];
