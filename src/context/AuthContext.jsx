@@ -39,16 +39,31 @@ export function AuthProvider({ children }) {
       },
     });
     if (error) throw error;
-    // Update username if signup succeeded
-    if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        email,
-        username,
-        display_name: username
-      });
-    }
+    // No profile write here: the handle_new_user trigger on auth.users creates
+    // the row from the username passed above. Doing it from the client also
+    // failed whenever email confirmation was on, since there's no session yet
+    // for the insert policy to match against.
     return data;
+  }
+
+  /**
+   * Hands off to the provider and comes back to whatever page we left from.
+   *
+   * There's no session to wait for here — the browser navigates away, and the
+   * session is picked up from the URL on return by detectSessionInUrl, which
+   * fires onAuthStateChange above.
+   */
+  async function signInWithProvider(provider) {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: window.location.href,
+        // Shared laptops are a real thing in a friends league; without this
+        // Google silently reuses whichever account signed in last.
+        queryParams: { prompt: 'select_account' },
+      },
+    });
+    if (error) throw error;
   }
 
   async function signIn(email, password) {
@@ -68,7 +83,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signOut, updateProfile, fetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithProvider, signOut, updateProfile, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   );

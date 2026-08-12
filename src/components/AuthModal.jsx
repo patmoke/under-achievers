@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { X, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import ProviderButtons from './ProviderButtons';
 import toast from 'react-hot-toast';
 
 export default function AuthModal({ mode, onClose, onSwitch }) {
@@ -57,6 +58,8 @@ export default function AuthModal({ mode, onClose, onSwitch }) {
             {mode === 'login' ? 'Sign in to your account' : 'Create your free account'}
           </p>
         </div>
+
+        <ProviderButtons mode={mode} />
 
         <form onSubmit={handleSubmit}>
           {mode === 'signup' && (

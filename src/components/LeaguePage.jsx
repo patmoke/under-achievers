@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, confidenceBudget, buildStandings } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 
@@ -53,6 +53,8 @@ export default function LeaguePage() {
   const [settingsForm, setSettingsForm] = useState(null);
   const [savingSettings, setSavingSettings] = useState(false);
   const [removingMember, setRemovingMember] = useState(null);
+  const [memberEmails, setMemberEmails] = useState({});
+  const [emailsCopied, setEmailsCopied] = useState(false);
 
   const [weekAllSubmitted, setWeekAllSubmitted] = useState(false);
   const [weeklyPicks, setWeeklyPicks] = useState([]);
@@ -142,6 +144,24 @@ export default function LeaguePage() {
     if (league && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
   }, [league, members, isSurvivor, checkAllSubmittedThenFetch]);
 
+  // Owner-only, because chasing buy-ins is the reason to have the list at all.
+  // RLS on user_contacts is what actually enforces that; the role check here
+  // just avoids a request that would come back holding only your own address.
+  useEffect(() => {
+    if (myMembership?.role !== 'owner' || members.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('user_contacts')
+        .select('user_id, email')
+        .in('user_id', members.map(m => m.user_id));
+      if (!cancelled) {
+        setMemberEmails(Object.fromEntries((data || []).map(c => [c.user_id, c.email])));
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [myMembership, members]);
+
   async function leaveLeague() {
     if (myMembership?.role === 'owner') { toast.error('Transfer ownership or delete the league before leaving'); return; }
     if (!confirm('Leave this league?')) return;
@@ -204,6 +224,16 @@ export default function LeaguePage() {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     toast.success('Join code copied!');
+  }
+
+  // Comma-separated so it can be pasted straight into a To: field.
+  function copyMemberEmails() {
+    const list = members.map(m => memberEmails[m.user_id]).filter(Boolean);
+    if (list.length === 0) { toast.error('No addresses to copy'); return; }
+    navigator.clipboard.writeText(list.join(', '));
+    setEmailsCopied(true);
+    setTimeout(() => setEmailsCopied(false), 2000);
+    toast.success(`${list.length} address${list.length === 1 ? '' : 'es'} copied`);
   }
 
   function shareLink() {
@@ -534,6 +564,17 @@ export default function LeaguePage() {
       )}
 
       {/* MEMBERS */}
+      {tab === 'members' && isOwner && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+          <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0 }}>
+            Addresses are visible to you as the league owner — nobody else in the league can see them.
+          </p>
+          <button onClick={copyMemberEmails} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, padding: '8px 12px', whiteSpace: 'nowrap' }}>
+            {emailsCopied ? <Check size={14} /> : <Mail size={14} />}
+            {emailsCopied ? 'Copied' : 'Copy addresses'}
+          </button>
+        </div>
+      )}
       {tab === 'members' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {members.map((member, idx) => (
@@ -559,6 +600,17 @@ export default function LeaguePage() {
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
                     Joined {new Date(member.joined_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                   </div>
+                  {isOwner && (
+                    <a
+                      href={memberEmails[member.user_id] ? `mailto:${memberEmails[member.user_id]}` : undefined}
+                      style={{
+                        fontSize: 12, color: 'var(--ink-soft)', wordBreak: 'break-all',
+                        display: 'block', marginTop: 2,
+                      }}
+                    >
+                      {memberEmails[member.user_id] || '—'}
+                    </a>
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>

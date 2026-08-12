@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { TrendingUp, Target, Trophy, Users, ChevronRight, Lock, Zap, BarChart3, ListChecks } from 'lucide-react';
 import AuthModal from './AuthModal';
+import SponsorBanner from './SponsorBanner';
 
 const SAMPLE_LEADERS = [
   { rank: 1, username: 'PickMaster99', points: 847, accuracy: '78%', weeks: 4 },
@@ -204,7 +205,8 @@ export default function LandingPage() {
           <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 18, color: 'var(--ink)' }}>Under Achievers</span>
           <span style={{ color: 'var(--ink-soft)', fontSize: 13 }}>Inspired by Guess the Lines · For entertainment only</span>
         </div>
-        <div style={{ padding: '16px 24px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+        <div style={{ padding: '24px 24px 16px', borderTop: '1px solid var(--border)', textAlign: 'center' }}>
+          <SponsorBanner />
           <p style={{ color: 'var(--ink-faint)', fontSize: 12, lineHeight: 1.6, maxWidth: 800, margin: '0 auto' }}>
             Under Achievers is an unofficial fan game not affiliated with or endorsed by the NFL, its teams, or any related entities.
             Team names and logos are the property of their respective owners.

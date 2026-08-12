@@ -19,7 +19,7 @@ const NFL_TEAMS = [
 ];
 
 export default function AdminPage() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('games');
   const [games, setGames] = useState([]);
@@ -35,12 +35,16 @@ export default function AdminPage() {
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [gamesRes, usersRes] = await Promise.all([
+    // Addresses live in user_contacts now; RLS there returns every row to a
+    // platform admin and only your own to anyone else.
+    const [gamesRes, usersRes, contactsRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
+      supabase.from('user_contacts').select('user_id, email'),
     ]);
+    const emails = new Map((contactsRes.data || []).map(c => [c.user_id, c.email]));
     setGames(gamesRes.data || []);
-    setUsers(usersRes.data || []);
+    setUsers((usersRes.data || []).map(u => ({ ...u, email: emails.get(u.id) })));
     setLoading(false);
   }, []);
 
@@ -136,7 +140,7 @@ export default function AdminPage() {
       <div style={{ marginBottom: 28, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', flexWrap: 'wrap', gap: 16 }}>
         <div>
           <div className="eyebrow" style={{ marginBottom: 6, color: 'var(--danger)' }}>
-            Admin only · {profile.email}
+            Admin only · {user?.email}
           </div>
           <h1 style={{ fontSize: 34, textTransform: 'none' }}>Admin dashboard</h1>
         </div>
@@ -228,7 +232,7 @@ export default function AdminPage() {
                     {u.username}
                     {u.is_admin && <span className="badge badge-lime" style={{ marginLeft: 8 }}>Admin</span>}
                   </div>
-                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email}</div>
+                  <div style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email || '—'}</div>
                   <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
                     {u.is_admin ? '✓ Admin' : '—'}
                   </div>
