@@ -1,11 +1,14 @@
+import SponsorBanner from './SponsorBanner';
+
 export default function Footer() {
   return (
     <footer style={{
       borderTop: '1px solid var(--border)',
       marginTop: 'auto',
-      padding: '20px 24px',
+      padding: '24px 24px 20px',
       textAlign: 'center'
     }}>
+      <SponsorBanner />
       <p style={{
         color: 'var(--slate)', fontSize: 11, lineHeight: 1.7,
         maxWidth: 800, margin: '0 auto'
