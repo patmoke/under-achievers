@@ -7,17 +7,30 @@ import { Home } from 'lucide-react';
  * Set `url` to make the name a link; left null it renders as plain text.
  */
 const SPONSOR = {
-  name: 'Jason of the List Realty',
+  name: 'Jason of The List Realty',
   tagline: 'Undefeated in real estate. Less so in survivor.',
   // The disclosure is also the punchline, which is the only reason it's
   // allowed to be this small.
   footnote: 'Not a real sponsorship. He has never given us any money.',
-  url: null,
+  url: 'https://www.instagram.com/reel/Db6FFHPRf6n/?utm_source=ig_web_copy_link',
 };
 
 export default function SponsorBanner() {
   const name = SPONSOR.url ? (
-    <a href={SPONSOR.url} target="_blank" rel="noopener noreferrer" style={nameStyle}>
+    <a
+      href={SPONSOR.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      // Underlined in gold rather than left bare: without an affordance
+      // nobody discovers there's anything to click.
+      style={{
+        ...nameStyle,
+        textDecoration: 'underline',
+        textDecorationColor: 'var(--gold)',
+        textDecorationThickness: 1,
+        textUnderlineOffset: 4,
+      }}
+    >
       {SPONSOR.name}
     </a>
   ) : (
