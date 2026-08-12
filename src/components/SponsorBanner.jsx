@@ -11,7 +11,7 @@ const SPONSOR = {
   tagline: 'Undefeated in real estate. Less so in survivor.',
   // The disclosure is also the punchline, which is the only reason it's
   // allowed to be this small.
-  footnote: 'Not a real sponsorship. He has never given us any money.',
+  footnote: 'Not a real sponsorship. He has never given us any money (except his fantasy dues).',
   url: 'https://www.instagram.com/reel/Db6FFHPRf6n/?utm_source=ig_web_copy_link',
 };
 
