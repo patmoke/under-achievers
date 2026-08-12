@@ -35,16 +35,39 @@ app locally.
    support email, developer email. The default scopes (`email`, `profile`,
    `openid`) are all this app needs, and they're non-sensitive — so no Google
    verification review.
-3. **Credentials → Create credentials → OAuth client ID → Web application**
+3. **Publish the consent screen.** The publishing status is on the same page —
+   **Google Auth Platform → Audience** in the newer console layout, **APIs &
+   Services → OAuth consent screen** in the older one. It starts in *Testing*;
+   press **Publish app** and confirm. It takes effect immediately.
+4. **Credentials → Create credentials → OAuth client ID → Web application**
    - Authorised JavaScript origins: `https://under-achievers.vercel.app`
    - Authorised redirect URI: the Supabase callback URL above
-4. **Supabase → Authentication → Providers → Google**: enable, paste the client
+5. **Supabase → Authentication → Providers → Google**: enable, paste the client
    ID and client secret.
 
-One thing to decide: leaving the consent screen in **Testing** means only
-addresses you add as test users can sign in, capped at 100. For a friends
-league that's a feature, not a limit — it's an allow-list. Hit **Publish** if
-you'd rather anyone with the join link could sign up.
+### Why publish rather than stay in Testing
+
+| Status | What people get |
+| --- | --- |
+| Testing | Only Gmail addresses on the test-user list can sign in, 100 max. Everyone else is blocked outright, and the ones who can get in still have to click through a "Google hasn't verified this app" warning. |
+| In production | Anyone signs in. Plain consent screen, no warning. |
+
+Testing is defensible as an allow-list if you want to hand-approve every
+member. The reason not to: the unverified-app interstitial is the first thing
+each of them sees.
+
+### Publishing does not mean a review
+
+Verification is triggered by sensitive or restricted scopes — Gmail, Drive,
+Calendar, contacts. This app asks for `email`, `profile` and `openid`, all
+non-sensitive, so publishing is a status flip with nothing to submit.
+
+The exception worth knowing: **uploading an app logo triggers brand
+verification**, which is a genuine multi-day review, and it applies even with
+non-sensitive scopes. If the console starts showing "verification required" or
+a pending review, a logo on the Branding page is the likely cause — remove it
+and the requirement goes away. Leaving it empty just means people see the app
+name on a plain consent screen.
 
 ## Turning the button on
 
