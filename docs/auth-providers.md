@@ -49,12 +49,21 @@ app locally.
 
 | Status | What people get |
 | --- | --- |
-| Testing | Only Gmail addresses on the test-user list can sign in, 100 max. Everyone else is blocked outright, and the ones who can get in still have to click through a "Google hasn't verified this app" warning. |
-| In production | Anyone signs in. Plain consent screen, no warning. |
+| Testing | Only Gmail addresses on the test-user list can sign in, 100 max. Everyone else is blocked outright. |
+| In production | Anyone signs in, no limit. |
 
 Testing is defensible as an allow-list if you want to hand-approve every
-member. The reason not to: the unverified-app interstitial is the first thing
-each of them sees.
+member. The reason not to: every new person has to wait for you to add them
+before they can get in at all.
+
+### The "OAuth user cap" panel is not a limit on you
+
+That panel shows 100 on every project, and it reads like a ceiling. It isn't
+one here — it caps users only for apps requesting **unapproved sensitive or
+restricted scopes**. `email`, `profile` and `openid` are non-sensitive, so
+there is nothing unapproved in the request and the cap never engages. Don't
+confuse it with the test-user list above, which is a real limit but only
+applies while the app is unpublished.
 
 ### Publishing does not mean a review
 
