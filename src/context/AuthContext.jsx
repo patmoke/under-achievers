@@ -39,15 +39,10 @@ export function AuthProvider({ children }) {
       },
     });
     if (error) throw error;
-    // Update username if signup succeeded
-    if (data.user) {
-      await supabase.from('profiles').upsert({
-        id: data.user.id,
-        email,
-        username,
-        display_name: username
-      });
-    }
+    // No profile write here: the handle_new_user trigger on auth.users creates
+    // the row from the username passed above. Doing it from the client also
+    // failed whenever email confirmation was on, since there's no session yet
+    // for the insert policy to match against.
     return data;
   }
 
