@@ -1,4 +1,5 @@
 import SponsorBanner from './SponsorBanner';
+import { SPONSOR } from '../lib/sponsor';
 
 // Deliberately reachable signed out. The person most likely to need it is the
 // one who can't get in — wrong Google account, join code not working, locked
@@ -12,6 +13,20 @@ const CONTACT_EMAIL = 'admin@mokelabs.dev';
  * across two files.
  */
 export default function Footer({ masthead = false }) {
+  const jason = SPONSOR.url ? (
+    <a
+      href={SPONSOR.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={{
+        color: 'inherit', textDecoration: 'underline',
+        textDecorationColor: 'var(--gold)', textUnderlineOffset: 3,
+      }}
+    >
+      {SPONSOR.firstName}
+    </a>
+  ) : SPONSOR.firstName;
+
   return (
     <footer style={{ borderTop: '1px solid var(--border)', marginTop: 'auto' }}>
       {masthead && (
@@ -32,11 +47,17 @@ export default function Footer({ masthead = false }) {
       <div style={{ padding: '24px 24px 20px', textAlign: 'center' }}>
         <SponsorBanner />
 
-        <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '0 0 14px' }}>
+        <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '0 0 4px' }}>
           Something broken, or a result that doesn't look right?{' '}
           <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: 'var(--accent)', fontWeight: 600 }}>
             {CONTACT_EMAIL}
           </a>
+        </p>
+
+        {/* Quieter than the line above on purpose: the real address should stay
+            the one that reads as the answer. */}
+        <p style={{ fontSize: 12, color: 'var(--ink-faint)', margin: '0 0 16px' }}>
+          For any complaints, please reach out to {jason}.
         </p>
 
         <p style={{

@@ -1,19 +1,5 @@
 import { Home } from 'lucide-react';
-
-/**
- * The house sponsor. Everything editable lives here, so changing the joke —
- * or dropping the banner entirely — is one file.
- *
- * Set `url` to make the name a link; left null it renders as plain text.
- */
-const SPONSOR = {
-  name: 'Jason of The List Realty',
-  tagline: 'Undefeated in real estate. Less so in survivor.',
-  // The disclosure is also the punchline, which is the only reason it's
-  // allowed to be this small.
-  footnote: 'Not a real sponsorship. He has never given us any money (except his fantasy dues).',
-  url: 'https://www.instagram.com/reel/Db6FFHPRf6n/?utm_source=ig_web_copy_link',
-};
+import { SPONSOR } from '../lib/sponsor';
 
 export default function SponsorBanner() {
   const name = SPONSOR.url ? (
