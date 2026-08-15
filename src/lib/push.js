@@ -58,11 +58,15 @@ export function usePushNotifications(userId) {
   );
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Whether the check below has actually run. Without it a caller can't tell
+  // "not subscribed" from "haven't looked yet", and anything that renders on
+  // that distinction flashes up before correcting itself.
+  const [ready, setReady] = useState(false);
 
   // Reflect the real subscription rather than what we last did: the user can
   // revoke notifications in browser settings without telling the app.
   const refresh = useCallback(async () => {
-    if (!supported) return;
+    if (!supported) { setReady(true); return; }
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
@@ -70,6 +74,8 @@ export function usePushNotifications(userId) {
       setPermission(Notification.permission);
     } catch {
       setSubscribed(false);
+    } finally {
+      setReady(true);
     }
   }, [supported]);
 
@@ -125,6 +131,7 @@ export function usePushNotifications(userId) {
 
   return {
     supported,
+    ready,
     permission,
     subscribed,
     busy,
