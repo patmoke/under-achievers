@@ -14,6 +14,7 @@ import JoinLeaguePage from './components/JoinLeaguePage';
 import UserProfilePage from './components/UserProfilePage';
 import Footer from './components/Footer';
 import ReloadPrompt from './components/ReloadPrompt';
+import NotifyPrompt from './components/NotifyPrompt';
 import './styles/globals.css';
 
 function ProtectedLayout({ children }) {
@@ -23,6 +24,9 @@ function ProtectedLayout({ children }) {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--paper)' }}>
       <Navigation />
+      {/* Above the page rather than on the profile: it has to find people
+          where they already are, not where the setting happens to live. */}
+      <NotifyPrompt userId={user.id} />
       {children}
       <Footer />
     </div>

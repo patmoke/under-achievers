@@ -14,6 +14,29 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+/**
+ * What to offer someone about reminders: 'install', 'enable', or nothing.
+ *
+ * A function rather than a chain of early returns in each component, because
+ * the ordering is subtle enough to have already been got wrong twice — and
+ * ordering is exactly the sort of thing a test can pin down.
+ *
+ * The trap: in an iOS browser tab Apple exposes neither PushManager nor
+ * Notification, so feature detection reports "unsupported". That's true of the
+ * tab and false of the device — installing the app is precisely what fixes it.
+ * Checking `supported` first therefore hid the install prompt from the only
+ * platform where installing is mandatory. `needsInstallFirst` has to win.
+ */
+export function reminderOffer({ ready, dismissed, subscribed, supported, permission, needsInstallFirst }) {
+  // Nothing to say until we know the real subscription state.
+  if (!ready || dismissed || subscribed) return null;
+  if (needsInstallFirst) return 'install';
+  if (!supported) return null;
+  // Blocked at the browser level; no prompt can undo that from here.
+  if (permission === 'denied') return null;
+  return 'enable';
+}
+
 export function pushSupported() {
   return typeof window !== 'undefined'
     && 'serviceWorker' in navigator
@@ -58,11 +81,15 @@ export function usePushNotifications(userId) {
   );
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Whether the check below has actually run. Without it a caller can't tell
+  // "not subscribed" from "haven't looked yet", and anything that renders on
+  // that distinction flashes up before correcting itself.
+  const [ready, setReady] = useState(false);
 
   // Reflect the real subscription rather than what we last did: the user can
   // revoke notifications in browser settings without telling the app.
   const refresh = useCallback(async () => {
-    if (!supported) return;
+    if (!supported) { setReady(true); return; }
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
@@ -70,6 +97,8 @@ export function usePushNotifications(userId) {
       setPermission(Notification.permission);
     } catch {
       setSubscribed(false);
+    } finally {
+      setReady(true);
     }
   }, [supported]);
 
@@ -125,6 +154,7 @@ export function usePushNotifications(userId) {
 
   return {
     supported,
+    ready,
     permission,
     subscribed,
     busy,

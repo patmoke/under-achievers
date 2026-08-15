@@ -13,17 +13,11 @@ export default function NotificationSettings({ userId }) {
   const { supported, permission, subscribed, busy, subscribe, unsubscribe, needsInstallFirst } =
     usePushNotifications(userId);
 
-  if (!supported) {
-    return (
-      <Shell>
-        <p style={{ color: 'var(--ink-soft)', fontSize: 14, margin: 0 }}>
-          This browser doesn't support notifications.
-        </p>
-      </Shell>
-    );
-  }
-
-  // iOS refuses push in a Safari tab, so a toggle here would simply fail.
+  // Checked before `supported`, and the order is the whole point: in an iOS
+  // browser tab Apple exposes neither PushManager nor Notification, so feature
+  // detection reports "unsupported". Testing that first told every iPhone user
+  // their browser couldn't do notifications, when installing the app is
+  // exactly what makes it able to.
   if (needsInstallFirst) {
     return (
       <Shell>
@@ -32,6 +26,16 @@ export default function NotificationSettings({ userId }) {
         </p>
         <p style={{ color: 'var(--ink-soft)', fontSize: 13, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
           Tap <Share size={14} /> Share, then <strong>Add to Home Screen</strong>, and open it from there.
+        </p>
+      </Shell>
+    );
+  }
+
+  if (!supported) {
+    return (
+      <Shell>
+        <p style={{ color: 'var(--ink-soft)', fontSize: 14, margin: 0 }}>
+          This browser doesn't support notifications.
         </p>
       </Shell>
     );

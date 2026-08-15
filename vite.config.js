@@ -44,4 +44,13 @@ export default defineConfig({
       },
     }),
   ],
+  test: {
+    // The Supabase client is built at module load, so importing any module
+    // that touches it — even to reach a pure helper beside it — fails without
+    // these. The values are never used: nothing under test makes a request.
+    env: {
+      VITE_SUPABASE_URL: 'http://localhost:54321',
+      VITE_SUPABASE_ANON_KEY: 'test-anon-key',
+    },
+  },
 })
