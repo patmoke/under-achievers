@@ -14,6 +14,29 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
 }
 
+/**
+ * What to offer someone about reminders: 'install', 'enable', or nothing.
+ *
+ * A function rather than a chain of early returns in each component, because
+ * the ordering is subtle enough to have already been got wrong twice — and
+ * ordering is exactly the sort of thing a test can pin down.
+ *
+ * The trap: in an iOS browser tab Apple exposes neither PushManager nor
+ * Notification, so feature detection reports "unsupported". That's true of the
+ * tab and false of the device — installing the app is precisely what fixes it.
+ * Checking `supported` first therefore hid the install prompt from the only
+ * platform where installing is mandatory. `needsInstallFirst` has to win.
+ */
+export function reminderOffer({ ready, dismissed, subscribed, supported, permission, needsInstallFirst }) {
+  // Nothing to say until we know the real subscription state.
+  if (!ready || dismissed || subscribed) return null;
+  if (needsInstallFirst) return 'install';
+  if (!supported) return null;
+  // Blocked at the browser level; no prompt can undo that from here.
+  if (permission === 'denied') return null;
+  return 'enable';
+}
+
 export function pushSupported() {
   return typeof window !== 'undefined'
     && 'serviceWorker' in navigator

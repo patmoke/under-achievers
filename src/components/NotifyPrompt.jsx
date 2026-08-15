@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Bell, Share, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { usePushNotifications } from '../lib/push';
+import { usePushNotifications, reminderOffer } from '../lib/push';
 
 const DISMISSED_KEY = 'ua:notify-prompt-dismissed';
 
@@ -38,12 +38,8 @@ export default function NotifyPrompt({ userId }) {
     }
   }
 
-  // `ready` rather than just `!subscribed`: until the check has run the two
-  // are indistinguishable, and the bar would flash for people already on.
-  if (!ready || dismissed || subscribed || !supported) return null;
-  // Blocked at the browser level — a prompt here can't undo that, and the
-  // profile page already explains where to change it.
-  if (permission === 'denied') return null;
+  const offer = reminderOffer({ ready, dismissed, subscribed, supported, permission, needsInstallFirst });
+  if (!offer) return null;
 
   async function turnOn() {
     const { ok, reason } = await subscribe();
@@ -61,7 +57,7 @@ export default function NotifyPrompt({ userId }) {
         <Bell size={16} style={{ color: 'var(--accent)', flexShrink: 0 }} />
 
         <p style={{ margin: 0, fontSize: 13, flex: 1, minWidth: 200, lineHeight: 1.5 }}>
-          {needsInstallFirst ? (
+          {offer === 'install' ? (
             // iOS refuses push from a Safari tab outright, so installing isn't
             // a nicety here — it's the only way to get reminders at all.
             <>
@@ -79,7 +75,7 @@ export default function NotifyPrompt({ userId }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 'auto' }}>
           {/* No button on iOS: there is nothing it could do until the app is
               installed, and a button that always fails is worse than none. */}
-          {!needsInstallFirst && (
+          {offer === 'enable' && (
             <button
               className="btn btn-primary"
               onClick={turnOn}
