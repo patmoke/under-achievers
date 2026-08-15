@@ -8,7 +8,11 @@ authority if any of these screens have moved.
 Two constants used below:
 
 - Supabase callback URL: `https://xidvmgpicefneggeeexf.supabase.co/auth/v1/callback`
-- Site: `https://under-achievers.vercel.app`
+- Site: `https://underachievers.mokelabs.dev`
+
+`under-achievers.vercel.app` still resolves — Vercel assigns that name to every
+project and it can't be removed — so keep its entries alongside the new ones
+until nothing is pointing at it. Anywhere below that takes a list, add both.
 
 Apple is deliberately not offered: Sign in with Apple on the web requires
 Apple Developer Program membership at $99/year, and nothing else in this stack
@@ -18,8 +22,9 @@ costs money.
 
 **Supabase → Authentication → URL Configuration**
 
-- Site URL: `https://under-achievers.vercel.app`
-- Redirect URLs: add `https://under-achievers.vercel.app/**`
+- Site URL: `https://underachievers.mokelabs.dev`
+- Redirect URLs: add `https://underachievers.mokelabs.dev/**` and
+  `https://under-achievers.vercel.app/**`
 
 The wildcard matters. Sign-in returns you to the page you started from rather
 than dumping you on the landing page, and every one of those paths has to be
@@ -40,8 +45,10 @@ app locally.
    Services → OAuth consent screen** in the older one. It starts in *Testing*;
    press **Publish app** and confirm. It takes effect immediately.
 4. **Credentials → Create credentials → OAuth client ID → Web application**
-   - Authorised JavaScript origins: `https://under-achievers.vercel.app`
-   - Authorised redirect URI: the Supabase callback URL above
+   - Authorised JavaScript origins: `https://underachievers.mokelabs.dev` and
+     `https://under-achievers.vercel.app`
+   - Authorised redirect URI: the Supabase callback URL above. This one does
+     not change with the domain — it points at Supabase, not at the site.
 5. **Supabase → Authentication → Providers → Google**: enable, paste the client
    ID and client secret.
 

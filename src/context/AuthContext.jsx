@@ -34,7 +34,11 @@ export function AuthProvider({ children }) {
       email,
       password,
       options: {
-        emailRedirectTo: 'https://under-achievers.vercel.app',
+        // Derived, not hardcoded: this used to name the vercel.app domain, so
+        // moving to underachievers.mokelabs.dev would have sent every
+        // confirmation link back to the old host. It also means preview
+        // deployments confirm to themselves.
+        emailRedirectTo: window.location.origin,
         data: { username },
       },
     });
