@@ -55,6 +55,7 @@ export default function LeaguePage() {
   const [removingMember, setRemovingMember] = useState(null);
   const [memberEmails, setMemberEmails] = useState({});
   const [emailsCopied, setEmailsCopied] = useState(false);
+  const [joiningLeague, setJoiningLeague] = useState(false);
 
   const [weekAllSubmitted, setWeekAllSubmitted] = useState(false);
   const [weeklyPicks, setWeeklyPicks] = useState([]);
@@ -102,7 +103,13 @@ export default function LeaguePage() {
     const me = (membersData || []).find(m => m.user_id === user.id);
     setMyMembership(me);
 
-    if (membersData && membersData.length > 0 && !me) {
+    // Membership is checked directly rather than inferred from the roster
+    // being non-empty. The old test was `membersData.length > 0 && !me`, which
+    // went quiet for exactly the people it existed to catch: RLS hides the
+    // roster from non-members, so the list came back empty and the guard read
+    // that as "nothing to object to". A public league is a preview from here;
+    // a private one still isn't yours to look at.
+    if (!me && !leagueData.is_public) {
       toast.error('You are not a member of this league');
       navigate('/leagues');
       return;
@@ -141,8 +148,10 @@ export default function LeaguePage() {
   useEffect(() => { fetchLeague(); }, [fetchLeague]);
 
   useEffect(() => {
-    if (league && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
-  }, [league, members, isSurvivor, checkAllSubmittedThenFetch]);
+    // Skipped for non-members: a public league renders as a preview, so
+    // loading the week's picks would be work nobody sees.
+    if (league && myMembership && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
+  }, [league, myMembership, members, isSurvivor, checkAllSubmittedThenFetch]);
 
   // Owner-only, because chasing buy-ins is the reason to have the list at all.
   // RLS on user_contacts is what actually enforces that; the role check here
@@ -226,6 +235,22 @@ export default function LeaguePage() {
     toast.success('Join code copied!');
   }
 
+  // Same RPC the browse list uses. A public league exposes its join_code in
+  // the row we already loaded, so there's nothing extra to look up.
+  async function joinFromPreview() {
+    setJoiningLeague(true);
+    try {
+      const { error } = await supabase.rpc('join_league_by_code', { p_code: league.join_code });
+      if (error) throw error;
+      toast.success(`Joined "${league.name}"!`);
+      await fetchLeague();
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setJoiningLeague(false);
+    }
+  }
+
   // Comma-separated so it can be pasted straight into a To: field.
   function copyMemberEmails() {
     const list = members.map(m => memberEmails[m.user_id]).filter(Boolean);
@@ -272,6 +297,21 @@ export default function LeaguePage() {
       <div className="skeleton card" style={{ height: 200 }} />
     </div>
   );
+
+  // Non-members only ever reach here on a public league; fetchLeague turns
+  // anyone else away. Standings and picks belong to the people playing, so
+  // what's on offer instead is enough to decide whether to join.
+  if (!myMembership) {
+    return (
+      <LeaguePreview
+        league={league}
+        members={members}
+        entryCount={entryCount}
+        onJoin={joinFromPreview}
+        joining={joiningLeague}
+      />
+    );
+  }
 
   // Validated against the league type, not just defaulted: carrying a
   // 'leaderboard' selection from a weekly league into a survivor one would
@@ -631,6 +671,94 @@ export default function LeaguePage() {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Public league preview ──────────────────────────────────────────────────
+
+/**
+ * What a signed-in non-member sees on a public league.
+ *
+ * Deliberately not the real page with empty tabs: showing standings and pick
+ * history to someone with no stake in them is both a privacy call and a
+ * useless screen. This answers the only question they have — what is this,
+ * who's in it, is there room — and gets out of the way.
+ */
+function LeaguePreview({ league, members, entryCount, onJoin, joining }) {
+  const isSurvivor = league.compete_on === 'survivor';
+  const TypeIcon = TYPE_ICON[league.compete_on] || Calendar;
+  const taken = isSurvivor ? entryCount : members.length;
+  const full = league.max_capacity != null && taken >= league.max_capacity;
+
+  return (
+    <div style={{ maxWidth: 720, margin: '0 auto', padding: '32px 20px' }}>
+      <div className="card" style={{ padding: 32 }}>
+        <div className="eyebrow" style={{ marginBottom: 10, color: 'var(--accent)' }}>
+          Public league
+        </div>
+        <h1 style={{ fontSize: 32, textTransform: 'none', marginBottom: 10 }}>{league.name}</h1>
+        {league.description && (
+          <p style={{ color: 'var(--ink-soft)', fontSize: 15, marginBottom: 18 }}>{league.description}</p>
+        )}
+
+        <div style={{ display: 'flex', gap: 20, fontSize: 13, color: 'var(--ink-soft)', flexWrap: 'wrap', marginBottom: 24 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <TypeIcon size={13} />{TYPE_LABEL[league.compete_on] || league.compete_on}
+          </span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+            <Users size={13} />
+            {isSurvivor
+              ? `${entryCount} / ${league.max_capacity} entries`
+              : `${members.length} / ${league.max_capacity} members`}
+          </span>
+          <span>{CURRENT_SEASON} Season</span>
+          {isSurvivor && (
+            <span>
+              {league.survivor_buyback_deadline_week != null
+                ? `Buybacks through Week ${league.survivor_buyback_deadline_week}`
+                : 'No buybacks'}
+            </span>
+          )}
+        </div>
+
+        <button
+          className="btn btn-primary"
+          onClick={onJoin}
+          disabled={joining || full}
+          style={{ fontSize: 16, padding: '13px 28px' }}
+        >
+          {joining ? 'Joining…' : full ? 'League is full' : 'Join this league'}
+        </button>
+      </div>
+
+      {members.length > 0 && (
+        <div className="card" style={{ padding: 24, marginTop: 20 }}>
+          <h3 style={{ fontSize: 17, textTransform: 'none', marginBottom: 14 }}>
+            Who's playing ({members.length})
+          </h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {members.map(m => (
+              <span
+                key={m.id}
+                style={{
+                  padding: '6px 12px', borderRadius: 999, fontSize: 13,
+                  background: 'var(--surface-alt)', border: '1px solid var(--border)',
+                }}
+              >
+                {m.profiles?.username || 'Unknown'}
+                {m.role === 'owner' && (
+                  <span style={{ color: 'var(--gold)', marginLeft: 6, fontSize: 11 }}>owner</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <p style={{ color: 'var(--ink-faint)', fontSize: 12, marginTop: 16, textAlign: 'center' }}>
+        Standings and pick history are visible once you join.
+      </p>
     </div>
   );
 }
