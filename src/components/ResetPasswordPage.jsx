@@ -25,9 +25,33 @@ export default function ResetPasswordPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    let settled = false;
+    let cancelled = false;
+    const params = new URLSearchParams(window.location.search);
+    const tokenHash = params.get('token_hash');
 
-    // Fires when the code in the URL has been exchanged.
+    // Current links point straight here and carry the token, so the journey
+    // never visibly leaves our own domain — a reset that sends people to a
+    // random supabase.co address is indistinguishable from phishing, and mail
+    // filters mark down a link whose domain doesn't match the sender's.
+    if (tokenHash) {
+      (async () => {
+        const { error } = await supabase.auth.verifyOtp({
+          token_hash: tokenHash,
+          type: params.get('type') || 'recovery',
+        });
+        if (cancelled) return;
+        setStatus(error ? 'expired' : 'ready');
+        // Drop the token from the address bar once spent: it would otherwise
+        // sit in history and ride along in any referrer we send.
+        window.history.replaceState({}, '', window.location.pathname);
+      })();
+      return () => { cancelled = true; };
+    }
+
+    // Older links hand off through Supabase and arrive with a code or a hash
+    // fragment for supabase-js to exchange. Kept working because links already
+    // sent are already in people's inboxes.
+    let settled = false;
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) { settled = true; setStatus('ready'); }
     });
@@ -36,10 +60,10 @@ export default function ResetPasswordPage() {
       if (session) { settled = true; setStatus('ready'); return; }
       // The exchange is asynchronous and may not have finished yet. Give it a
       // moment before calling the link dead.
-      setTimeout(() => { if (!settled) setStatus('expired'); }, 2500);
+      setTimeout(() => { if (!settled && !cancelled) setStatus('expired'); }, 2500);
     });
 
-    return () => subscription.unsubscribe();
+    return () => { cancelled = true; subscription.unsubscribe(); };
   }, []);
 
   async function submit(e) {
