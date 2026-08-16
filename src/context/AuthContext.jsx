@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseEmailFlow } from '../lib/supabase';
 
 const AuthContext = createContext({});
 
@@ -82,7 +82,9 @@ export function AuthProvider({ children }) {
    * and it isn't worth one for the sake of a slightly friendlier message.
    */
   async function requestPasswordReset(email) {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+    // Through the implicit-flow client, so the emailed token is redeemable
+    // on whatever device opens the mail rather than only the one that asked.
+    const { error } = await supabaseEmailFlow.auth.resetPasswordForEmail(email.trim(), {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) throw error;
