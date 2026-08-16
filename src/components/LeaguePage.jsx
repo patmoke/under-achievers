@@ -173,8 +173,15 @@ export default function LeaguePage() {
 
   async function leaveLeague() {
     if (myMembership?.role === 'owner') { toast.error('Transfer ownership or delete the league before leaving'); return; }
-    if (!confirm('Leave this league?')) return;
-    await supabase.from('league_members').delete().eq('league_id', id).eq('user_id', user.id);
+    // Leaving takes entries and their pick history with it — the database
+    // cascades from membership now — so a survivor pool says so plainly rather
+    // than letting someone discard a paid-up entry behind a one-word prompt.
+    const warning = isSurvivor
+      ? `Leave "${league.name}"? Your entries and their pick history will be deleted, and this can't be undone.`
+      : `Leave "${league.name}"?`;
+    if (!confirm(warning)) return;
+    const { error } = await supabase.from('league_members').delete().eq('league_id', id).eq('user_id', user.id);
+    if (error) { toast.error(error.message); return; }
     toast.success('Left league');
     navigate('/leagues');
   }
