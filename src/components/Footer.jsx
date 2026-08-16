@@ -1,10 +1,9 @@
 import SponsorBanner from './SponsorBanner';
 import { SPONSOR } from '../lib/sponsor';
-
 // Deliberately reachable signed out. The person most likely to need it is the
 // one who can't get in — wrong Google account, join code not working, locked
 // out — and a support link behind the login is invisible to exactly them.
-const CONTACT_EMAIL = 'admin@mokelabs.dev';
+import { CONTACT_EMAIL } from '../lib/contact';
 
 /**
  * The single footer. The landing page passes `masthead` to get its own brand
