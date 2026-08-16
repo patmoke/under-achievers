@@ -108,3 +108,27 @@ Google doesn't send a username, and `profiles.username` is UNIQUE. The
 back to the email local part — and appends a number if it's taken, so two
 people called Pat both get in. Anyone who dislikes what they were given can
 change it on their profile page.
+
+## When someone is locked out
+
+Most lockouts are a forgotten password, not a broken account — signing up
+signs you in automatically, so a password gets chosen once and then never
+typed until a session lapses days later.
+
+**Normally:** they use **Forgot your password?** on the sign-in form.
+
+**While email is unreliable** — the built-in Supabase SMTP allowance is two
+messages an hour — there's a manual path that sends no email at all:
+
+**Admin → Users → Reset link.** It mints a one-time recovery link server-side
+and copies it to your clipboard; you send it to them however you like. It
+expires in an hour, and it signs them in as themselves, so it's exactly as
+private as the phone it lands on. Only send it to someone you can identify.
+
+Once custom SMTP is configured, prefer the self-serve route and keep this for
+the cases where someone can't receive mail at all.
+
+Worth checking first: if the account was created with Google it has no
+password, and Supabase reports that identically to a wrong one. Check
+`auth.identities` for the address — if the only provider is `google`, the
+answer is the Google button, not a reset.

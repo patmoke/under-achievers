@@ -26,6 +26,7 @@ export default function AdminPage() {
   const [users, setUsers] = useState([]);
   const [errors, setErrors] = useState([]);
   const [expandedError, setExpandedError] = useState(null);
+  const [linkFor, setLinkFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
@@ -126,6 +127,39 @@ export default function AdminPage() {
       toast.error(err.message || 'Sync failed');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  /**
+   * Mints a reset link to hand over by text.
+   *
+   * Nothing is emailed — the link is generated server-side and copied to the
+   * clipboard, which is the whole point while the built-in SMTP allowance is
+   * two messages an hour. Send it to someone you can identify; it signs them
+   * in as themselves, so it's exactly as private as the phone it lands on.
+   */
+  async function generateResetLink(u) {
+    if (!u.email) { toast.error('No email on file for this account'); return; }
+    setLinkFor(u.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-reset-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ email: u.email }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Could not create a link');
+
+      await navigator.clipboard.writeText(body.link);
+      toast.success(`Link copied — send it to ${u.username}. Expires in 1 hour.`, { duration: 6000 });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLinkFor(null);
     }
   }
 
@@ -233,8 +267,8 @@ export default function AdminPage() {
           {/* ── USERS ── */}
           {activeTab === 'users' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 12 }}>
-                {['Username', 'Email', 'Admin'].map(h => (
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', gap: 12 }}>
+                {['Username', 'Email', 'Admin', ''].map(h => (
                   <div key={h} className="label-muted">{h}</div>
                 ))}
               </div>
@@ -242,7 +276,7 @@ export default function AdminPage() {
                 <div key={u.id} style={{
                   padding: '14px 20px',
                   borderBottom: idx === users.length - 1 ? 'none' : '1px solid var(--border)',
-                  display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 12, alignItems: 'center'
+                  display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', gap: 12, alignItems: 'center'
                 }}>
                   <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
                     {u.username}
@@ -252,6 +286,15 @@ export default function AdminPage() {
                   <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
                     {u.is_admin ? '✓ Admin' : '—'}
                   </div>
+                  <button
+                    onClick={() => generateResetLink(u)}
+                    disabled={linkFor === u.id}
+                    title="Copy a one-time password reset link to send them"
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap' }}
+                  >
+                    {linkFor === u.id ? 'Working…' : 'Reset link'}
+                  </button>
                 </div>
               ))}
             </div>
