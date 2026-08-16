@@ -9,11 +9,19 @@ Templates are the third-biggest lever, not the first. In rough order of effect
 on whether Gmail trusts you:
 
 1. **DMARC record.** Resend sets up SPF and DKIM; it does not usually set up
-   DMARC, and a domain without one is treated with suspicion. One Cloudflare
-   TXT record — name `_dmarc`, value
-   `v=DMARC1; p=none; rua=mailto:admin@mokelabs.dev`. `p=none` is monitor-only
-   and changes nothing about delivery; it just declares a policy exists, which
-   is the part that's being checked for.
+   DMARC, and a domain without one is treated with suspicion. Add a Cloudflare
+   TXT record named `_dmarc` whose content is exactly the line between the
+   fences below — no surrounding quotes, no backticks. A stray backtick copied
+   in from formatting makes `rua` an invalid URI, and a strict parser then
+   discards the whole record, leaving you with no DMARC while appearing to
+   have one.
+
+   ```
+   v=DMARC1; p=none; rua=mailto:admin@mokelabs.dev
+   ```
+
+   `p=none` is monitor-only and changes nothing about delivery; it just
+   declares a policy exists, which is the part that's being checked for.
 2. **Sending reputation.** A brand-new domain has none. It builds as real
    people receive and open messages. Marking early messages "Not spam" helps
    directly.
