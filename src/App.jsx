@@ -11,6 +11,7 @@ import AdminPage from './components/AdminPage';
 import LeaguesPage from './components/LeaguesPage';
 import LeaguePage from './components/LeaguePage';
 import JoinLeaguePage from './components/JoinLeaguePage';
+import ResetPasswordPage from './components/ResetPasswordPage';
 import UserProfilePage from './components/UserProfilePage';
 import Footer from './components/Footer';
 import ReloadPrompt from './components/ReloadPrompt';
@@ -60,6 +61,10 @@ function AppRoutes() {
       <Route path="/leagues" element={<ProtectedLayout><LeaguesPage /></ProtectedLayout>} />
       <Route path="/leagues/:id" element={<ProtectedLayout><LeaguePage /></ProtectedLayout>} />
       <Route path="/join/:code" element={<JoinLeaguePage />} />
+      {/* Outside ProtectedLayout: someone arriving from a reset email has a
+          session, but the point is to reach this even when they cannot sign
+          in normally. */}
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/users/:id" element={<ProtectedLayout><UserProfilePage /></ProtectedLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

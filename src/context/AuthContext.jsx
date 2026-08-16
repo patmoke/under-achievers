@@ -76,6 +76,23 @@ export function AuthProvider({ children }) {
     return data;
   }
 
+  /**
+   * Sends a reset link. Deliberately reports success either way — telling a
+   * stranger whether an address has an account here is an enumeration oracle,
+   * and it isn't worth one for the sake of a slightly friendlier message.
+   */
+  async function requestPasswordReset(email) {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  }
+
+  async function setPassword(password) {
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) throw error;
+  }
+
   async function signOut() {
     await supabase.auth.signOut();
   }
@@ -87,7 +104,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithProvider, signOut, updateProfile, fetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithProvider, requestPasswordReset, setPassword, signOut, updateProfile, fetchProfile }}>
       {children}
     </AuthContext.Provider>
   );

@@ -24,6 +24,9 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState('games');
   const [games, setGames] = useState([]);
   const [users, setUsers] = useState([]);
+  const [errors, setErrors] = useState([]);
+  const [expandedError, setExpandedError] = useState(null);
+  const [linkFor, setLinkFor] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
@@ -37,14 +40,16 @@ export default function AdminPage() {
     setLoading(true);
     // Addresses live in user_contacts now; RLS there returns every row to a
     // platform admin and only your own to anyone else.
-    const [gamesRes, usersRes, contactsRes] = await Promise.all([
+    const [gamesRes, usersRes, contactsRes, errorsRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('user_contacts').select('user_id, email'),
+      supabase.from('client_errors').select('*').order('last_seen', { ascending: false }).limit(100),
     ]);
     const emails = new Map((contactsRes.data || []).map(c => [c.user_id, c.email]));
     setGames(gamesRes.data || []);
     setUsers((usersRes.data || []).map(u => ({ ...u, email: emails.get(u.id) })));
+    setErrors(errorsRes.data || []);
     setLoading(false);
   }, []);
 
@@ -125,13 +130,58 @@ export default function AdminPage() {
     }
   }
 
+  /**
+   * Mints a reset link to hand over by text.
+   *
+   * Nothing is emailed — the link is generated server-side and copied to the
+   * clipboard, which is the whole point while the built-in SMTP allowance is
+   * two messages an hour. Send it to someone you can identify; it signs them
+   * in as themselves, so it's exactly as private as the phone it lands on.
+   */
+  async function generateResetLink(u) {
+    if (!u.email) { toast.error('No email on file for this account'); return; }
+    setLinkFor(u.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/admin-reset-link`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ email: u.email }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || 'Could not create a link');
+
+      await navigator.clipboard.writeText(body.link);
+      toast.success(`Link copied — send it to ${u.username}. Expires in 1 hour.`, { duration: 6000 });
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setLinkFor(null);
+    }
+  }
+
+  // Resolving is a note to yourself, not a fix. If the same fault happens
+  // again the reporting function clears the flag, so a premature resolve
+  // corrects itself rather than hiding a live bug.
+  async function resolveError(err) {
+    const resolved_at = err.resolved_at ? null : new Date().toISOString();
+    const { error } = await supabase.from('client_errors').update({ resolved_at }).eq('id', err.id);
+    if (error) { toast.error(error.message); return; }
+    setErrors(list => list.map(e => (e.id === err.id ? { ...e, resolved_at } : e)));
+  }
+
   // Loading / access guard
   if (!profile) return <div style={{ padding: 40, textAlign: 'center', color: 'var(--ink-soft)' }}>Loading...</div>;
   if (!profile.is_admin) return null;
 
+  const openErrors = errors.filter(e => !e.resolved_at).length;
   const TABS = [
     { key: 'games', label: 'Games', count: games.length },
     { key: 'users', label: 'Users', count: users.length },
+    { key: 'errors', label: 'Errors', count: openErrors },
   ];
 
   return (
@@ -217,8 +267,8 @@ export default function AdminPage() {
           {/* ── USERS ── */}
           {activeTab === 'users' && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 12 }}>
-                {['Username', 'Email', 'Admin'].map(h => (
+              <div style={{ padding: '12px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)', display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', gap: 12 }}>
+                {['Username', 'Email', 'Admin', ''].map(h => (
                   <div key={h} className="label-muted">{h}</div>
                 ))}
               </div>
@@ -226,7 +276,7 @@ export default function AdminPage() {
                 <div key={u.id} style={{
                   padding: '14px 20px',
                   borderBottom: idx === users.length - 1 ? 'none' : '1px solid var(--border)',
-                  display: 'grid', gridTemplateColumns: '2fr 2fr 1fr', gap: 12, alignItems: 'center'
+                  display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr', gap: 12, alignItems: 'center'
                 }}>
                   <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
                     {u.username}
@@ -236,11 +286,104 @@ export default function AdminPage() {
                   <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
                     {u.is_admin ? '✓ Admin' : '—'}
                   </div>
+                  <button
+                    onClick={() => generateResetLink(u)}
+                    disabled={linkFor === u.id}
+                    title="Copy a one-time password reset link to send them"
+                    className="btn btn-secondary"
+                    style={{ padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap' }}
+                  >
+                    {linkFor === u.id ? 'Working…' : 'Reset link'}
+                  </button>
                 </div>
               ))}
             </div>
           )}
+
+          {/* ── ERRORS ── */}
+          {activeTab === 'errors' && (
+            errors.length === 0 ? (
+              <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+                <h3 style={{ fontSize: 19, marginBottom: 8, textTransform: 'none' }}>Nothing has broken</h3>
+                <p style={{ color: 'var(--ink-soft)', fontSize: 14, margin: 0 }}>
+                  Browser errors land here — one row per distinct fault, counted by how many
+                  sessions hit it.
+                </p>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {errors.map(err => (
+                  <ErrorRow
+                    key={err.id}
+                    err={err}
+                    username={users.find(u => u.id === err.user_id)?.username}
+                    expanded={expandedError === err.id}
+                    onToggle={() => setExpandedError(expandedError === err.id ? null : err.id)}
+                    onResolve={() => resolveError(err)}
+                  />
+                ))}
+              </div>
+            )
+          )}
         </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One distinct fault. Collapsed it's a headline; expanded it's the stack.
+ *
+ * The count is sessions affected rather than times thrown — reporting is
+ * deduplicated per page load, so a render loop firing ten thousand times is
+ * still one broken session, which is the number that tells you how bad it is.
+ */
+function ErrorRow({ err, username, expanded, onToggle, onResolve }) {
+  const resolved = Boolean(err.resolved_at);
+  const when = new Date(err.last_seen);
+
+  return (
+    <div className="card" style={{ padding: 0, overflow: 'hidden', opacity: resolved ? 0.55 : 1 }}>
+      <div
+        onClick={onToggle}
+        style={{ padding: '14px 18px', cursor: 'pointer', display: 'flex', gap: 12, alignItems: 'flex-start' }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: 13, lineHeight: 1.5, wordBreak: 'break-word',
+            textDecoration: resolved ? 'line-through' : 'none',
+          }}>
+            {err.message}
+          </div>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 6, fontSize: 12, color: 'var(--ink-soft)' }}>
+            <span>{when.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}</span>
+            <span>{err.seen_count} session{err.seen_count === 1 ? '' : 's'}</span>
+            {err.url && <span>{err.url}</span>}
+            {username && <span>{username}</span>}
+            {err.app_version && <span>build {err.app_version}</span>}
+            {err.kind !== 'error' && <span className="badge">{err.kind}</span>}
+          </div>
+        </div>
+        <button
+          onClick={e => { e.stopPropagation(); onResolve(); }}
+          className="btn btn-secondary"
+          style={{ padding: '6px 10px', fontSize: 12, whiteSpace: 'nowrap' }}
+        >
+          {resolved ? 'Reopen' : 'Resolve'}
+        </button>
+      </div>
+
+      {expanded && (
+        <pre style={{
+          margin: 0, padding: '14px 18px', borderTop: '1px solid var(--border)',
+          background: 'var(--surface-alt)', fontSize: 11.5, lineHeight: 1.6,
+          overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+          color: 'var(--ink-soft)',
+        }}>
+          {err.stack || 'No stack recorded.'}
+          {err.user_agent ? `\n\n${err.user_agent}` : ''}
+        </pre>
       )}
     </div>
   );

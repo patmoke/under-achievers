@@ -2,6 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+// Vercel exposes the deployed commit at build time. Stamping it into the
+// bundle is what turns "it broke" into "it broke on that build".
+const appVersion = (process.env.VERCEL_GIT_COMMIT_SHA || 'dev').slice(0, 7)
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
@@ -44,6 +48,9 @@ export default defineConfig({
       },
     }),
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   test: {
     // The Supabase client is built at module load, so importing any module
     // that touches it — even to reach a pure helper beside it — fails without
