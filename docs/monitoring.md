@@ -1,68 +1,75 @@
 # Error monitoring
 
-Supabase and Vercel logs only see the server side. A React exception, a broken
-render on someone's phone, a failed fetch — none of that reaches either,
-because the site is a static SPA with no server runtime. Sentry fills that gap.
+Supabase and Vercel logs only see the server side. A React exception, a bad
+render on someone's phone, a rejected promise — none of it reaches either,
+because this is a static SPA with no server runtime. Browser errors are the
+half that was missing.
 
-The code is done and inert until a DSN exists. **No DSN means monitoring is
-off**, which is what keeps local dev and preview deployments out of the issue
-list, and means the app runs fine for anyone cloning the repo.
+They're captured in-house rather than sent to a third party: **there is nothing
+to sign up for and no key to configure.** It works the moment it's deployed.
 
-## Turning it on
+## Where to look
 
-1. Create a Sentry account and a project, choosing **React** as the platform.
-2. Copy the DSN it gives you — it looks like
-   `https://<key>@<org>.ingest.sentry.io/<id>`. It's not a secret; it ships in
-   the client bundle by design and only permits writing events.
-3. In Vercel → project → Settings → Environment Variables, add
-   `VITE_SENTRY_DSN` for Production. Leave it off Preview unless you want
-   preview noise in with the real thing.
-4. Redeploy. Vite inlines env vars at build time, so an existing deployment
-   won't pick it up.
+**Admin → Errors.** One row per distinct fault, newest first, with the message,
+where it happened, which build, and who hit it. Click a row for the stack and
+the browser. **Resolve** marks one as handled; if the same fault recurs the
+reporting function clears the flag, so a premature resolve corrects itself
+instead of hiding a live bug.
 
-## Source maps (worth doing)
+## What gets recorded
 
-Without them a production stack trace points into minified nonsense —
-`c.jsx:1:4821` — and Sentry is worth about half what it should be. With them it
-names the file and line.
+Anything reaching `window.onerror` or an unhandled promise rejection, plus any
+React render that throws (caught by `ErrorBoundary`).
 
-Add three more Vercel environment variables:
+**The count is sessions affected, not times thrown.** Reporting is deduplicated
+per page load, so a render loop firing ten thousand times is one broken
+session — which is the number that tells you how bad something is. Occurrences
+would just tell you how fast the loop spins.
 
-| Variable | Where to find it |
-| --- | --- |
-| `SENTRY_AUTH_TOKEN` | Sentry → Settings → Auth Tokens, scope `project:releases` |
-| `SENTRY_ORG` | your org slug, in the Sentry URL |
-| `SENTRY_PROJECT` | your project slug |
+Errors are grouped by a fingerprint built from the message and the top stack
+frame, with digits stripped, so the "week 3" and "week 5" flavours of one fault
+land on the same row instead of filling the table with near-duplicates.
 
-The build uploads maps only when `SENTRY_AUTH_TOKEN` is present, and deletes
-them afterwards so they aren't served to visitors. A build without the token
-still succeeds, unchanged.
+Noise is dropped before sending: stale-chunk errors after a deploy (the service
+worker already handles those by reloading), the benign `ResizeObserver` loop
+Safari reports, plain network failures, and anything thrown from a browser
+extension. None are defects and all of them repeat forever.
 
-Unlike the DSN, **the auth token is a real secret.** It goes in Vercel's
-environment variables and nowhere near the repo.
+## Privacy and abuse
 
-## What is and isn't sent
+- **The user id comes from `auth.uid()` server-side**, never from the client,
+  and no email is stored — the admin view resolves a username for display.
+  Addresses stay in `user_contacts` behind RLS.
+- **The user agent is read from the request headers**, not from anything the
+  caller sends.
+- **`report_client_error` is callable signed out**, on purpose: the errors most
+  worth catching are the ones that stop someone signing in, and by definition
+  those happen signed out.
+- That makes it an open write endpoint, so it's bounded. Every field is
+  truncated server-side, repeats only bump a counter, and once the table
+  reaches 2,000 distinct rows new fingerprints are refused while known ones
+  keep counting. The realistic abuse is unique junk, and that's what the
+  ceiling caps.
+- Only platform admins can read the table. Ordinary members and anonymous
+  callers get nothing — verified.
 
-Configured in `src/lib/monitoring.js`.
+A weekly `pg_cron` job deletes resolved errors that haven't recurred in 90
+days.
 
-- **User id and username, never the email.** Addresses live in `user_contacts`
-  behind RLS; shipping them to a third party would quietly undo that. A
-  username is enough to follow up with someone.
-- **`sendDefaultPii: false`** — no IP addresses, no request headers.
-- **Errors only.** Tracing and session replay are off. They bill against the
-  same monthly allowance and would spend it on performance data nobody is going
-  to read for a league of twelve.
-- **Noise filtered:** stale-chunk errors after a deploy (the service worker
-  already handles those by reloading), the benign `ResizeObserver` loop Safari
-  reports, plain network failures, and anything thrown from a browser
-  extension.
+## Testing it
 
-## The crash screen
+On the live site, open the browser console and run:
 
-`CrashScreen.jsx` renders when a React render throws, instead of the white
-screen someone would otherwise get. Sentry has already recorded the error by
-then, so the screen's only job is a way forward and the reassurance that
-submitted picks are safe — which is the thing anyone would actually worry
-about.
+```js
+setTimeout(() => { throw new Error('monitoring test') })
+```
 
-To see it, throw at the top of any component and load the page.
+It should appear under Admin → Errors within a few seconds. Resolve it
+afterwards, or leave it — the cron job clears resolved rows eventually.
+
+## If you outgrow this
+
+What you don't get: alerting, release tracking, and stack traces mapped back
+through minification. If the league grows or you want to be told rather than
+having to look, Sentry does all three. It was wired up and removed in commit
+`9c3334e`, so reinstating it is mostly a revert.

@@ -4,10 +4,10 @@ import { CONTACT_EMAIL } from '../lib/contact';
 /**
  * Last resort when a render throws.
  *
- * Sentry has already recorded the error by the time this paints, so its job
- * isn't reporting — it's giving someone a way forward instead of the white
- * screen they'd otherwise be staring at, and telling them their picks are
- * safe, which is the only thing they'll actually be worried about.
+ * ErrorBoundary has already recorded the error by the time this paints, so
+ * its job isn't reporting — it's giving someone a way forward instead of the
+ * white screen they'd otherwise be staring at, and telling them their picks
+ * are safe, which is the only thing they'll actually be worried about.
  */
 export default function CrashScreen({ resetError }) {
   return (

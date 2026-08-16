@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { identify } from '../lib/monitoring';
 
 const AuthContext = createContext({});
 
@@ -24,10 +23,6 @@ export function AuthProvider({ children }) {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  // "This broke for MarcShifres in week 3" is something you can follow up on;
-  // an anonymous stack trace usually isn't.
-  useEffect(() => { identify(user, profile); }, [user, profile]);
 
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();

@@ -1,13 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
-import { sentryVitePlugin } from '@sentry/vite-plugin'
 
-// Source maps are built and uploaded only when a token is present, so a build
-// without one still succeeds — which is what local builds and anyone cloning
-// the repo will do. Without maps a production stack trace is minified
-// nonsense and Sentry is worth about half of what it should be.
-const uploadSourcemaps = Boolean(process.env.SENTRY_AUTH_TOKEN)
+// Vercel exposes the deployed commit at build time. Stamping it into the
+// bundle is what turns "it broke" into "it broke on that build".
+const appVersion = (process.env.VERCEL_GIT_COMMIT_SHA || 'dev').slice(0, 7)
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -50,21 +47,9 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
       },
     }),
-    // Last in the list on purpose: it needs the finished bundle to work from.
-    ...(uploadSourcemaps
-      ? [sentryVitePlugin({
-          org: process.env.SENTRY_ORG,
-          project: process.env.SENTRY_PROJECT,
-          authToken: process.env.SENTRY_AUTH_TOKEN,
-          // Deleted once uploaded. Serving them would ship the whole source
-          // tree to every visitor for no benefit — Sentry already has its copy.
-          sourcemaps: { filesToDeleteAfterUpload: ['./dist/**/*.map'] },
-        })]
-      : []),
   ],
-  build: {
-    // Only worth generating when something is going to consume them.
-    sourcemap: uploadSourcemaps,
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   test: {
     // The Supabase client is built at module load, so importing any module

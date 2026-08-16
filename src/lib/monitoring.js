@@ -1,66 +1,91 @@
-import * as Sentry from '@sentry/react';
+import { supabase } from './supabase';
 
-// Unset means off. That keeps local dev quiet, keeps preview deployments from
-// filling the issue list with noise, and means the app runs perfectly well
-// before anyone has created a Sentry project.
-const DSN = import.meta.env.VITE_SENTRY_DSN;
+// Injected at build time from the deployed commit; see vite.config.js. Knowing
+// which build an error came from is most of the work of reproducing it.
+const APP_VERSION = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev';
 
-export const monitoringEnabled = Boolean(DSN);
+/**
+ * Errors that repeat forever and mean nothing.
+ *
+ * Left in, these would drown the real ones — which is the failure mode of
+ * every error tracker nobody looks at any more.
+ */
+const IGNORED = [
+  // A deploy replaced the bundle mid-session and an old chunk 404s. The
+  // service worker already resolves this by reloading.
+  /Loading chunk \d+ failed/i,
+  /Failed to fetch dynamically imported module/i,
+  /Importing a module script failed/i,
+  // A benign layout loop that Safari and several in-app browsers report.
+  /ResizeObserver loop/i,
+  // Someone's train went into a tunnel. Not a defect.
+  /NetworkError when attempting to fetch/i,
+  /^Load failed$/i,
+  /Failed to fetch$/i,
+];
 
-export function initMonitoring() {
-  if (!DSN) return;
+function isIgnorable(message, stack) {
+  if (!message) return true;
+  if (IGNORED.some(re => re.test(message))) return true;
+  // Browser extensions throw inside our page and arrive looking like our bugs.
+  return /(?:chrome|moz|safari-web)-extension:\/\//.test(stack || '');
+}
 
-  Sentry.init({
-    dsn: DSN,
-    environment: import.meta.env.MODE,
-
-    // Errors only. Tracing and session replay bill against the same free
-    // allowance, and would spend it collecting performance data nobody is
-    // going to read for a league of twelve.
-    tracesSampleRate: 0,
-
-    // No IP addresses, no request headers. "Who hit this" is answered by
-    // identify() below with an id and a username, which is enough to follow
-    // up with someone without putting addresses in a third-party service.
-    sendDefaultPii: false,
-
-    ignoreErrors: [
-      // A deploy replaced the bundle mid-session and an old chunk 404s. The
-      // service worker already resolves this by reloading; there is nothing
-      // to fix and nothing to learn from seeing it a hundred times.
-      /Loading chunk \d+ failed/,
-      'Failed to fetch dynamically imported module',
-      // A benign layout loop Safari and several in-app browsers report.
-      'ResizeObserver loop completed with undelivered notifications',
-      // Someone's train went into a tunnel. Not a defect.
-      'NetworkError when attempting to fetch resource',
-      'Load failed',
-    ],
-
-    beforeSend(event) {
-      // Browser extensions throw inside our page and arrive looking like our
-      // bugs. On a phone-first app these are mostly desktop noise, and none of
-      // them are actionable.
-      const frames = event.exception?.values?.[0]?.stacktrace?.frames ?? [];
-      const fromExtension = frames.some(f => /^(chrome|moz|safari-web)-extension:/.test(f.filename ?? ''));
-      return fromExtension ? null : event;
-    },
-  });
+// djb2. Not security, just a stable short key for grouping.
+function hash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = (((h << 5) + h + str.charCodeAt(i)) | 0);
+  return (h >>> 0).toString(16);
 }
 
 /**
- * Attaches a player to their errors, without sending an address.
+ * Groups occurrences of the same bug onto one row.
  *
- * A username is what makes a report actionable — "this broke for MarcShifres
- * in week 3" is something you can act on, where an anonymous stack trace
- * isn't. The email deliberately stays out of it; emails live in user_contacts
- * behind RLS, and shipping them to a third party would undo that.
+ * Digits are stripped before hashing so that "week 3" and "week 5" versions of
+ * one fault land together rather than filling the table with near-duplicates.
  */
-export function identify(user, profile) {
-  if (!DSN) return;
-  if (!user) {
-    Sentry.setUser(null);
-    return;
+function fingerprintOf(message, stack) {
+  const topFrame = (stack || '').split('\n')[1]?.trim() || '';
+  return hash(`${message}|${topFrame}`.replace(/\d+/g, '#'));
+}
+
+// One report per fingerprint per page load. The stored count therefore reads
+// as "sessions affected", which is more useful than "times thrown" — a render
+// loop firing ten thousand times is still one broken session.
+const reportedThisSession = new Set();
+
+export async function reportError(error, kind = 'error') {
+  try {
+    const message = String(error?.message ?? error ?? '').slice(0, 500);
+    const stack = error?.stack ? String(error.stack).slice(0, 4000) : null;
+    if (isIgnorable(message, stack)) return;
+
+    const fingerprint = fingerprintOf(message, stack);
+    if (reportedThisSession.has(fingerprint)) return;
+    reportedThisSession.add(fingerprint);
+
+    await supabase.rpc('report_client_error', {
+      p_fingerprint: fingerprint,
+      p_message: message,
+      p_stack: stack,
+      p_kind: kind,
+      p_url: window.location.pathname + window.location.search,
+      p_app_version: APP_VERSION,
+    });
+  } catch {
+    // Swallowed deliberately. This runs inside an error handler, so throwing
+    // here would either loop or replace a useful error with a useless one.
   }
-  Sentry.setUser({ id: user.id, username: profile?.username ?? undefined });
+}
+
+export function initMonitoring() {
+  window.addEventListener('error', event => {
+    // Failed <img>/<script> loads also fire this, without an error object.
+    if (!event.error) return;
+    reportError(event.error, 'error');
+  });
+
+  window.addEventListener('unhandledrejection', event => {
+    reportError(event.reason, 'unhandledrejection');
+  });
 }
