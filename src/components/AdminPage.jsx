@@ -27,6 +27,8 @@ export default function AdminPage() {
   const [errors, setErrors] = useState([]);
   const [expandedError, setExpandedError] = useState(null);
   const [linkFor, setLinkFor] = useState(null);
+  const [pickLog, setPickLog] = useState([]);
+  const [logWeek, setLogWeek] = useState('all');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
@@ -40,16 +42,18 @@ export default function AdminPage() {
     setLoading(true);
     // Addresses live in user_contacts now; RLS there returns every row to a
     // platform admin and only your own to anyone else.
-    const [gamesRes, usersRes, contactsRes, errorsRes] = await Promise.all([
+    const [gamesRes, usersRes, contactsRes, errorsRes, logRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('user_contacts').select('user_id, email'),
       supabase.from('client_errors').select('*').order('last_seen', { ascending: false }).limit(100),
+      supabase.from('pick_log').select('*').order('at', { ascending: false }).limit(300),
     ]);
     const emails = new Map((contactsRes.data || []).map(c => [c.user_id, c.email]));
     setGames(gamesRes.data || []);
     setUsers((usersRes.data || []).map(u => ({ ...u, email: emails.get(u.id) })));
     setErrors(errorsRes.data || []);
+    setPickLog(logRes.data || []);
     setLoading(false);
   }, []);
 
@@ -178,10 +182,13 @@ export default function AdminPage() {
   if (!profile.is_admin) return null;
 
   const openErrors = errors.filter(e => !e.resolved_at).length;
+  const logWeeks = [...new Set(pickLog.map(r => r.week).filter(w => w != null))].sort((a, b) => a - b);
+  const visibleLog = logWeek === 'all' ? pickLog : pickLog.filter(r => String(r.week) === String(logWeek));
   const TABS = [
     { key: 'games', label: 'Games', count: games.length },
     { key: 'users', label: 'Users', count: users.length },
     { key: 'errors', label: 'Errors', count: openErrors },
+    { key: 'picklog', label: 'Pick log', count: pickLog.length },
   ];
 
   return (
@@ -325,6 +332,43 @@ export default function AdminPage() {
               </div>
             )
           )}
+
+          {/* ── PICK LOG ── */}
+          {activeTab === 'picklog' && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0, maxWidth: 640 }}>
+                  Every pick written, in order. What was picked stays hidden until that game
+                  kicks off — the log would otherwise hand whoever reads it the whole field.
+                </p>
+                <select value={logWeek} onChange={e => setLogWeek(e.target.value)} style={{ padding: '8px 10px', fontSize: 13 }}>
+                  <option value="all">All weeks</option>
+                  {logWeeks.map(w => <option key={w} value={w}>Week {w}</option>)}
+                </select>
+              </div>
+
+              {visibleLog.length === 0 ? (
+                <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+                  <h3 style={{ fontSize: 19, marginBottom: 8, textTransform: 'none' }}>No picks recorded yet</h3>
+                  <p style={{ color: 'var(--ink-soft)', fontSize: 14, margin: 0 }}>
+                    Every insert, change and deletion will appear here from now on.
+                  </p>
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  {visibleLog.map((row, idx) => (
+                    <PickLogRow
+                      key={row.id}
+                      row={row}
+                      last={idx === visibleLog.length - 1}
+                      username={users.find(u => u.id === row.subject_user)?.username}
+                      actorName={users.find(u => u.id === row.actor)?.username}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </>
       )}
     </div>
@@ -385,6 +429,79 @@ function ErrorRow({ err, username, expanded, onToggle, onResolve }) {
           {err.user_agent ? `\n\n${err.user_agent}` : ''}
         </pre>
       )}
+    </div>
+  );
+}
+
+
+/**
+ * One recorded pick write.
+ *
+ * The wording is deliberately plain, because the reason to open this page is
+ * to settle "I picked the Chiefs and it says Ravens" with a person who is
+ * annoyed and not interested in database vocabulary.
+ */
+function describeChange(row) {
+  if (!row.values_visible) return null;
+  const o = row.old_value || {};
+  const n = row.new_value || {};
+
+  if (row.source_table === 'survivor_picks') {
+    if (row.action === 'insert') return `picked ${n.team_abbr}`;
+    if (row.action === 'delete') return `pick removed — had been ${o.team_abbr}`;
+    return `changed ${o.team_abbr} → ${n.team_abbr}`;
+  }
+
+  if (row.action === 'insert') {
+    return `picked ${n.predicted_spread} at ${n.confidence_points}★`;
+  }
+  if (row.action === 'delete') {
+    return `pick removed — had been ${o.predicted_spread} at ${o.confidence_points}★`;
+  }
+  const parts = [];
+  if (o.predicted_spread !== n.predicted_spread) parts.push(`spread ${o.predicted_spread} → ${n.predicted_spread}`);
+  if (o.confidence_points !== n.confidence_points) parts.push(`${o.confidence_points}★ → ${n.confidence_points}★`);
+  return parts.length ? `changed ${parts.join(', ')}` : 'changed';
+}
+
+function PickLogRow({ row, last, username, actorName }) {
+  const change = describeChange(row);
+  // Someone editing a pick that isn't theirs is the single most important thing
+  // this log can show, so it gets called out rather than buried in a field.
+  const onBehalf = row.actor && row.subject_user && row.actor !== row.subject_user;
+
+  return (
+    <div style={{
+      padding: '12px 18px',
+      borderBottom: last ? 'none' : '1px solid var(--border)',
+      display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: 12, color: 'var(--ink-faint)', minWidth: 132, fontVariantNumeric: 'tabular-nums' }}>
+        {new Date(row.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+      </span>
+
+      <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15, minWidth: 110 }}>
+        {username || 'Unknown'}
+      </span>
+
+      <span style={{ flex: 1, minWidth: 200, fontSize: 13.5 }}>
+        {change || (
+          <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic' }}>
+            {row.action === 'insert' ? 'pick made' : row.action === 'delete' ? 'pick removed' : 'pick changed'}
+            {' '}— team hidden until kickoff
+          </span>
+        )}
+        {onBehalf && (
+          <span className="badge" style={{ marginLeft: 8, background: 'var(--warning-soft)', color: 'var(--warning)' }}>
+            by {actorName || 'admin'}
+          </span>
+        )}
+      </span>
+
+      <span style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+        {row.week != null && `Wk ${row.week}`}
+        {row.source_table === 'survivor_picks' ? ' · survivor' : ' · weekly'}
+      </span>
     </div>
   );
 }
