@@ -130,7 +130,15 @@ export default function AdminPage() {
       const { data, error } = await supabase.functions.invoke('sync-games', { method: 'POST' });
       if (error) throw error;
       const errCount = data?.errors?.length || 0;
-      toast.success(`Synced ${data?.synced ?? 0} games${errCount ? ` (${errCount} errors)` : ''}`);
+      // The frozen count is worth showing: it's the only visible sign that the
+      // line-freeze rule is holding, and a sudden zero mid-season would mean
+      // settled numbers had started moving again.
+      const lines = [
+        data?.linesWritten ? `${data.linesWritten} lines updated` : null,
+        data?.linesFrozen ? `${data.linesFrozen} frozen` : null,
+        errCount ? `${errCount} errors` : null,
+      ].filter(Boolean);
+      toast.success(`Synced ${data?.synced ?? 0} games${lines.length ? ` — ${lines.join(', ')}` : ''}`);
       if (errCount) console.warn('sync-games errors:', data.errors);
       fetchAll();
     } catch (err) {
