@@ -83,3 +83,18 @@ Runs are also recorded in `sync_runs`, surfaced under Admin → Health.
 - nflverse's `spread_line` is positive when the home team is favoured. Ours is
   negative when the home team is favoured, matching standard odds notation, so
   the sign is flipped on the way in.
+
+## How this is tested
+
+`src/lib/season.test.js` plays the whole 2026 season through the real synced
+schedule — 272 games, bye weeks, Thanksgiving, Christmas, the week 18
+all-at-once slate, the November clock change — and asserts the week derivation,
+the freeze schedule, a survivor pool, the confidence budget, and the standings
+all stay coherent at every step. The schedule it runs on is a fixture pulled
+straight from the `games` table, so it is the same data production reads.
+
+The freeze rule lives in two places: `src/lib/lines.js` in the app, and a copy
+inside the Edge Function. They are independent implementations — the app's uses
+`Intl` for Eastern time, the function's a hand-rolled offset table — and the
+test pins both to the freeze points a live sync actually returned. If either
+drifts, that test fails and names the week.
