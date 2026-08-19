@@ -29,6 +29,7 @@ export default function AdminPage() {
   const [linkFor, setLinkFor] = useState(null);
   const [pickLog, setPickLog] = useState([]);
   const [logWeek, setLogWeek] = useState('all');
+  const [adminBusy, setAdminBusy] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
@@ -167,6 +168,34 @@ export default function AdminPage() {
     }
   }
 
+
+  /**
+   * Grants or revokes admin access.
+   *
+   * Spelled out in the prompt because this is a real privilege handover, not a
+   * display setting — an admin can edit games, read every member's address,
+   * and promote further admins.
+   *
+   * Self-demotion is refused by the database rather than hidden here, since
+   * that mistake is unrecoverable from inside the app.
+   */
+  async function toggleAdmin(u) {
+    const promoting = !u.is_admin;
+    const message = promoting
+      ? `Make ${u.username} an admin? They'll be able to edit games and results, read every member's email address, and make other people admins.`
+      : `Remove admin access from ${u.username}?`;
+    if (!confirm(message)) return;
+
+    setAdminBusy(u.id);
+    const { error } = await supabase.rpc('set_admin', { p_user_id: u.id, p_is_admin: promoting });
+    if (error) toast.error(error.message);
+    else {
+      toast.success(promoting ? `${u.username} is now an admin` : `${u.username} is no longer an admin`);
+      fetchAll();
+    }
+    setAdminBusy(null);
+  }
+
   // Resolving is a note to yourself, not a fix. If the same fault happens
   // again the reporting function clears the flag, so a premature resolve
   // corrects itself rather than hiding a live bug.
@@ -290,9 +319,22 @@ export default function AdminPage() {
                     {u.is_admin && <span className="badge badge-lime" style={{ marginLeft: 8 }}>Admin</span>}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email || '—'}</div>
-                  <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
-                    {u.is_admin ? '✓ Admin' : '—'}
-                  </div>
+                  <button
+                    onClick={() => toggleAdmin(u)}
+                    disabled={adminBusy === u.id || u.id === user?.id}
+                    title={u.id === user?.id
+                      ? 'You cannot change your own admin access — another admin has to'
+                      : u.is_admin ? 'Revoke admin access' : 'Make this person an admin'}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, textAlign: 'left',
+                      fontSize: 13, cursor: u.id === user?.id ? 'default' : 'pointer',
+                      color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)',
+                      textDecoration: u.id === user?.id ? 'none' : 'underline',
+                      textDecorationColor: 'var(--border-strong)', textUnderlineOffset: 3,
+                    }}
+                  >
+                    {adminBusy === u.id ? '…' : u.is_admin ? '✓ Admin' : 'Make admin'}
+                  </button>
                   <button
                     onClick={() => generateResetLink(u)}
                     disabled={linkFor === u.id}
