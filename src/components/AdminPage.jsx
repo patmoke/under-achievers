@@ -30,6 +30,9 @@ export default function AdminPage() {
   const [pickLog, setPickLog] = useState([]);
   const [logWeek, setLogWeek] = useState('all');
   const [adminBusy, setAdminBusy] = useState(null);
+  const [checks, setChecks] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [syncRuns, setSyncRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
@@ -43,18 +46,20 @@ export default function AdminPage() {
     setLoading(true);
     // Addresses live in user_contacts now; RLS there returns every row to a
     // platform admin and only your own to anyone else.
-    const [gamesRes, usersRes, contactsRes, errorsRes, logRes] = await Promise.all([
+    const [gamesRes, usersRes, contactsRes, errorsRes, logRes, syncRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('user_contacts').select('user_id, email'),
       supabase.from('client_errors').select('*').order('last_seen', { ascending: false }).limit(100),
       supabase.from('pick_log').select('*').order('at', { ascending: false }).limit(300),
+      supabase.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(10),
     ]);
     const emails = new Map((contactsRes.data || []).map(c => [c.user_id, c.email]));
     setGames(gamesRes.data || []);
     setUsers((usersRes.data || []).map(u => ({ ...u, email: emails.get(u.id) })));
     setErrors(errorsRes.data || []);
     setPickLog(logRes.data || []);
+    setSyncRuns(syncRes.data || []);
     setLoading(false);
   }, []);
 
@@ -196,6 +201,23 @@ export default function AdminPage() {
     setAdminBusy(null);
   }
 
+
+  /**
+   * Runs the integrity sweeps that have until now been done by hand.
+   *
+   * Reports rather than repairs: several findings need a judgement nobody
+   * should delegate to a query — is that really the same person, has he
+   * actually paid — and a sweep that quietly deleted things would be far
+   * worse than one that just tells you.
+   */
+  async function runChecks() {
+    setChecking(true);
+    const { data, error } = await supabase.rpc('run_health_checks');
+    if (error) toast.error(error.message);
+    else setChecks(data || []);
+    setChecking(false);
+  }
+
   // Resolving is a note to yourself, not a fix. If the same fault happens
   // again the reporting function clears the flag, so a premature resolve
   // corrects itself rather than hiding a live bug.
@@ -218,6 +240,7 @@ export default function AdminPage() {
     { key: 'users', label: 'Users', count: users.length },
     { key: 'errors', label: 'Errors', count: openErrors },
     { key: 'picklog', label: 'Pick log', count: pickLog.length },
+    { key: 'health', label: 'Health', count: checks ? checks.filter(c => c.severity !== 'ok').length : null },
   ];
 
   return (
@@ -409,6 +432,84 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+            </>
+          )}
+
+          {/* ── HEALTH ── */}
+          {activeTab === 'health' && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0, maxWidth: 620 }}>
+                  Integrity sweeps. These report rather than repair — several need a judgement
+                  a query shouldn't be making, like whether two accounts are really one person.
+                </p>
+                <button className="btn btn-primary" onClick={runChecks} disabled={checking}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                  <RefreshCw size={15} style={checking ? { animation: 'spin 1s linear infinite' } : undefined} />
+                  {checking ? 'Checking…' : 'Run checks'}
+                </button>
+              </div>
+
+              {checks === null ? (
+                <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 14 }}>
+                  Press <strong>Run checks</strong> to sweep the data.
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  {checks.map((c, idx) => (
+                    <div key={c.name} style={{
+                      padding: '14px 18px',
+                      borderBottom: idx === checks.length - 1 ? 'none' : '1px solid var(--border)',
+                      display: 'flex', gap: 12, alignItems: 'flex-start',
+                    }}>
+                      <span style={{
+                        width: 9, height: 9, borderRadius: '50%', marginTop: 6, flexShrink: 0,
+                        background: c.severity === 'alert' ? 'var(--danger)'
+                                  : c.severity === 'warn' ? 'var(--warning)' : 'var(--success)',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
+                          {c.name}
+                          {c.findings > 0 && (
+                            <span style={{ marginLeft: 8, color: 'var(--ink-soft)', fontFamily: 'DM Sans', fontWeight: 400, fontSize: 13 }}>
+                              {c.findings}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 2 }}>{c.detail}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 style={{ fontSize: 17, textTransform: 'none', margin: '28px 0 10px' }}>Recent syncs</h3>
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {syncRuns.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 14 }}>
+                    Nothing recorded yet — the job runs every 30 minutes.
+                  </div>
+                ) : syncRuns.map((r, idx) => (
+                  <div key={r.id} style={{
+                    padding: '11px 18px',
+                    borderBottom: idx === syncRuns.length - 1 ? 'none' : '1px solid var(--border)',
+                    display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 13,
+                  }}>
+                    <span style={{ color: 'var(--ink-faint)', minWidth: 120, fontVariantNumeric: 'tabular-nums' }}>
+                      {new Date(r.started_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                    <span style={{
+                      minWidth: 70, fontWeight: 600,
+                      color: r.ok === true ? 'var(--success)' : r.ok === false ? 'var(--danger)' : 'var(--ink-faint)',
+                    }}>
+                      {r.ok === true ? 'OK' : r.ok === false ? 'Failed' : 'Running…'}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 180, color: 'var(--ink-soft)' }}>
+                      {r.ok ? `${r.games_synced ?? 0} games, ${r.error_count ?? 0} errors` : (r.message || '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </>
           )}
         </>
