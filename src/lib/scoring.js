@@ -23,10 +23,16 @@ export function getCurrentNFLWeek(season = 2026) {
  * off a hardcoded kickoff date.
  *
  * The current week is the one containing the next game that hasn't started —
- * during a Sunday slate the already-kicked-off games are still "this week",
- * and once the last game of a week ends the next week takes over. Falls back
- * to null when there's no schedule to read, so callers can use the date-based
- * estimate instead.
+ * during a Sunday slate the already-kicked-off games are still "this week".
+ *
+ * The rollover is therefore the moment the week's last game *kicks off*, not
+ * the moment it ends: for the three hours Monday Night Football is being
+ * played, this already reads as next week. Nothing is graded or locked off
+ * this, so it's a display question rather than a correctness one — but it is
+ * the behaviour, and season.test.js pins it so a change has to be deliberate.
+ *
+ * Falls back to null when there's no schedule to read, so callers can use the
+ * date-based estimate instead.
  *
  * Pass only regular-season games for the season in question; playoff and
  * scratch/QA rows carry week numbers outside 1-18 and are ignored.

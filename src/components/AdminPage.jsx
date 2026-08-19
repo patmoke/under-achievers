@@ -27,6 +27,12 @@ export default function AdminPage() {
   const [errors, setErrors] = useState([]);
   const [expandedError, setExpandedError] = useState(null);
   const [linkFor, setLinkFor] = useState(null);
+  const [pickLog, setPickLog] = useState([]);
+  const [logWeek, setLogWeek] = useState('all');
+  const [adminBusy, setAdminBusy] = useState(null);
+  const [checks, setChecks] = useState(null);
+  const [checking, setChecking] = useState(false);
+  const [syncRuns, setSyncRuns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
@@ -40,16 +46,20 @@ export default function AdminPage() {
     setLoading(true);
     // Addresses live in user_contacts now; RLS there returns every row to a
     // platform admin and only your own to anyone else.
-    const [gamesRes, usersRes, contactsRes, errorsRes] = await Promise.all([
+    const [gamesRes, usersRes, contactsRes, errorsRes, logRes, syncRes] = await Promise.all([
       supabase.from('games').select('*').order('week', { ascending: false }).order('game_time').limit(50),
       supabase.from('profiles').select('*').order('created_at', { ascending: false }),
       supabase.from('user_contacts').select('user_id, email'),
       supabase.from('client_errors').select('*').order('last_seen', { ascending: false }).limit(100),
+      supabase.from('pick_log').select('*').order('at', { ascending: false }).limit(300),
+      supabase.from('sync_runs').select('*').order('started_at', { ascending: false }).limit(10),
     ]);
     const emails = new Map((contactsRes.data || []).map(c => [c.user_id, c.email]));
     setGames(gamesRes.data || []);
     setUsers((usersRes.data || []).map(u => ({ ...u, email: emails.get(u.id) })));
     setErrors(errorsRes.data || []);
+    setPickLog(logRes.data || []);
+    setSyncRuns(syncRes.data || []);
     setLoading(false);
   }, []);
 
@@ -120,7 +130,15 @@ export default function AdminPage() {
       const { data, error } = await supabase.functions.invoke('sync-games', { method: 'POST' });
       if (error) throw error;
       const errCount = data?.errors?.length || 0;
-      toast.success(`Synced ${data?.synced ?? 0} games${errCount ? ` (${errCount} errors)` : ''}`);
+      // The frozen count is worth showing: it's the only visible sign that the
+      // line-freeze rule is holding, and a sudden zero mid-season would mean
+      // settled numbers had started moving again.
+      const lines = [
+        data?.linesWritten ? `${data.linesWritten} lines updated` : null,
+        data?.linesFrozen ? `${data.linesFrozen} frozen` : null,
+        errCount ? `${errCount} errors` : null,
+      ].filter(Boolean);
+      toast.success(`Synced ${data?.synced ?? 0} games${lines.length ? ` — ${lines.join(', ')}` : ''}`);
       if (errCount) console.warn('sync-games errors:', data.errors);
       fetchAll();
     } catch (err) {
@@ -163,6 +181,51 @@ export default function AdminPage() {
     }
   }
 
+
+  /**
+   * Grants or revokes admin access.
+   *
+   * Spelled out in the prompt because this is a real privilege handover, not a
+   * display setting — an admin can edit games, read every member's address,
+   * and promote further admins.
+   *
+   * Self-demotion is refused by the database rather than hidden here, since
+   * that mistake is unrecoverable from inside the app.
+   */
+  async function toggleAdmin(u) {
+    const promoting = !u.is_admin;
+    const message = promoting
+      ? `Make ${u.username} an admin? They'll be able to edit games and results, read every member's email address, and make other people admins.`
+      : `Remove admin access from ${u.username}?`;
+    if (!confirm(message)) return;
+
+    setAdminBusy(u.id);
+    const { error } = await supabase.rpc('set_admin', { p_user_id: u.id, p_is_admin: promoting });
+    if (error) toast.error(error.message);
+    else {
+      toast.success(promoting ? `${u.username} is now an admin` : `${u.username} is no longer an admin`);
+      fetchAll();
+    }
+    setAdminBusy(null);
+  }
+
+
+  /**
+   * Runs the integrity sweeps that have until now been done by hand.
+   *
+   * Reports rather than repairs: several findings need a judgement nobody
+   * should delegate to a query — is that really the same person, has he
+   * actually paid — and a sweep that quietly deleted things would be far
+   * worse than one that just tells you.
+   */
+  async function runChecks() {
+    setChecking(true);
+    const { data, error } = await supabase.rpc('run_health_checks');
+    if (error) toast.error(error.message);
+    else setChecks(data || []);
+    setChecking(false);
+  }
+
   // Resolving is a note to yourself, not a fix. If the same fault happens
   // again the reporting function clears the flag, so a premature resolve
   // corrects itself rather than hiding a live bug.
@@ -178,10 +241,14 @@ export default function AdminPage() {
   if (!profile.is_admin) return null;
 
   const openErrors = errors.filter(e => !e.resolved_at).length;
+  const logWeeks = [...new Set(pickLog.map(r => r.week).filter(w => w != null))].sort((a, b) => a - b);
+  const visibleLog = logWeek === 'all' ? pickLog : pickLog.filter(r => String(r.week) === String(logWeek));
   const TABS = [
     { key: 'games', label: 'Games', count: games.length },
     { key: 'users', label: 'Users', count: users.length },
     { key: 'errors', label: 'Errors', count: openErrors },
+    { key: 'picklog', label: 'Pick log', count: pickLog.length },
+    { key: 'health', label: 'Health', count: checks ? checks.filter(c => c.severity !== 'ok').length : null },
   ];
 
   return (
@@ -283,9 +350,22 @@ export default function AdminPage() {
                     {u.is_admin && <span className="badge badge-lime" style={{ marginLeft: 8 }}>Admin</span>}
                   </div>
                   <div style={{ fontSize: 13, color: 'var(--ink-soft)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.email || '—'}</div>
-                  <div style={{ fontSize: 13, color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)' }}>
-                    {u.is_admin ? '✓ Admin' : '—'}
-                  </div>
+                  <button
+                    onClick={() => toggleAdmin(u)}
+                    disabled={adminBusy === u.id || u.id === user?.id}
+                    title={u.id === user?.id
+                      ? 'You cannot change your own admin access — another admin has to'
+                      : u.is_admin ? 'Revoke admin access' : 'Make this person an admin'}
+                    style={{
+                      background: 'none', border: 'none', padding: 0, textAlign: 'left',
+                      fontSize: 13, cursor: u.id === user?.id ? 'default' : 'pointer',
+                      color: u.is_admin ? 'var(--success)' : 'var(--ink-faint)',
+                      textDecoration: u.id === user?.id ? 'none' : 'underline',
+                      textDecorationColor: 'var(--border-strong)', textUnderlineOffset: 3,
+                    }}
+                  >
+                    {adminBusy === u.id ? '…' : u.is_admin ? '✓ Admin' : 'Make admin'}
+                  </button>
                   <button
                     onClick={() => generateResetLink(u)}
                     disabled={linkFor === u.id}
@@ -324,6 +404,121 @@ export default function AdminPage() {
                 ))}
               </div>
             )
+          )}
+
+          {/* ── PICK LOG ── */}
+          {activeTab === 'picklog' && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 12, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0, maxWidth: 640 }}>
+                  Every pick written, in order. What was picked stays hidden until that game
+                  kicks off — the log would otherwise hand whoever reads it the whole field.
+                </p>
+                <select value={logWeek} onChange={e => setLogWeek(e.target.value)} style={{ padding: '8px 10px', fontSize: 13 }}>
+                  <option value="all">All weeks</option>
+                  {logWeeks.map(w => <option key={w} value={w}>Week {w}</option>)}
+                </select>
+              </div>
+
+              {visibleLog.length === 0 ? (
+                <div className="card" style={{ padding: 40, textAlign: 'center' }}>
+                  <h3 style={{ fontSize: 19, marginBottom: 8, textTransform: 'none' }}>No picks recorded yet</h3>
+                  <p style={{ color: 'var(--ink-soft)', fontSize: 14, margin: 0 }}>
+                    Every insert, change and deletion will appear here from now on.
+                  </p>
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  {visibleLog.map((row, idx) => (
+                    <PickLogRow
+                      key={row.id}
+                      row={row}
+                      last={idx === visibleLog.length - 1}
+                      username={users.find(u => u.id === row.subject_user)?.username}
+                      actorName={users.find(u => u.id === row.actor)?.username}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ── HEALTH ── */}
+          {activeTab === 'health' && (
+            <>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' }}>
+                <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: 0, maxWidth: 620 }}>
+                  Integrity sweeps. These report rather than repair — several need a judgement
+                  a query shouldn't be making, like whether two accounts are really one person.
+                </p>
+                <button className="btn btn-primary" onClick={runChecks} disabled={checking}
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap' }}>
+                  <RefreshCw size={15} style={checking ? { animation: 'spin 1s linear infinite' } : undefined} />
+                  {checking ? 'Checking…' : 'Run checks'}
+                </button>
+              </div>
+
+              {checks === null ? (
+                <div className="card" style={{ padding: 36, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 14 }}>
+                  Press <strong>Run checks</strong> to sweep the data.
+                </div>
+              ) : (
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  {checks.map((c, idx) => (
+                    <div key={c.name} style={{
+                      padding: '14px 18px',
+                      borderBottom: idx === checks.length - 1 ? 'none' : '1px solid var(--border)',
+                      display: 'flex', gap: 12, alignItems: 'flex-start',
+                    }}>
+                      <span style={{
+                        width: 9, height: 9, borderRadius: '50%', marginTop: 6, flexShrink: 0,
+                        background: c.severity === 'alert' ? 'var(--danger)'
+                                  : c.severity === 'warn' ? 'var(--warning)' : 'var(--success)',
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16 }}>
+                          {c.name}
+                          {c.findings > 0 && (
+                            <span style={{ marginLeft: 8, color: 'var(--ink-soft)', fontFamily: 'DM Sans', fontWeight: 400, fontSize: 13 }}>
+                              {c.findings}
+                            </span>
+                          )}
+                        </div>
+                        <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 2 }}>{c.detail}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <h3 style={{ fontSize: 17, textTransform: 'none', margin: '28px 0 10px' }}>Recent syncs</h3>
+              <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                {syncRuns.length === 0 ? (
+                  <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)', fontSize: 14 }}>
+                    Nothing recorded yet — the job runs every 30 minutes.
+                  </div>
+                ) : syncRuns.map((r, idx) => (
+                  <div key={r.id} style={{
+                    padding: '11px 18px',
+                    borderBottom: idx === syncRuns.length - 1 ? 'none' : '1px solid var(--border)',
+                    display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap', fontSize: 13,
+                  }}>
+                    <span style={{ color: 'var(--ink-faint)', minWidth: 120, fontVariantNumeric: 'tabular-nums' }}>
+                      {new Date(r.started_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                    </span>
+                    <span style={{
+                      minWidth: 70, fontWeight: 600,
+                      color: r.ok === true ? 'var(--success)' : r.ok === false ? 'var(--danger)' : 'var(--ink-faint)',
+                    }}>
+                      {r.ok === true ? 'OK' : r.ok === false ? 'Failed' : 'Running…'}
+                    </span>
+                    <span style={{ flex: 1, minWidth: 180, color: 'var(--ink-soft)' }}>
+                      {r.ok ? `${r.games_synced ?? 0} games, ${r.error_count ?? 0} errors` : (r.message || '')}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </>
       )}
@@ -385,6 +580,79 @@ function ErrorRow({ err, username, expanded, onToggle, onResolve }) {
           {err.user_agent ? `\n\n${err.user_agent}` : ''}
         </pre>
       )}
+    </div>
+  );
+}
+
+
+/**
+ * One recorded pick write.
+ *
+ * The wording is deliberately plain, because the reason to open this page is
+ * to settle "I picked the Chiefs and it says Ravens" with a person who is
+ * annoyed and not interested in database vocabulary.
+ */
+function describeChange(row) {
+  if (!row.values_visible) return null;
+  const o = row.old_value || {};
+  const n = row.new_value || {};
+
+  if (row.source_table === 'survivor_picks') {
+    if (row.action === 'insert') return `picked ${n.team_abbr}`;
+    if (row.action === 'delete') return `pick removed — had been ${o.team_abbr}`;
+    return `changed ${o.team_abbr} → ${n.team_abbr}`;
+  }
+
+  if (row.action === 'insert') {
+    return `picked ${n.predicted_spread} at ${n.confidence_points}★`;
+  }
+  if (row.action === 'delete') {
+    return `pick removed — had been ${o.predicted_spread} at ${o.confidence_points}★`;
+  }
+  const parts = [];
+  if (o.predicted_spread !== n.predicted_spread) parts.push(`spread ${o.predicted_spread} → ${n.predicted_spread}`);
+  if (o.confidence_points !== n.confidence_points) parts.push(`${o.confidence_points}★ → ${n.confidence_points}★`);
+  return parts.length ? `changed ${parts.join(', ')}` : 'changed';
+}
+
+function PickLogRow({ row, last, username, actorName }) {
+  const change = describeChange(row);
+  // Someone editing a pick that isn't theirs is the single most important thing
+  // this log can show, so it gets called out rather than buried in a field.
+  const onBehalf = row.actor && row.subject_user && row.actor !== row.subject_user;
+
+  return (
+    <div style={{
+      padding: '12px 18px',
+      borderBottom: last ? 'none' : '1px solid var(--border)',
+      display: 'flex', gap: 12, alignItems: 'baseline', flexWrap: 'wrap',
+    }}>
+      <span style={{ fontSize: 12, color: 'var(--ink-faint)', minWidth: 132, fontVariantNumeric: 'tabular-nums' }}>
+        {new Date(row.at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit' })}
+      </span>
+
+      <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 15, minWidth: 110 }}>
+        {username || 'Unknown'}
+      </span>
+
+      <span style={{ flex: 1, minWidth: 200, fontSize: 13.5 }}>
+        {change || (
+          <span style={{ color: 'var(--ink-faint)', fontStyle: 'italic' }}>
+            {row.action === 'insert' ? 'pick made' : row.action === 'delete' ? 'pick removed' : 'pick changed'}
+            {' '}— team hidden until kickoff
+          </span>
+        )}
+        {onBehalf && (
+          <span className="badge" style={{ marginLeft: 8, background: 'var(--warning-soft)', color: 'var(--warning)' }}>
+            by {actorName || 'admin'}
+          </span>
+        )}
+      </span>
+
+      <span style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+        {row.week != null && `Wk ${row.week}`}
+        {row.source_table === 'survivor_picks' ? ' · survivor' : ' · weekly'}
+      </span>
     </div>
   );
 }
