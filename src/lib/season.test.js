@@ -411,6 +411,97 @@ describe('a survivor pool over a full season', () => {
   });
 });
 
+// ─── The Monday night window ────────────────────────────────────────────────
+//
+// The week turns over when its last game kicks off, but that game isn't final
+// for another three hours. So for the length of Monday Night Football the app
+// reads as next week while a pick on the game in progress is still ungraded.
+//
+// The question that matters: can someone whose Monday night pick is losing get
+// a pick in for next week before their elimination lands? These pin the answer
+// so it can't drift, whichever way it's decided.
+
+describe('the window while Monday night football is being played', () => {
+  const WEEK = 6;
+  const mnf = [...gamesForWeek(WEEK)].sort((a, b) => kickoff(a) - kickoff(b)).at(-1);
+  const kickedOff = new Date(kickoff(mnf) + 60 * 1000);
+  const finished = new Date(kickoff(mnf) + 4 * 60 * 60 * 1000);
+
+  const entry = { id: 'mnf', start_week: 1 };
+  // Every week up to WEEK picked and won, except the Monday nighter, which is
+  // about to lose. Teams are taken from the front of each slate, and the loser
+  // of the Monday game is excluded so the path stays legal.
+  const losingTeam = mnf.away_team_abbr;
+  const priorPicks = [];
+  const burned = new Set([losingTeam]);
+  for (let w = 1; w < WEEK; w++) {
+    const g = gamesForWeek(w).find(x => !burned.has(x.home_team_abbr));
+    burned.add(g.home_team_abbr);
+    priorPicks.push({
+      entry_id: 'mnf', week: w, team_abbr: g.home_team_abbr,
+      games: { ...g, status: 'final', home_score: 24, away_score: 17 },
+    });
+  }
+
+  const inProgress = { ...mnf, status: 'scheduled', home_score: null, away_score: null };
+  const lost = { ...mnf, status: 'final', home_score: 30, away_score: 10 }; // away pick loses
+  const mnfPick = at => ({ entry_id: 'mnf', week: WEEK, team_abbr: losingTeam, games: at });
+
+  const gamesWith = mnfGame => SEASON_2026.map(g => (g.id === mnf.id ? mnfGame : g));
+
+  it('has already turned the page to next week', () => {
+    expect(deriveCurrentWeek(SEASON_2026, kickedOff)).toBe(WEEK + 1);
+  });
+
+  it('still reads the entry as alive, because the game has no result yet', () => {
+    const picks = [...priorPicks, mnfPick(inProgress)];
+    expect(computeEntryStatus({
+      entry, picks, games: gamesWith(inProgress), currentWeek: WEEK + 1, now: kickedOff,
+    })).toEqual({ status: 'alive', week: null, reason: null });
+  });
+
+  it('so yes — a losing entry can file next week\'s pick before going out', () => {
+    // This is the answer to the question. Nothing in the rules stops it: the
+    // entry is alive, the week is WEEK + 1, and that week's games are open.
+    const nextGame = gamesForWeek(WEEK + 1)[0];
+    expect(isGameLocked(nextGame, kickedOff)).toBe(false);
+    const picks = [...priorPicks, mnfPick(inProgress)];
+    const used = usedTeams({ entry, picks, currentWeek: WEEK + 1, now: kickedOff });
+    expect(used.has(nextGame.home_team_abbr) && used.has(nextGame.away_team_abbr)).toBe(false);
+  });
+
+  it('but cannot reuse the team that is losing on the field right now', () => {
+    // The Monday pick belongs to a past week as far as usedTeams is concerned,
+    // and its game has kicked off, so the team is burned either way.
+    const picks = [...priorPicks, mnfPick(inProgress)];
+    expect(usedTeams({ entry, picks, currentWeek: WEEK + 1, now: kickedOff }).has(losingTeam)).toBe(true);
+  });
+
+  it('and the early pick buys nothing: the loss still eliminates them', () => {
+    const jumped = gamesForWeek(WEEK + 1).find(
+      g => ![...burned].includes(g.home_team_abbr),
+    );
+    const picks = [
+      ...priorPicks,
+      mnfPick(lost),
+      { entry_id: 'mnf', week: WEEK + 1, team_abbr: jumped.home_team_abbr, games: jumped },
+    ];
+    expect(computeEntryStatus({
+      entry, picks, games: gamesWith(lost), currentWeek: WEEK + 1, now: finished,
+    })).toEqual({ status: 'eliminated', week: WEEK, reason: 'loss' });
+  });
+
+  it('eliminates a missed week on time, which is the other half of the trade', () => {
+    // The same early rollover is what catches someone who never picked at all:
+    // once the Monday game kicks off the week is unpickable, and they are out.
+    const missed = { id: 'missed', start_week: 1 };
+    expect(computeEntryStatus({
+      entry: missed, picks: priorPicks.map(p => ({ ...p, entry_id: 'missed' })),
+      games: gamesWith(inProgress), currentWeek: WEEK + 1, now: kickedOff,
+    })).toEqual({ status: 'eliminated', week: WEEK, reason: 'missed' });
+  });
+});
+
 // ─── The weekly confidence budget ───────────────────────────────────────────
 
 describe('the confidence budget, week by week', () => {
