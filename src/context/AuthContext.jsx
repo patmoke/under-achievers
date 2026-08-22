@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase, supabaseEmailFlow } from '../lib/supabase';
+import { CURRENT_SEASON } from '../lib/membership';
 
 const AuthContext = createContext({});
 
@@ -7,18 +8,31 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
+  // null means "not looked yet", which is different from "in no leagues" —
+  // the landing redirect has to wait for the answer rather than assume one.
+  const [leagues, setLeagues] = useState(null);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        fetchLeagues(session.user.id);
+      } else {
+        setLeagues([]);
+      }
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (session?.user) fetchProfile(session.user.id);
-      else setProfile(null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+        fetchLeagues(session.user.id);
+      } else {
+        setProfile(null);
+        setLeagues([]);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -27,6 +41,37 @@ export function AuthProvider({ children }) {
   async function fetchProfile(userId) {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single();
     setProfile(data);
+  }
+
+  /**
+   * The leagues this user is in, for the current season.
+   *
+   * Loaded once here rather than per-page because two separate decisions need
+   * it before anything renders — where to land someone who has just signed in,
+   * and which nav items mean anything to them. Fetching it in each place would
+   * be the same query two or three times on every page load.
+   *
+   * On failure it sets an empty list rather than leaving null. Null is the
+   * "still loading" state, and a failed request that stayed null would hang
+   * the landing redirect on a spinner for ever; an empty list sends them to
+   * the league list, which is a fine place to be wrong.
+   */
+  async function fetchLeagues(userId) {
+    try {
+      const { data, error } = await supabase
+        .from('league_members')
+        .select('leagues!inner(id, name, compete_on, season)')
+        .eq('user_id', userId)
+        .eq('leagues.season', CURRENT_SEASON);
+      if (error) { setLeagues([]); return; }
+      setLeagues((data || []).map(r => r.leagues).filter(Boolean));
+    } catch {
+      // Offline, or the request threw rather than returning an error. Either
+      // way this must not leave the state null: null is what the redirect
+      // waits on, so a thrown request would strand someone on the loading
+      // screen with no way out but a reload.
+      setLeagues([]);
+    }
   }
 
   async function signUp(email, password, username) {
@@ -106,7 +151,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signUp, signIn, signInWithProvider, requestPasswordReset, setPassword, signOut, updateProfile, fetchProfile }}>
+    <AuthContext.Provider value={{ user, profile, leagues, loading, signUp, signIn, signInWithProvider, requestPasswordReset, setPassword, signOut, updateProfile, fetchProfile, fetchLeagues }}>
       {children}
     </AuthContext.Provider>
   );
