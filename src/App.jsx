@@ -15,6 +15,7 @@ import ResetPasswordPage from './components/ResetPasswordPage';
 import UserProfilePage from './components/UserProfilePage';
 import Footer from './components/Footer';
 import ReloadPrompt from './components/ReloadPrompt';
+import { landingPath } from './lib/membership';
 import NotifyPrompt from './components/NotifyPrompt';
 import './styles/globals.css';
 
@@ -47,12 +48,31 @@ function LoadingScreen() {
   );
 }
 
+/**
+ * Where signing in actually takes you.
+ *
+ * This used to be a flat redirect to /games, the weekly picks page. Most of
+ * the league plays survivor only, so most people were landing on a game they
+ * aren't in — and the fix can't be a different fixed path, because the right
+ * destination depends on what they've joined.
+ *
+ * Waits on the membership query rather than guessing, which costs a beat of
+ * the loading screen that was already showing while the session resolved. If
+ * that query fails, AuthContext hands back an empty list rather than null, so
+ * this lands on /leagues instead of spinning.
+ */
+function HomeRedirect() {
+  const { leagues } = useAuth();
+  if (leagues === null) return <LoadingScreen />;
+  return <Navigate to={landingPath(leagues)} replace />;
+}
+
 function AppRoutes() {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   return (
     <Routes>
-      <Route path="/" element={user ? <Navigate to="/games" replace /> : <LandingPage />} />
+      <Route path="/" element={user ? <HomeRedirect /> : <LandingPage />} />
       <Route path="/games" element={<ProtectedLayout><GamesPage /></ProtectedLayout>} />
       <Route path="/leaderboard" element={<ProtectedLayout><LeaderboardPage /></ProtectedLayout>} />
       <Route path="/profile" element={<ProtectedLayout><ProfilePage /></ProtectedLayout>} />

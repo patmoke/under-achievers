@@ -2,21 +2,28 @@ import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { BarChart2, User, History, Menu, X, LogOut, ChevronDown, Shield, Calendar, Trophy } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { visibleNavPaths, landingPath } from '../lib/membership';
 import toast from 'react-hot-toast';
 
 export default function Navigation() {
-  const { profile, signOut } = useAuth();
+  const { profile, leagues, signOut } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
 
-  const navItems = [
+  const allNavItems = [
     { path: '/games', label: 'Make Picks', icon: <Calendar size={16} /> },
     { path: '/leagues', label: 'Leagues', icon: <Trophy size={16} /> },
     { path: '/leaderboard', label: 'Leaderboard', icon: <BarChart2 size={16} /> },
     { path: '/history', label: 'History', icon: <History size={16} /> },
   ];
+
+  // Make Picks, Leaderboard and History all read from the weekly game. Showing
+  // them to a survivor-only player is three links to empty pages, which reads
+  // as broken rather than focused. The routes still work if you type them.
+  const shown = new Set(visibleNavPaths({ leagues, isAdmin: profile?.is_admin }));
+  const navItems = allNavItems.filter(item => shown.has(item.path));
 
   async function handleSignOut() {
     await signOut();
@@ -37,7 +44,7 @@ export default function Navigation() {
         }}>
 
           {/* Logo */}
-          <button onClick={() => navigate('/games')} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
+          <button onClick={() => navigate(landingPath(leagues))} style={{ background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             <span className="gradient-hero-text" style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 20, letterSpacing: '0.02em' }}>
               UNDER ACHIEVERS
             </span>
