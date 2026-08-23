@@ -136,6 +136,7 @@ export default function AdminPage() {
       const lines = [
         data?.linesWritten ? `${data.linesWritten} lines updated` : null,
         data?.linesFrozen ? `${data.linesFrozen} frozen` : null,
+        data?.marketsWritten ? `${data.marketsWritten} priced` : null,
         errCount ? `${errCount} errors` : null,
       ].filter(Boolean);
       toast.success(`Synced ${data?.synced ?? 0} games${lines.length ? ` — ${lines.join(', ')}` : ''}`);

@@ -10,7 +10,7 @@ import { describe, it, expect } from 'vitest';
 import {
   toDecimal, impliedProbability, fairProbability, houseHold,
   payout, combinedDecimal, gradeLeg, oddsFor, otherSideOdds,
-  settleBet, slipProblem, MAX_LEGS,
+  settleBet, slipProblem, MAX_LEGS, forSettlement, isPriced,
 } from './odds';
 import { SEASON_2025, REGULAR_2025 } from './__fixtures__/season2025';
 
@@ -384,5 +384,44 @@ describe('slip rules', () => {
 
   it('lets the banned pairing through on separate games, where it is harmless', () => {
     expect(slipProblem([leg('g1', 'spread'), leg('g2', 'moneyline')])).toBeNull();
+  });
+});
+
+// ─── Reading a database row ─────────────────────────────────────────────────
+
+describe('mapping a games row for settlement', () => {
+  const row = {
+    id: 'x', home_score: 26, away_score: 24,
+    spread_line: -4.5, total_line: 41.5,
+    home_spread_odds: -115, away_spread_odds: -105,
+    over_odds: -110, under_odds: -110,
+    home_moneyline: 185, away_moneyline: -225,
+  };
+
+  it('derives the margin and the combined score from the two scores', () => {
+    const g = forSettlement(row);
+    expect(g.result).toBe(2);
+    expect(g.total).toBe(50);
+  });
+
+  it('leaves both null while the game has no score', () => {
+    const g = forSettlement({ ...row, home_score: null, away_score: null });
+    expect(g.result).toBeNull();
+    expect(g.total).toBeNull();
+    expect(gradeLeg({ market: 'spread', side: 'home' }, g)).toBeNull();
+  });
+
+  it('grades straight off a mapped row', () => {
+    const g = forSettlement(row);
+    expect(gradeLeg({ market: 'spread', side: 'home' }, g)).toBe('win');
+    expect(gradeLeg({ market: 'total', side: 'over' }, g)).toBe('win');
+    expect(gradeLeg({ market: 'moneyline', side: 'home' }, g)).toBe('win');
+  });
+
+  it('knows a fully priced game from one the books have not posted yet', () => {
+    expect(isPriced(row)).toBe(true);
+    expect(isPriced({ ...row, total_line: null })).toBe(false);
+    expect(isPriced({ ...row, home_moneyline: null })).toBe(false);
+    expect(isPriced({ ...row, over_odds: null })).toBe(false);
   });
 });

@@ -221,3 +221,31 @@ export function slipProblem(legs) {
   }
   return null;
 }
+
+/**
+ * A `games` row as the engine wants to see it.
+ *
+ * The database stores what the feed publishes — two scores. `result` and
+ * `total` are derived here rather than stored, so there is no second copy able
+ * to disagree with the first.
+ *
+ * Reads `spread_line`, never `actual_spread`: the two carry opposite signs,
+ * and the one on this side is the feed's own.
+ */
+export function forSettlement(row) {
+  const home = row.home_score;
+  const away = row.away_score;
+  const played = home !== null && home !== undefined && away !== null && away !== undefined;
+  return {
+    ...row,
+    result: played ? home - away : null,
+    total: played ? home + away : null,
+  };
+}
+
+/** Whether a game has a full set of prices and can be bet on. */
+export function isPriced(row) {
+  return MARKETS.every(market =>
+    SIDES[market].every(side => toDecimal(oddsFor(row, market, side)) !== null)
+  ) && row.spread_line !== null && row.total_line !== null;
+}
