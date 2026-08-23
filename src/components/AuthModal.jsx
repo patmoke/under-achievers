@@ -31,8 +31,19 @@ export default function AuthModal({ mode, onClose, onSwitch }) {
           setLoading(false);
           return;
         }
-        await signUp(email, password, username);
-        toast.success('Account created! Check your email to confirm.');
+        const data = await signUp(email, password, username);
+        // Which of these is true depends on a Supabase setting, not on
+        // anything here: with email confirmation off, signUp hands back a
+        // session and the person is already signed in and looking at the app.
+        // Telling them to go and check an inbox that will stay empty is how
+        // you get someone who thinks they're locked out of an account that
+        // works. Reading the session back means this stays honest whichever
+        // way that setting is flipped.
+        toast.success(
+          data?.session
+            ? 'You\'re in — welcome to Under Achievers.'
+            : 'Account created. Check your email to confirm.'
+        );
         onClose();
       }
     } catch (err) {
