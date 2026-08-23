@@ -152,3 +152,52 @@ table alias in the grading UPDATE. PL/pgSQL resolves a qualified name against
 its own declarations first, so `l.market` bound to the unassigned record rather
 than the row being updated, and the whole thing died with *"record l is not
 assigned yet"* on the first settlement. Nothing would have been graded, ever.
+
+## Standings and the house
+
+`bankroll_standings(league_id)` is a function rather than a view, because it
+credits allowances before reading balances — opening the standings is what tops
+everyone up, so a view could never be the entry point. Members only.
+
+Balance is the score and the board sorts on it. The rest is context for *why*
+someone is there: a big balance off two lucky parlays reads very differently
+from one off thirty disciplined singles, and the record and biggest win are
+what separate them.
+
+### What is public
+
+Everything on the board, plus **how many bets you have placed this week and how
+much is at risk — never what they are on**. That is the deliberate middle
+ground: enough to see who is active and who has forgotten, without letting
+anyone copy a slip. Slips themselves become public once every game on them has
+kicked off.
+
+It is also the main defence against the one weakness in the season format.
+Unused units bank, so a clear leader can protect a lead by not betting — and
+the board showing "nothing yet" against their name is what makes that visible.
+
+### `bankroll_house(league_id)`
+
+| | |
+|---|---|
+| **take** | Stakes in, returns out. What the house actually kept. Swings with luck. |
+| **vig** | The edge built into the prices people accepted. Fixed at placement, barely moves. |
+| **luck** | take − vig. |
+
+Settled bets only on both sides, so the two are comparable. Pass `null` for the
+whole platform — that path is admin-only.
+
+Verified on a two-player league across 80 settled bets:
+
+```
+take 45.46   vig 35.02   luck 10.44
+take = staked − returned : true
+luck = take − vig        : true
+vig as % of staked       : 4.38%
+```
+
+The vig percentage is the meaningful check, because it is deterministic — it
+falls out of the prices alone, and 4.38% is where a mix of spreads, totals and
+moneylines should land. **Take is not evidence of anything at this sample
+size**; on 80 bets it is mostly noise, and the two converging is a claim that
+needs a season behind it, not a probe.

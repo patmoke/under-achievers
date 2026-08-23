@@ -8,6 +8,7 @@ import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Coins, Settin
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 import BankrollTab from './BankrollTab';
+import BankrollStandings from './BankrollStandings';
 
 const CURRENT_SEASON = 2026;
 
@@ -326,7 +327,7 @@ export default function LeaguePage() {
   // 'leaderboard' selection from a weekly league into a survivor one would
   // otherwise match no tab and render an empty page.
   const availableTabs = isSurvivor ? ['survivor', 'members']
-    : isBankroll ? ['bankroll', 'members']
+    : isBankroll ? ['bankroll', 'standings', 'members']
     : ['leaderboard', 'weekly', 'members'];
   const tab = availableTabs.includes(tabOverride) ? tabOverride : availableTabs[0];
   const isOwner = myMembership?.role === 'owner';
@@ -337,6 +338,7 @@ export default function LeaguePage() {
   const TAB_LABELS = {
     survivor: 'Survivor pool',
     bankroll: 'The board',
+    standings: 'Standings',
     leaderboard: 'Leaderboard',
     weekly: 'Weekly picks',
     members: `Members (${members.length})`,
@@ -533,6 +535,14 @@ export default function LeaguePage() {
           leagueId={id}
           currentUserId={user.id}
           season={CURRENT_SEASON}
+          currentWeek={effectiveWeek}
+        />
+      )}
+
+      {isBankroll && tab === 'standings' && (
+        <BankrollStandings
+          leagueId={id}
+          currentUserId={user.id}
           currentWeek={effectiveWeek}
         />
       )}
