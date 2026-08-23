@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy, Share2 } from 'lucide-react';
+import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy, Share2, Coins } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const LEAGUE_TYPES = [
   { val: 'weekly', label: 'Weekly Picks', desc: 'Predict NFL spreads every week', icon: Calendar },
   { val: 'survivor', label: 'Survivor Pool', desc: 'Pick a winner each week — lose and you’re out', icon: Skull },
+  { val: 'bankroll', label: 'Bankroll', desc: 'Bet units on real lines — most units at week 18 wins', icon: Coins },
 ];
 
 function leagueTypeInfo(competeOn) {
@@ -114,6 +115,13 @@ export default function LeaguesPage() {
         user_id: user.id,
         role: 'owner',
       });
+
+      // A betting league is unusable without its settings row — place_bet
+      // refuses outright when there isn't one — so it is created here rather
+      // than left to be discovered missing.
+      if (form.compete_on === 'bankroll') {
+        await supabase.from('bankroll_settings').insert({ league_id: league.id });
+      }
 
       // Survivor pools auto-create the owner's first entry
       if (form.compete_on === 'survivor') {
