@@ -98,3 +98,57 @@ immediately and never has to be rebuilt from prices that have since moved.
 The SQL and `src/lib/odds.js` agree exactly — a moneyline at −185/+154 gives
 `fair 0.62246655, hold 0.04106504` from both. Worth re-checking if either side
 is edited, because nothing automatically compares them.
+
+## Settlement
+
+`settle_bets()` grades every leg whose game is final, resolves every bet with
+nothing ungraded left, and credits the returns. It runs on `pg_cron` at **:10
+and :40** — ten minutes after each games sync, so scores have landed before
+anything is graded. Admin → Games has a **Settle bets** button for when a
+score arrives late and someone is waiting to be paid.
+
+Three properties carry the weight:
+
+**Idempotent.** Legs are graded only while their outcome is null, bets resolved
+only while open, and the return written once — enforced by a unique index on
+`bankroll_ledger(bet_id) where kind = 'return'`, not by remembering. A second
+run over the same bets settles nothing and pays nothing.
+
+**Graded against the price that was struck.** A leg carries the line it was
+placed at and is judged by that. Reading `games.spread_line` at settlement
+would grade people against a number that moved after they bet, which is the
+entire reason the line is snapshotted onto the leg.
+
+**Recorded.** Every run lands in `bankroll_settlement_runs`, and two health
+checks watch it: *Bets waiting to be settled* (all games finished, still open —
+someone is owed units) and *Negative bankrolls* (a stake was accepted the
+balance could not cover). Both are alerts, not warnings.
+
+### How it was proven
+
+A league, 22 bets across every market — singles and parlays — then the games
+played out and settled:
+
+```
+first run   : 32 legs graded, 22 bets settled, 317.63 paid
+outcomes    : 10 won, 11 lost, 1 push
+second run  : 0 legs, 0 bets, 0.00 paid
+ledger      : allowance 100000 − staked 303 + returned 317.63 = 100014.63
+balance()   : 100014.63   reconciles
+```
+
+Then every one of those 22 bets was re-graded independently by
+`src/lib/odds.js` from the same inputs. **All 22 agree on status and payout to
+the cent.** Two implementations, written separately, reaching the same verdict
+is the strongest evidence available short of a real season.
+
+The two rare cases were forced rather than waited for: a spread landing exactly
+on its number, and a game ending level so the moneyline pushes.
+
+### The bug this found
+
+The first version named a PL/pgSQL record variable `l` and used `l` as the
+table alias in the grading UPDATE. PL/pgSQL resolves a qualified name against
+its own declarations first, so `l.market` bound to the unassigned record rather
+than the row being updated, and the whole thing died with *"record l is not
+assigned yet"* on the first settlement. Nothing would have been graded, ever.
