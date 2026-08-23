@@ -153,6 +153,88 @@ its own declarations first, so `l.market` bound to the unassigned record rather
 than the row being updated, and the whole thing died with *"record l is not
 assigned yet"* on the first settlement. Nothing would have been graded, ever.
 
+## The playoff round
+
+The postseason runs on different rules, and they exist to close the season
+format's one real weakness: unused units bank, so a leader can protect a lead
+by not betting. Sitting out the playoffs is now the most expensive thing anyone
+can do.
+
+**No new allowance.** `bankroll_credit_allowances()` caps its top-up at week 18:
+
+```sql
+v_week := least(bankroll_current_week(v_season), 18);
+```
+
+That single `least()` *is* the rule. Whatever you carry out of week 18 is what
+you have for January.
+
+**An escalating minimum stake.** Each round demands a share of the balance you
+brought into it, and whatever you have not put at risk by its last kickoff is
+taken:
+
+| Week | Round       | Minimum |
+|------|-------------|---------|
+| 19   | Wild Card   | 10%     |
+| 20   | Divisional  | 20%     |
+| 21   | Conference  | 35%     |
+| 22   | Super Bowl  | 60%     |
+
+A share rather than a fixed number, so someone down to 40 units faces the same
+decision as someone holding 900, and nobody is locked out or busted to exactly
+zero.
+
+The share is measured against the balance **carried into that round**, so the
+rounds compound: 500 units coasted through the postseason goes 500 → 450 → 360
+→ 234 → 93.6, a loss of about 81%. Betting badly can cost less than that, which
+is the whole point. It also means the rounds have to be assessed in order —
+`bankroll_apply_forfeits` carries an `order by g.week` for exactly that reason,
+and `odds.test.js` pins the chain.
+
+nflverse numbers the rounds 19–22 in the same `week` column as the regular
+season, so nothing is remapped anywhere — `bankroll_current_week` simply runs
+to 22 and `sync-games` accepts `WC`/`DIV`/`CON`/`SB` as those numbers.
+
+### What enforces it
+
+`bankroll_apply_forfeits()` runs at the end of `settle_bets()` — after the
+round's winnings are in the ledger, so the next round's floor is measured
+against a balance that is actually settled. A round is only assessed once
+`max(game_time) <= now()`, and the forfeit is written as a `'forfeit'` ledger
+row guarded by a partial unique index on `(league_id, user_id, season, week)
+where kind = 'forfeit'`. Assessing the same round twice takes nothing twice.
+
+The penalty is never more than the shortfall: it is the part you did not put at
+risk, not a fine on top of it. Someone with a balance of zero or less is
+skipped entirely.
+
+A league whose `bankroll_settings.playoff_round` is false is skipped, and the
+season simply ends at week 18.
+
+### What the player sees
+
+`bankroll_round_status(league_id, user_id)` returns one jsonb object — the
+week, the round name, the floor, the balance carried in, what has been staked,
+and the shortfall — and it is the *same arithmetic* `bankroll_apply_forfeits()`
+runs. What the banner warns about is what actually gets taken.
+
+It also answers "what week is it" for the betting game, which matters because
+the weekly game and the survivor pool stop at 18. `BankrollTab` derives its
+week from this call rather than from the shared `currentWeek` prop; borrowing
+that one would pin the board to week 18 for all of January.
+
+### Playoff games carry no `actual_spread`
+
+`sync-games` skips that column for weeks 19–22 and computes its freeze points
+from regular-season rows only. `actual_spread` belongs to the weekly prediction
+game, which does not run in the playoffs, and it carries the opposite sign
+convention to `spread_line` — writing it here would be a negation waiting to be
+read by the wrong side. The betting game reads `spread_line` and nothing else.
+
+The health check *Upcoming games without a line* is scoped to weeks 1–18 for
+the same reason: an unpriced playoff game in early January is a bracket that
+does not exist yet, not a broken feed.
+
 ## Standings and the house
 
 `bankroll_standings(league_id)` is a function rather than a view, because it

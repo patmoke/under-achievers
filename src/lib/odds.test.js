@@ -11,6 +11,7 @@ import {
   toDecimal, impliedProbability, fairProbability, houseHold,
   payout, combinedDecimal, gradeLeg, oddsFor, otherSideOdds,
   settleBet, slipProblem, MAX_LEGS, forSettlement, isPriced,
+  PLAYOFF_WEEKS, PLAYOFF_ROUNDS, isPlayoffWeek, weekLabel, requiredStake, shortfall,
 } from './odds';
 import { SEASON_2025, REGULAR_2025 } from './__fixtures__/season2025';
 
@@ -425,3 +426,87 @@ describe('mapping a games row for settlement', () => {
     expect(isPriced({ ...row, over_odds: null })).toBe(false);
   });
 });
+
+// ─── The playoff round ──────────────────────────────────────────────────────
+
+describe('playoff rounds', () => {
+  it('knows the four rounds and nothing else', () => {
+    expect(PLAYOFF_WEEKS).toEqual([19, 20, 21, 22]);
+    for (const w of [1, 10, 18, 23]) expect(isPlayoffWeek(w)).toBe(false);
+    for (const w of PLAYOFF_WEEKS) expect(isPlayoffWeek(w)).toBe(true);
+  });
+
+  it('names them, and leaves regular weeks as numbers', () => {
+    expect(weekLabel(19)).toBe('Wild Card');
+    expect(weekLabel(22)).toBe('Super Bowl');
+    expect(weekLabel(7)).toBe('Week 7');
+  });
+
+  it('climbs the floor as the field narrows', () => {
+    const floors = PLAYOFF_WEEKS.map(w => PLAYOFF_ROUNDS[w].floor);
+    expect(floors).toEqual([0.10, 0.20, 0.35, 0.60]);
+    for (let i = 1; i < floors.length; i++) expect(floors[i]).toBeGreaterThan(floors[i - 1]);
+  });
+
+  it('scales the minimum with whoever is holding it', () => {
+    // The point of a percentage: both players face the same decision.
+    expect(requiredStake(19, 1000)).toBe(100);
+    expect(requiredStake(19, 40)).toBe(4);
+    expect(requiredStake(22, 1000)).toBe(600);
+    expect(requiredStake(22, 40)).toBe(24);
+  });
+
+  it('asks nothing of a regular week or an empty balance', () => {
+    expect(requiredStake(12, 500)).toBe(0);
+    expect(requiredStake(19, 0)).toBe(0);
+    expect(requiredStake(19, -5)).toBe(0);
+  });
+
+  it('forfeits only the part you did not put at risk', () => {
+    expect(shortfall(19, 1000, 0)).toBe(100);    // bet nothing, lose the floor
+    expect(shortfall(19, 1000, 60)).toBe(40);    // bet 60 of 100, lose 40
+    expect(shortfall(19, 1000, 100)).toBe(0);    // met it exactly
+    expect(shortfall(19, 1000, 250)).toBe(0);    // over it, nothing owed
+  });
+
+  it('never penalises outside the playoffs', () => {
+    for (const w of [1, 9, 18]) expect(shortfall(w, 1000, 0)).toBe(0);
+  });
+
+  it('cannot take a balance to zero on its own', () => {
+    // Even doing nothing every round, the floor is a share of what is left, so
+    // it approaches zero without reaching it — nobody is knocked out.
+    let bal = 1000;
+    for (const w of PLAYOFF_WEEKS) bal = coast(bal, w);
+    expect(bal).toBeGreaterThan(0);
+    expect(bal).toBeLessThan(1000 * 0.9 * 0.8 * 0.65 * 0.4 + 0.01);
+  });
+
+  it('compounds, because each round is a share of what you carried in', () => {
+    // The rounds are assessed in order and each forfeit changes what the next
+    // one asks for. bankroll_apply_forfeits does this with an ORDER BY on the
+    // week; without it a batch catching two unassessed rounds at once would
+    // take an amount that depended on row order.
+    //
+    // 500 carried out of week 18, betting nothing:
+    expect(coast(500, 19)).toBe(450);        // 10% of 500
+    expect(coast(450, 20)).toBe(360);        // 20% of 450, not of 500
+    expect(coast(360, 21)).toBe(234);        // 35% of 360
+    expect(coast(234, 22)).toBe(93.6);       // 60% of 234
+
+    // Which is the number docs/bankroll.md quotes: coasting the whole
+    // postseason costs about 81% of a balance.
+    expect(1 - 93.6 / 500).toBeCloseTo(0.8128, 4);
+  });
+
+  it('takes only the part you did not risk, never a fine on top', () => {
+    // Staking 40 into a round that demanded 90 forfeits 50, not 90 — matching
+    // the note bankroll_apply_forfeits writes into the ledger.
+    expect(shortfall(20, 450, 40)).toBe(50);
+    expect(requiredStake(20, 450)).toBe(90);
+  });
+});
+
+/** One round of doing nothing: what a balance is worth after the forfeit. */
+const coast = (bal, week) =>
+  Math.round((bal - shortfall(week, bal, 0)) * 100) / 100;

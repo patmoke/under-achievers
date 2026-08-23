@@ -19,26 +19,33 @@ const signed = n => (Number(n) > 0 ? `+${fmt(n, 2)}` : fmt(n, 2));
 export default function BankrollStandings({ leagueId, currentUserId, currentWeek }) {
   const [rows, setRows] = useState([]);
   const [house, setHouse] = useState(null);
+  const [round, setRound] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
-    const [standingsRes, houseRes] = await Promise.all([
+    // bankroll_standings already counts this week's bets against its own
+    // playoff-aware week; this is only here so the column header agrees with
+    // the numbers underneath it.
+    const [standingsRes, houseRes, roundRes] = await Promise.all([
       supabase.rpc('bankroll_standings', { p_league_id: leagueId }),
       supabase.rpc('bankroll_house', { p_league_id: leagueId }),
+      supabase.rpc('bankroll_round_status', { p_league_id: leagueId, p_user_id: currentUserId }),
     ]);
     const sorted = (standingsRes.data || []).slice().sort(
       (a, b) => Number(b.balance) - Number(a.balance) || a.username.localeCompare(b.username));
     setRows(sorted);
     setHouse((houseRes.data || [])[0] || null);
+    setRound(roundRes.data || null);
     setLoading(false);
-  }, [leagueId]);
+  }, [leagueId, currentUserId]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   if (loading) return <p style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Loading standings…</p>;
 
   const settledBets = rows.reduce((n, r) => n + r.won + r.lost + r.pushed, 0);
+  const weekLabel = round?.round_name || `Week ${round?.week ?? currentWeek}`;
 
   return (
     <div>
@@ -46,7 +53,7 @@ export default function BankrollStandings({ leagueId, currentUserId, currentWeek
         <table style={{ width: '100%', minWidth: 560, borderCollapse: 'collapse', fontSize: 14 }}>
           <thead>
             <tr>
-              {['', 'Player', 'Balance', 'W–L–P', 'Best win', `Week ${currentWeek}`].map((h, i) => (
+              {['', 'Player', 'Balance', 'W–L–P', 'Best win', weekLabel].map((h, i) => (
                 <th key={h + i} className="label-muted" style={{
                   textAlign: i >= 2 ? 'right' : 'left',
                   padding: '8px 10px', borderBottom: '1px solid var(--border-strong)', whiteSpace: 'nowrap',

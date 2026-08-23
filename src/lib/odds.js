@@ -249,3 +249,58 @@ export function isPriced(row) {
     SIDES[market].every(side => toDecimal(oddsFor(row, market, side)) !== null)
   ) && row.spread_line !== null && row.total_line !== null;
 }
+
+// ─── The playoff round ──────────────────────────────────────────────────────
+//
+// The postseason runs on different rules to the season, on purpose. Balance
+// carries from week 18, no allowance arrives, and each round demands a minimum
+// stake as a share of what you brought into it — anything short is forfeited.
+//
+// That last rule answers the one weakness of the season format: unused units
+// bank, so a leader can protect a lead by not betting. Sitting out the
+// playoffs costs 60% of a balance by the Super Bowl.
+//
+// nflverse numbers the rounds 19 to 22 in the same `week` column as the
+// regular season, so nothing here needs remapping.
+
+export const PLAYOFF_WEEKS = [19, 20, 21, 22];
+
+export const PLAYOFF_ROUNDS = {
+  19: { name: 'Wild Card', floor: 0.10 },
+  20: { name: 'Divisional', floor: 0.20 },
+  21: { name: 'Conference', floor: 0.35 },
+  22: { name: 'Super Bowl', floor: 0.60 },
+};
+
+export const isPlayoffWeek = week => PLAYOFF_WEEKS.includes(Number(week));
+
+/** What a week is called. Regular weeks are just their number. */
+export function weekLabel(week) {
+  return PLAYOFF_ROUNDS[week]?.name ?? `Week ${week}`;
+}
+
+/**
+ * The minimum you must stake in a round, given the balance you brought in.
+ *
+ * A share rather than a fixed number so it scales with whoever is holding it:
+ * someone down to 40 units faces the same decision as someone on 900, and
+ * nobody is locked out or busted to exactly zero. Rounds to the cent, because
+ * that is what the ledger stores.
+ */
+export function requiredStake(week, balanceAtRoundOpen) {
+  const round = PLAYOFF_ROUNDS[week];
+  if (!round || !(balanceAtRoundOpen > 0)) return 0;
+  return round2(balanceAtRoundOpen * round.floor);
+}
+
+/**
+ * What is forfeited for under-staking a round.
+ *
+ * Zero outside the playoffs, and zero once you have met the floor. Never more
+ * than the shortfall itself — the penalty is the part you did not put at risk,
+ * not a fine on top of it.
+ */
+export function shortfall(week, balanceAtRoundOpen, staked) {
+  const required = requiredStake(week, balanceAtRoundOpen);
+  return round2(Math.max(0, required - (staked || 0)));
+}

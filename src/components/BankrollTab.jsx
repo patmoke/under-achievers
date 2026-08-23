@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { Clock, X, Trophy, Info } from 'lucide-react';
+import { Clock, X, Trophy, Info, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   MARKETS, SIDES, oddsFor, otherSideOdds, lineFor, isPriced,
@@ -80,6 +80,7 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
   const [games, setGames] = useState([]);
   const [bets, setBets] = useState([]);
   const [balance, setBalance] = useState(null);
+  const [round, setRound] = useState(null);
   const [slip, setSlip] = useState([]);      // [{ game_id, market, side }]
   const [stake, setStake] = useState('');
   const [loading, setLoading] = useState(true);
@@ -95,9 +96,19 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
     // load is free.
     await supabase.rpc('bankroll_credit_allowances', { p_league_id: leagueId });
 
+    // This game runs to week 22. The weekly game and the survivor pool stop at
+    // 18, so their week — the `currentWeek` prop — cannot be borrowed once the
+    // playoffs start; it would pin the board to week 18 all January. The same
+    // call also carries what this round demands you put at risk.
+    const { data: roundData } = await supabase.rpc('bankroll_round_status', {
+      p_league_id: leagueId, p_user_id: currentUserId,
+    });
+    const wk = roundData?.week ?? currentWeek;
+    setRound(roundData || null);
+
     const [gamesRes, betsRes, balanceRes] = await Promise.all([
       supabase.from('games').select('*')
-        .eq('season', season).eq('week', currentWeek).order('game_time'),
+        .eq('season', season).eq('week', wk).order('game_time'),
       supabase.from('bets')
         .select('*, bet_legs(*, games(home_team_abbr, away_team_abbr, game_time))')
         .eq('league_id', leagueId).eq('user_id', currentUserId)
@@ -181,10 +192,12 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
     return <p style={{ color: 'var(--ink-soft)', fontSize: 14 }}>Loading the board…</p>;
   }
 
+  const week = round?.week ?? currentWeek;
+  const label = round?.round_name || `Week ${week}`;
   const openBets = bets.filter(b => b.status === 'open');
   const settled = bets.filter(b => b.status !== 'open');
   const stakedThisWeek = openBets
-    .filter(b => b.week === currentWeek)
+    .filter(b => b.week === week)
     .reduce((sum, b) => sum + Number(b.stake), 0);
 
   return (
@@ -199,22 +212,27 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
           </div>
         </div>
         <div>
-          <div className="label-muted" style={{ marginBottom: 2 }}>Week {currentWeek}</div>
+          <div className="label-muted" style={{ marginBottom: 2 }}>{label}</div>
           <div style={{ fontSize: 14, color: 'var(--ink-soft)' }}>
-            {openBets.filter(b => b.week === currentWeek).length} open
+            {openBets.filter(b => b.week === week).length} open
             {stakedThisWeek > 0 && ` · ${formatUnits(stakedThisWeek)} at risk`}
           </div>
         </div>
       </div>
 
+      {round?.is_playoff && <PlayoffRound round={round} />}
+
       {/* The board */}
-      <h3 style={{ fontSize: 20, textTransform: 'none', marginBottom: 4 }}>Week {currentWeek} board</h3>
+      <h3 style={{ fontSize: 20, textTransform: 'none', marginBottom: 4 }}>{label} board</h3>
       {board.length === 0 ? (
         <div className="card" style={{ padding: 20, marginBottom: 24 }}>
           <p style={{ margin: 0, color: 'var(--ink-soft)', fontSize: 14, lineHeight: 1.6 }}>
             <Info size={14} style={{ verticalAlign: -2, marginRight: 6 }} />
-            No prices for week {currentWeek} yet. Books post a few weeks ahead rather
-            than a whole season, so this fills in closer to kickoff.
+            {round?.is_playoff
+              ? `No prices for the ${label} yet. The bracket is not set until the
+                 round before it finishes, so these appear once the matchups exist.`
+              : `No prices for week ${week} yet. Books post a few weeks ahead rather
+                 than a whole season, so this fills in closer to kickoff.`}
           </p>
         </div>
       ) : (
@@ -359,6 +377,74 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
           {[...openBets, ...settled].map(bet => <BetRow key={bet.id} bet={bet} />)}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * The playoff round's terms, stated before anyone bets rather than after.
+ *
+ * The season's one weakness is that unused units bank, so a leader can protect
+ * a lead by sitting still. The floor closes it: a round costs you a share of
+ * what you brought into it whether or not you use it, and the share climbs to
+ * 60% by the Super Bowl. Sitting out is the most expensive thing you can do.
+ *
+ * Every figure here comes from bankroll_round_status, which is the same
+ * arithmetic bankroll_apply_forfeits runs when the round is over — so what this
+ * warns about is exactly what gets taken.
+ */
+function PlayoffRound({ round }) {
+  const short = Number(round.shortfall);
+  const met = short <= 0;
+  return (
+    <div className="card" style={{
+      padding: 18, marginBottom: 20,
+      borderColor: met ? 'var(--border-strong)' : 'var(--danger)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+        <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 21, letterSpacing: '.01em' }}>
+          {round.round_name}
+        </strong>
+        <span className="label-muted">
+          No new allowance · {Math.round(Number(round.stake_floor) * 100)}% minimum stake
+        </span>
+      </div>
+
+      <div style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))' }}>
+        <RoundFigure label="Carried in" value={formatUnits(round.balance_at_open)} />
+        <RoundFigure label="Must stake" value={formatUnits(round.required)} />
+        <RoundFigure label="Staked" value={formatUnits(round.staked)}
+                     tone={met ? 'accent' : 'ink'} />
+      </div>
+
+      <p style={{ margin: '12px 0 0', fontSize: 13, lineHeight: 1.6,
+                  color: met ? 'var(--ink-faint)' : 'var(--danger)' }}>
+        {met ? (
+          <>
+            <Trophy size={12} style={{ verticalAlign: -1, marginRight: 5 }} />
+            You have met the minimum for this round. Anything further is your own call.
+          </>
+        ) : (
+          <>
+            <AlertTriangle size={12} style={{ verticalAlign: -1, marginRight: 5 }} />
+            {formatUnits(short)} units short. Whatever you have not put at risk by the
+            last kickoff of this round is forfeited.
+          </>
+        )}
+      </p>
+    </div>
+  );
+}
+
+function RoundFigure({ label, value, tone = 'ink' }) {
+  return (
+    <div>
+      <div className="label-muted" style={{ marginBottom: 3 }}>{label}</div>
+      <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 24, lineHeight: 1,
+                    fontVariantNumeric: 'tabular-nums',
+                    color: tone === 'accent' ? 'var(--accent)' : 'var(--ink)' }}>
+        {value}
+      </div>
     </div>
   );
 }
