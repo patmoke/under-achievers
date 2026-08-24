@@ -9,6 +9,7 @@ import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
 import BankrollTab from './BankrollTab';
 import BankrollStandings from './BankrollStandings';
+import HowThisWorks from './HowThisWorks';
 
 const CURRENT_SEASON = 2026;
 
@@ -513,6 +514,11 @@ export default function LeaguePage() {
           <FlaskConical size={14} /> Admin test view — viewing this league as Week {weekOverride} (real week is {currentWeek}). Remove <code>?week=</code> from the URL to see it live.
         </div>
       )}
+
+      {/* Above the main tab only. Someone on Members or Standings has already
+          found their way around; someone landing on the game itself may not
+          know what game it is. */}
+      {tab === availableTabs[0] && <HowThisWorks competeOn={competeOn} />}
 
       {/* SURVIVOR (primary content for survivor-type leagues) */}
       {isSurvivor && tab === 'survivor' && (
