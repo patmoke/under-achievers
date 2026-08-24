@@ -34,6 +34,28 @@ the current week, and a partial unique index on
 credit impossible even if two people open the standings in the same second.
 Nothing to schedule and nothing that can quietly stop running.
 
+### The settings row is seeded by a trigger
+
+`bankroll_settings` is not optional — `place_bet` refuses outright without one,
+and `bankroll_credit_allowances` joins to it for the weekly amount — so a
+trigger on `leagues` creates it whenever a `compete_on = 'bankroll'` league is
+inserted.
+
+It used to be a client insert after creating the league, and **it never once
+worked**. `bankroll_settings` has RLS on with SELECT and UPDATE policies and no
+INSERT policy, so every attempt was refused; the call didn't check its error, so
+the league was created looking perfectly normal and was simply unusable. No
+allowance credited, balance stuck at zero, every slip refused, and nothing on
+screen saying why. The first betting league anyone made hit it.
+
+A trigger rather than a new INSERT policy: whether the row exists is not the
+client's business to get right. Two health checks now watch for it anyway —
+*Betting leagues with no settings* (the cause) and *Betting members never
+credited* (the symptom, whatever the cause) — both alerts.
+
+The other writes in the league-creation path are now error-checked too. A
+half-made league should fail loudly.
+
 ## Placing a bet
 
 `place_bet(league_id, stake, legs)` is the only way a bet comes into existence.

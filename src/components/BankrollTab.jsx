@@ -4,7 +4,7 @@ import { Clock, X, Trophy, Info, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   MARKETS, SIDES, oddsFor, otherSideOdds, lineFor, isPriced,
-  payout, houseHold, slipProblem,
+  payout, slipProblem,
 } from '../lib/odds';
 
 /** −110 rather than -110: a real minus sign, so prices line up in a column. */
@@ -163,7 +163,6 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
   const stakeValid = stake !== '' && Number.isFinite(stakeNum) && stakeNum > 0;
   const overBalance = stakeValid && balance !== null && stakeNum > balance;
   const toReturn = stakeValid && pricedSlip.length ? payout(stakeNum, pricedSlip) : null;
-  const hold = pricedSlip.length ? houseHold(pricedSlip) : null;
   const canPlace = !problem && stakeValid && !overBalance && pricedSlip.length > 0 && !placing;
 
   async function place() {
@@ -338,16 +337,6 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
             {overBalance && (
               <p style={{ margin: '10px 0 0', fontSize: 13.5, color: 'var(--danger)' }}>
                 That is more than your {formatUnits(balance)} units.
-              </p>
-            )}
-
-            {/* The house's cut, shown rather than buried. It is the honest
-                answer to "why does a five-leg pay so badly", and it climbs
-                visibly as legs go on. */}
-            {hold !== null && (
-              <p style={{ margin: '10px 0 0', fontSize: 12.5, color: 'var(--ink-faint)' }}>
-                House edge on this slip: {(hold * 100).toFixed(1)}%
-                {slip.length > 1 && ' — the edge is taken on every leg'}
               </p>
             )}
 

@@ -162,7 +162,7 @@ export const MODES = [
       {
         heading: 'The house',
         points: [
-          'The prices carry an edge, the same way real ones do. Your slip shows exactly what that edge is before you place it, and it climbs with every leg you add.',
+          'The prices carry an edge, the same way real ones do. It is taken on every leg, which is why a five-leg parlay pays worse than five singles.',
           'The league page shows what the house has taken and what the prices say it should have taken. Over enough bets the two meet; the gap in between is luck, not anyone\'s skill.',
         ],
       },
