@@ -6,7 +6,7 @@ import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull
 import toast from 'react-hot-toast';
 
 const LEAGUE_TYPES = [
-  { val: 'weekly', label: 'Weekly Picks', desc: 'Predict NFL spreads every week', icon: Calendar },
+  { val: 'weekly', label: 'Call the Line', desc: 'Predict NFL spreads every week', icon: Calendar },
   { val: 'survivor', label: 'Survivor Pool', desc: 'Pick a winner each week — lose and you’re out', icon: Skull },
   { val: 'bankroll', label: 'Bankroll', desc: 'Bet units on real lines — most units at week 18 wins', icon: Coins },
 ];
