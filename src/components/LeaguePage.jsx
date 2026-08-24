@@ -14,7 +14,7 @@ import HowThisWorks from './HowThisWorks';
 const CURRENT_SEASON = 2026;
 
 const TYPE_ICON = { weekly: Calendar, survivor: Skull, bankroll: Coins };
-const TYPE_LABEL = { weekly: 'Weekly Picks', survivor: 'Survivor Pool', bankroll: 'Bankroll' };
+const TYPE_LABEL = { weekly: 'Call the Line', survivor: 'Survivor Pool', bankroll: 'Bankroll' };
 
 export default function LeaguePage() {
   const { id } = useParams();
@@ -341,7 +341,7 @@ export default function LeaguePage() {
     bankroll: 'The board',
     standings: 'Standings',
     leaderboard: 'Leaderboard',
-    weekly: 'Weekly picks',
+    weekly: 'Call the line',
     members: `Members (${members.length})`,
   };
   const TABS = availableTabs.map(key => ({ key, label: TAB_LABELS[key] }));

@@ -16,6 +16,14 @@ describe('rules content', () => {
     expect(MODES.map(m => m.key)).toEqual(['weekly', 'survivor', 'bankroll']);
   });
 
+  it('names each mode the way the rest of the app names it', () => {
+    // These strings are duplicated in LeaguePage's TYPE_LABEL and TAB_LABELS
+    // and in LeaguesPage's type picker. Nothing links them, so a rename has to
+    // be made in all four places — this is here so a half-done one is loud
+    // rather than a mode called two different things on two screens.
+    expect(MODES.map(m => m.title)).toEqual(['Call the Line', 'Survivor Pool', 'Bankroll']);
+  });
+
   it('gives every mode a blurb, a summary and sections', () => {
     for (const mode of MODES) {
       expect(mode.title).toBeTruthy();

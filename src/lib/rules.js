@@ -22,7 +22,7 @@ const playoffFloors = PLAYOFF_WEEKS
 export const MODES = [
   {
     key: 'weekly',
-    title: 'Weekly Picks',
+    title: 'Call the Line',
     blurb: 'Predict the point spread for every game. Closest to the real line wins it.',
     summary: [
       'Predict the spread for every game before it kicks off.',
