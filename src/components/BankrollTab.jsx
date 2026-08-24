@@ -4,7 +4,7 @@ import { Clock, X, Trophy, Info, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   MARKETS, SIDES, oddsFor, otherSideOdds, lineFor, isPriced,
-  payout, slipProblem,
+  payout, slipProblem, parlayOdds,
 } from '../lib/odds';
 
 /** −110 rather than -110: a real minus sign, so prices line up in a column. */
@@ -163,6 +163,9 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
   const stakeValid = stake !== '' && Number.isFinite(stakeNum) && stakeNum > 0;
   const overBalance = stakeValid && balance !== null && stakeNum > balance;
   const toReturn = stakeValid && pricedSlip.length ? payout(stakeNum, pricedSlip) : null;
+  // The price for the whole slip. A single already shows its price on its own
+  // row, so this only earns its place once the legs start multiplying.
+  const combined = pricedSlip.length > 1 ? parlayOdds(pricedSlip) : null;
   const canPlace = !problem && stakeValid && !overBalance && pricedSlip.length > 0 && !placing;
 
   async function place() {
@@ -282,7 +285,17 @@ export default function BankrollTab({ leagueId, currentUserId, season, currentWe
       {slip.length > 0 && (
         <div className="card" style={{ padding: 0, marginBottom: 28, overflow: 'hidden', position: 'sticky', bottom: 16, boxShadow: 'var(--shadow-card-hover)' }}>
           <div style={{ padding: '10px 18px', background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between' }}>
-            <span className="label-muted">{slip.length === 1 ? 'Bet slip' : `${slip.length}-leg parlay`}</span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+              <span className="label-muted">{slip.length === 1 ? 'Bet slip' : `${slip.length}-leg parlay`}</span>
+              {combined !== null && (
+                <strong style={{
+                  fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17, lineHeight: 1,
+                  color: 'var(--accent)', fontVariantNumeric: 'tabular-nums',
+                }}>
+                  {formatOdds(combined)}
+                </strong>
+              )}
+            </span>
             <button onClick={() => setSlip([])} style={{ background: 'none', border: 'none', color: 'var(--ink-soft)', cursor: 'pointer', fontSize: 12, display: 'flex', alignItems: 'center', gap: 4 }}>
               <X size={12} /> Clear
             </button>
@@ -460,7 +473,14 @@ function BetRow({ bet }) {
             {formatUnits(bet.stake)} units
           </strong>
           {legs.length > 1 && (
-            <span style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>{legs.length}-leg parlay</span>
+            <span style={{ fontSize: 12.5, color: 'var(--ink-soft)' }}>
+              {legs.length}-leg parlay
+              {parlayOdds(legs) !== null && (
+                <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14, marginLeft: 6, fontVariantNumeric: 'tabular-nums' }}>
+                  {formatOdds(parlayOdds(legs))}
+                </span>
+              )}
+            </span>
           )}
         </span>
         {settledProfit !== null && (

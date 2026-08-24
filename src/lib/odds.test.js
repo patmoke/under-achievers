@@ -12,6 +12,7 @@ import {
   payout, combinedDecimal, gradeLeg, oddsFor, otherSideOdds,
   settleBet, slipProblem, MAX_LEGS, forSettlement, isPriced,
   PLAYOFF_WEEKS, PLAYOFF_ROUNDS, isPlayoffWeek, weekLabel, requiredStake, shortfall,
+  toAmerican, parlayOdds,
 } from './odds';
 import { SEASON_2025, REGULAR_2025 } from './__fixtures__/season2025';
 
@@ -424,6 +425,74 @@ describe('mapping a games row for settlement', () => {
     expect(isPriced({ ...row, total_line: null })).toBe(false);
     expect(isPriced({ ...row, home_moneyline: null })).toBe(false);
     expect(isPriced({ ...row, over_odds: null })).toBe(false);
+  });
+});
+
+// ─── The combined price ─────────────────────────────────────────────────────
+
+describe('toAmerican', () => {
+  it('is the inverse of toDecimal for standard prices', () => {
+    for (const price of [-110, -185, -250, 100, 150, 265, 1200]) {
+      expect(toAmerican(toDecimal(price))).toBe(price);
+    }
+  });
+
+  it('crosses over at evens', () => {
+    expect(toAmerican(2)).toBe(100);
+    expect(toAmerican(2.01)).toBe(101);
+    expect(toAmerican(1.99)).toBe(-101);
+  });
+
+  it('refuses a multiplier that cannot be a price', () => {
+    // A decimal of 1 or less would mean a bet that returns less than the
+    // stake when it wins.
+    expect(toAmerican(1)).toBeNull();
+    expect(toAmerican(0.5)).toBeNull();
+    expect(toAmerican(null)).toBeNull();
+    expect(toAmerican(NaN)).toBeNull();
+  });
+});
+
+describe('parlayOdds', () => {
+  const leg = odds => ({ odds });
+
+  it('prices a single at its own price', () => {
+    expect(parlayOdds([leg(-110)])).toBe(-110);
+    expect(parlayOdds([leg(150)])).toBe(150);
+  });
+
+  it('prices the standard two-team parlay at +264', () => {
+    // 1.909091² = 3.6446, which every book in the world quotes as +264.
+    expect(parlayOdds([leg(-110), leg(-110)])).toBe(264);
+  });
+
+  it('prices the standard three- and four-team parlays', () => {
+    expect(parlayOdds([leg(-110), leg(-110), leg(-110)])).toBe(596);
+    expect(parlayOdds([leg(-110), leg(-110), leg(-110), leg(-110)])).toBe(1228);
+  });
+
+  it('handles mixed favourites and underdogs', () => {
+    // 1.5405 × 2.5 = 3.8512
+    expect(parlayOdds([leg(-185), leg(150)])).toBe(285);
+  });
+
+  it('drops a pushed leg, so the slip reprices as one leg shorter', () => {
+    const withPush = [leg(-110), leg(-110), { odds: -110, outcome: 'push' }];
+    expect(parlayOdds(withPush)).toBe(parlayOdds([leg(-110), leg(-110)]));
+  });
+
+  it('agrees with the payout it is shown next to', () => {
+    // The price is rounded for display and the payout is not, so they can
+    // differ by a rounding step — but never by more than one unit per 100
+    // staked, which is what makes showing the rounded number honest.
+    const legs = [leg(-110), leg(-115), leg(120)];
+    const shown = parlayOdds(legs);
+    const impliedReturn = 100 * (shown > 0 ? 1 + shown / 100 : 1 + 100 / Math.abs(shown));
+    expect(Math.abs(payout(100, legs) - impliedReturn)).toBeLessThan(1);
+  });
+
+  it('returns null when a leg has no price', () => {
+    expect(parlayOdds([leg(-110), leg(null)])).toBeNull();
   });
 });
 

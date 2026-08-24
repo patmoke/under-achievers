@@ -81,6 +81,32 @@ export function payout(stake, legs) {
   return dec === null ? null : round2(stake * dec);
 }
 
+/**
+ * A decimal multiplier back as American odds.
+ *
+ * The inverse of toDecimal, and lossy on purpose: books quote whole numbers, so
+ * two −110 legs show as +264 rather than +264.4628. The payout is always
+ * computed from the exact decimal, never from this — what is shown is the
+ * price, what is paid is the arithmetic, and they can differ by a rounding
+ * step on a long parlay.
+ */
+export function toAmerican(decimal) {
+  const d = Number(decimal);
+  if (!Number.isFinite(d) || d <= 1) return null;
+  return d >= 2 ? Math.round((d - 1) * 100) : -Math.round(100 / (d - 1));
+}
+
+/**
+ * What a whole slip is priced at, as one American number.
+ *
+ * This is the figure people mean by "what does the parlay pay" — the thing a
+ * bet slip anywhere else in the world puts at the top.
+ */
+export function parlayOdds(legs) {
+  const dec = combinedDecimal(legs);
+  return dec === null ? null : toAmerican(dec);
+}
+
 /** The multiplier for a slip. Legs multiply; a pushed leg counts as 1. */
 export function combinedDecimal(legs) {
   let dec = 1;
