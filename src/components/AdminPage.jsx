@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Lock, Unlock, Plus, Save, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
+import { Lock, Unlock, Plus, Save, ChevronDown, ChevronUp, RefreshCw, Coins } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const CURRENT_SEASON = 2026;
@@ -37,6 +37,7 @@ export default function AdminPage() {
   const [saving, setSaving] = useState({});
   const [showAddGame, setShowAddGame] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [settling, setSettling] = useState(false);
 
   // New game form
   const [newGame, setNewGame] = useState({ week: '', home_team: '', home_team_abbr: '', away_team: '', away_team_abbr: '', game_time: '', actual_spread: '', bookmaker: 'DraftKings' });
@@ -136,6 +137,7 @@ export default function AdminPage() {
       const lines = [
         data?.linesWritten ? `${data.linesWritten} lines updated` : null,
         data?.linesFrozen ? `${data.linesFrozen} frozen` : null,
+        data?.marketsWritten ? `${data.marketsWritten} priced` : null,
         errCount ? `${errCount} errors` : null,
       ].filter(Boolean);
       toast.success(`Synced ${data?.synced ?? 0} games${lines.length ? ` — ${lines.join(', ')}` : ''}`);
@@ -145,6 +147,33 @@ export default function AdminPage() {
       toast.error(err.message || 'Sync failed');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  /**
+   * Settles any bet whose games have all finished.
+   *
+   * Normally this runs on its own, ten minutes after each sync. The button
+   * exists for the case that matters — scores landed late, or a run failed —
+   * where the alternative is telling someone to wait half an hour to be paid.
+   * Safe to press repeatedly: a second run over the same bets pays nothing
+   * twice.
+   */
+  async function settleBets() {
+    setSettling(true);
+    try {
+      const { data, error } = await supabase.rpc('admin_settle_bets');
+      if (error) throw error;
+      const r = Array.isArray(data) ? data[0] : data;
+      const settled = r?.bets_settled ?? 0;
+      toast.success(settled === 0
+        ? 'Nothing left to settle'
+        : `Settled ${settled} bet${settled === 1 ? '' : 's'} — ${r?.paid_out ?? 0} units paid`);
+      fetchAll();
+    } catch (err) {
+      toast.error(err.message || 'Could not settle');
+    } finally {
+      setSettling(false);
     }
   }
 
@@ -266,6 +295,9 @@ export default function AdminPage() {
             <>
               <button className="btn btn-secondary" onClick={syncGames} disabled={syncing} title="Pull the season schedule, lines, and results from nflverse" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <RefreshCw size={16} style={syncing ? { animation: 'spin 1s linear infinite' } : undefined} /> {syncing ? 'Syncing…' : 'Sync games'}
+              </button>
+              <button className="btn btn-secondary" onClick={settleBets} disabled={settling} title="Grade and pay out any bet whose games have all finished. Safe to press twice." style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Coins size={16} /> {settling ? 'Settling…' : 'Settle bets'}
               </button>
               <button className="btn btn-primary" onClick={() => setShowAddGame(!showAddGame)} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <Plus size={16} /> Add game

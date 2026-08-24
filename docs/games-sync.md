@@ -42,7 +42,42 @@ returns to the foreground. That matters for the installed app specifically: a
 PWA left open across a Sunday night used to hold the old week indefinitely,
 which meant picking into a week that had already closed.
 
+## What a row carries
+
+The feed publishes a full three-market picture per game, and all of it is now
+kept:
+
+| Column | Is |
+|---|---|
+| `actual_spread` | The weekly picks game's number. **Negated** — negative means home favoured. |
+| `spread_line` | The betting game's number. The feed's own convention — **positive** means home favoured. |
+| `home_spread_odds` · `away_spread_odds` | Prices on each side of the spread |
+| `total_line` · `over_odds` · `under_odds` | The over/under and its prices |
+| `home_moneyline` · `away_moneyline` | Straight-winner prices |
+
+There is no stored result or points total. `home_score` and `away_score` are
+already there and both are derivable, so a second copy could only ever disagree
+with the first — `forSettlement()` in `src/lib/odds.js` derives them on read.
+
+### The two spreads carry opposite signs, on purpose
+
+`actual_spread` is `spread_line` negated. Both sit on the same row. Read the
+one belonging to the game you are working on and never the other — mixing them
+produces bets that settle backwards and look nearly right, which is the worst
+kind of bug to find in week 9.
+
+A sync run asserts they stay exact mirrors; a check in Admin → Health would
+catch a drift, and the migration that added these columns verified all 112
+priced games agreed.
+
 ## When lines freeze
+
+This applies to **`actual_spread` only**. The betting markets do not freeze —
+they track right up to kickoff and stop there, so what is left on a played game
+is the closing line. A bet stores the price it was struck at, so a line moving
+underneath it changes nothing already placed; the freeze exists because the
+weekly game grades everyone against one shared number, and the betting game
+does not.
 
 **A week's lines stop moving after the last Sunday game before that week's
 first kickoff** — in practice, Sunday night's game plus four hours, so a little

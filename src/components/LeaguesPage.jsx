@@ -2,12 +2,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy, Share2 } from 'lucide-react';
+import { Plus, Lock, Globe, Users, ChevronRight, Copy, Check, X, Calendar, Skull, Key, Trophy, Share2, Coins } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const LEAGUE_TYPES = [
   { val: 'weekly', label: 'Weekly Picks', desc: 'Predict NFL spreads every week', icon: Calendar },
   { val: 'survivor', label: 'Survivor Pool', desc: 'Pick a winner each week — lose and you’re out', icon: Skull },
+  { val: 'bankroll', label: 'Bankroll', desc: 'Bet units on real lines — most units at week 18 wins', icon: Coins },
 ];
 
 function leagueTypeInfo(competeOn) {
@@ -108,20 +109,30 @@ export default function LeaguesPage() {
 
       if (error) throw error;
 
-      // Auto-join as owner
-      await supabase.from('league_members').insert({
+      // Every follow-up write is checked. These used to be fire-and-forget,
+      // and a betting league's settings insert was being refused by RLS on
+      // every single attempt — the league came out looking fine and was
+      // unusable, with a balance stuck at zero and nothing on screen saying
+      // why. A half-made league should fail loudly.
+      const { error: memberError } = await supabase.from('league_members').insert({
         league_id: league.id,
         user_id: user.id,
         role: 'owner',
       });
+      if (memberError) throw memberError;
+
+      // A bankroll league's settings row is seeded by a trigger on `leagues`,
+      // not from here. It is not optional — place_bet refuses without one —
+      // so its existence isn't left to a client call that might not land.
 
       // Survivor pools auto-create the owner's first entry
       if (form.compete_on === 'survivor') {
-        await supabase.from('survivor_entries').insert({
+        const { error: entryError } = await supabase.from('survivor_entries').insert({
           league_id: league.id,
           user_id: user.id,
           entry_number: 1,
         });
+        if (entryError) throw entryError;
       }
 
       toast.success('League created!');

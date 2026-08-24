@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import SponsorBanner from './SponsorBanner';
 import { SPONSOR } from '../lib/sponsor';
 // Deliberately reachable signed out. The person most likely to need it is the
@@ -45,6 +46,15 @@ export default function Footer({ masthead = false }) {
 
       <div style={{ padding: '24px 24px 20px', textAlign: 'center' }}>
         <SponsorBanner />
+
+        {/* Above the support line on purpose. Half of what reaches that inbox
+            is a rule someone didn't know about, and this answers it first. */}
+        <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '0 0 10px' }}>
+          New here, or not sure how a game works?{' '}
+          <Link to="/rules" style={{ color: 'var(--accent)', fontWeight: 600 }}>
+            Read the rules
+          </Link>
+        </p>
 
         <p style={{ fontSize: 13, color: 'var(--ink-soft)', margin: '0 0 4px' }}>
           Something broken, or a result that doesn't look right?{' '}

@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import LandingPage from './components/LandingPage';
@@ -13,6 +13,7 @@ import LeaguePage from './components/LeaguePage';
 import JoinLeaguePage from './components/JoinLeaguePage';
 import ResetPasswordPage from './components/ResetPasswordPage';
 import UserProfilePage from './components/UserProfilePage';
+import RulesPage from './components/RulesPage';
 import Footer from './components/Footer';
 import ReloadPrompt from './components/ReloadPrompt';
 import { landingPath } from './lib/membership';
@@ -29,6 +30,35 @@ function ProtectedLayout({ children }) {
       {/* Above the page rather than on the profile: it has to find people
           where they already are, not where the setting happens to live. */}
       <NotifyPrompt userId={user.id} />
+      {children}
+      <Footer />
+    </div>
+  );
+}
+
+/**
+ * The rules, wrapped so they work either side of the login.
+ *
+ * Deliberately not a ProtectedLayout. Someone weighing up an invite has no
+ * account yet, and they are the reader most likely to need this — the same
+ * reason the support address in the footer sits outside the login. Signed in,
+ * it looks like any other page; signed out, it gets a brand bar back to the
+ * front page, since there is no nav to carry them there.
+ */
+function RulesLayout({ children }) {
+  const { user } = useAuth();
+  return (
+    <div style={{ minHeight: '100vh', background: 'var(--paper)', display: 'flex', flexDirection: 'column' }}>
+      {user ? <Navigation /> : (
+        <div style={{ borderBottom: '1px solid var(--border)', padding: '18px 24px' }}>
+          <Link to="/" style={{
+            fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 18,
+            color: 'var(--ink)', textDecoration: 'none', letterSpacing: '.01em',
+          }}>
+            Under Achievers
+          </Link>
+        </div>
+      )}
       {children}
       <Footer />
     </div>
@@ -86,6 +116,8 @@ function AppRoutes() {
           in normally. */}
       <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/users/:id" element={<ProtectedLayout><UserProfilePage /></ProtectedLayout>} />
+      <Route path="/rules" element={<RulesLayout><RulesPage /></RulesLayout>} />
+      <Route path="/rules/:mode" element={<RulesLayout><RulesPage /></RulesLayout>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

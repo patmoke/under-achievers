@@ -1,7 +1,15 @@
 import { useState } from 'react';
-import { TrendingUp, Target, Trophy, Users, ChevronRight, Lock, Zap, BarChart3, ListChecks } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { TrendingUp, Target, Trophy, Users, ChevronRight, Lock, Zap, BarChart3, ListChecks, Skull, Coins } from 'lucide-react';
 import AuthModal from './AuthModal';
 import Footer from './Footer';
+import { MODES } from '../lib/rules';
+
+// The three games, in the order the rules page lists them. Written from MODES
+// so the front page cannot end up describing a game differently from the rules
+// — which is exactly what it used to do: it described the weekly game's old
+// scoring, dropped years ago, and never mentioned the other two at all.
+const MODE_ICON = { weekly: <Target size={28} />, survivor: <Skull size={28} />, bankroll: <Coins size={28} /> };
 
 const SAMPLE_LEADERS = [
   { rank: 1, username: 'PickMaster99', points: 847, accuracy: '78%', weeks: 4 },
@@ -101,22 +109,30 @@ export default function LandingPage() {
       {/* How It Works */}
       <section style={{ padding: '56px 24px', borderTop: '1px solid var(--border)' }}>
         <div style={{ maxWidth: 1100, margin: '0 auto' }}>
-          <h2 style={{ textAlign: 'center', fontSize: 36, marginBottom: 40, color: 'var(--ink)', textTransform: 'none' }}>
-            How it works
+          <h2 style={{ textAlign: 'center', fontSize: 36, marginBottom: 10, color: 'var(--ink)', textTransform: 'none' }}>
+            Three games
           </h2>
+          <p style={{ textAlign: 'center', color: 'var(--ink-soft)', fontSize: 15, margin: '0 auto 36px', maxWidth: 560, lineHeight: 1.6 }}>
+            A league plays one of them, picked by whoever set it up. You can be in as
+            many as you like.
+          </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
-            {[
-              { icon: <Target size={28} />, step: '01', title: 'Make your picks', desc: 'Every week, predict the point spread for each NFL game before kickoff.' },
-              { icon: <TrendingUp size={28} />, step: '02', title: 'Score points', desc: 'The closer your prediction to the actual line, the more points you earn. Add confidence for bigger rewards.' },
-              { icon: <Trophy size={28} />, step: '03', title: 'Climb the ranks', desc: 'Compete on weekly and season-long leaderboards and earn bragging rights.' },
-            ].map(item => (
-              <div key={item.step} className="card" style={{ padding: 28 }}>
+            {MODES.map((mode, i) => (
+              <div key={mode.key} className="card" style={{ padding: 28, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
-                  <div style={{ color: 'var(--accent)' }}>{item.icon}</div>
-                  <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 40, color: 'var(--accent-soft)', lineHeight: 1 }}>{item.step}</span>
+                  <div style={{ color: 'var(--accent)' }}>{MODE_ICON[mode.key]}</div>
+                  <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 40, color: 'var(--accent-soft)', lineHeight: 1 }}>
+                    {String(i + 1).padStart(2, '0')}
+                  </span>
                 </div>
-                <h3 style={{ fontSize: 19, marginBottom: 10, textTransform: 'none' }}>{item.title}</h3>
-                <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, fontSize: 14.5 }}>{item.desc}</p>
+                <h3 style={{ fontSize: 19, marginBottom: 10, textTransform: 'none' }}>{mode.title}</h3>
+                <p style={{ color: 'var(--ink-soft)', lineHeight: 1.6, fontSize: 14.5, marginBottom: 14 }}>{mode.blurb}</p>
+                <Link
+                  to={`/rules/${mode.key}`}
+                  style={{ marginTop: 'auto', fontSize: 13.5, color: 'var(--accent)', fontWeight: 600 }}
+                >
+                  How it works →
+                </Link>
               </div>
             ))}
           </div>

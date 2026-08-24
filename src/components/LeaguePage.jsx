@@ -4,14 +4,17 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, confidenceBudget, buildStandings } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
-import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight, Mail } from 'lucide-react';
+import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Coins, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import SurvivorTab from './SurvivorTab';
+import BankrollTab from './BankrollTab';
+import BankrollStandings from './BankrollStandings';
+import HowThisWorks from './HowThisWorks';
 
 const CURRENT_SEASON = 2026;
 
-const TYPE_ICON = { weekly: Calendar, survivor: Skull };
-const TYPE_LABEL = { weekly: 'Weekly Picks', survivor: 'Survivor Pool' };
+const TYPE_ICON = { weekly: Calendar, survivor: Skull, bankroll: Coins };
+const TYPE_LABEL = { weekly: 'Weekly Picks', survivor: 'Survivor Pool', bankroll: 'Bankroll' };
 
 export default function LeaguePage() {
   const { id } = useParams();
@@ -63,6 +66,7 @@ export default function LeaguePage() {
   const [myWeekPicks, setMyWeekPicks] = useState([]);
 
   const isSurvivor = league?.compete_on === 'survivor';
+  const isBankroll = league?.compete_on === 'bankroll';
 
   const fetchLeague = useCallback(async () => {
     setLoading(true);
@@ -150,8 +154,8 @@ export default function LeaguePage() {
   useEffect(() => {
     // Skipped for non-members: a public league renders as a preview, so
     // loading the week's picks would be work nobody sees.
-    if (league && myMembership && members.length > 0 && !isSurvivor) checkAllSubmittedThenFetch();
-  }, [league, myMembership, members, isSurvivor, checkAllSubmittedThenFetch]);
+    if (league && myMembership && members.length > 0 && !isSurvivor && !isBankroll) checkAllSubmittedThenFetch();
+  }, [league, myMembership, members, isSurvivor, isBankroll, checkAllSubmittedThenFetch]);
 
   // Owner-only, because chasing buy-ins is the reason to have the list at all.
   // RLS on user_contacts is what actually enforces that; the role check here
@@ -323,15 +327,19 @@ export default function LeaguePage() {
   // Validated against the league type, not just defaulted: carrying a
   // 'leaderboard' selection from a weekly league into a survivor one would
   // otherwise match no tab and render an empty page.
-  const availableTabs = isSurvivor ? ['survivor', 'members'] : ['leaderboard', 'weekly', 'members'];
+  const availableTabs = isSurvivor ? ['survivor', 'members']
+    : isBankroll ? ['bankroll', 'standings', 'members']
+    : ['leaderboard', 'weekly', 'members'];
   const tab = availableTabs.includes(tabOverride) ? tabOverride : availableTabs[0];
   const isOwner = myMembership?.role === 'owner';
-  const weeklyBoard = isSurvivor ? [] : buildWeeklyLeaderboard();
+  const weeklyBoard = (isSurvivor || isBankroll) ? [] : buildWeeklyLeaderboard();
   const competeOn = league.compete_on;
   const TypeIcon = TYPE_ICON[competeOn] || Calendar;
 
   const TAB_LABELS = {
     survivor: 'Survivor pool',
+    bankroll: 'The board',
+    standings: 'Standings',
     leaderboard: 'Leaderboard',
     weekly: 'Weekly picks',
     members: `Members (${members.length})`,
@@ -476,7 +484,7 @@ export default function LeaguePage() {
       )}
 
       {/* Blind Picks Banner (not applicable to survivor pools) */}
-      {!isSurvivor && weeklyTab === currentWeek && (
+      {!isSurvivor && !isBankroll && weeklyTab === currentWeek && (
         <WeeklyPicksHub
           week={weeklyTab}
           myPicks={myWeekPicks}
@@ -485,7 +493,7 @@ export default function LeaguePage() {
         />
       )}
 
-      {!isSurvivor && <BlindPicksBanner weekAllSubmitted={weekAllSubmitted} weeklyTab={weeklyTab} />}
+      {!isSurvivor && !isBankroll && <BlindPicksBanner weekAllSubmitted={weekAllSubmitted} weeklyTab={weeklyTab} />}
 
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 0, marginBottom: 24, borderBottom: '1px solid var(--border)', overflowX: 'auto' }}>
@@ -507,6 +515,11 @@ export default function LeaguePage() {
         </div>
       )}
 
+      {/* Above the main tab only. Someone on Members or Standings has already
+          found their way around; someone landing on the game itself may not
+          know what game it is. */}
+      {tab === availableTabs[0] && <HowThisWorks competeOn={competeOn} />}
+
       {/* SURVIVOR (primary content for survivor-type leagues) */}
       {isSurvivor && tab === 'survivor' && (
         <SurvivorTab
@@ -522,8 +535,26 @@ export default function LeaguePage() {
         />
       )}
 
+      {/* BANKROLL (primary content for betting leagues) */}
+      {isBankroll && tab === 'bankroll' && (
+        <BankrollTab
+          leagueId={id}
+          currentUserId={user.id}
+          season={CURRENT_SEASON}
+          currentWeek={effectiveWeek}
+        />
+      )}
+
+      {isBankroll && tab === 'standings' && (
+        <BankrollStandings
+          leagueId={id}
+          currentUserId={user.id}
+          currentWeek={effectiveWeek}
+        />
+      )}
+
       {/* LEADERBOARD */}
-      {!isSurvivor && tab === 'leaderboard' && (
+      {!isSurvivor && !isBankroll && tab === 'leaderboard' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
             <h3 style={{ fontSize: 20, textTransform: 'none' }}>Week {weeklyTab} standings</h3>
@@ -541,7 +572,7 @@ export default function LeaguePage() {
       )}
 
       {/* WEEKLY PICKS */}
-      {!isSurvivor && tab === 'weekly' && (
+      {!isSurvivor && !isBankroll && tab === 'weekly' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
             <h3 style={{ fontSize: 20, textTransform: 'none' }}>Week {weeklyTab} picks</h3>
@@ -693,8 +724,10 @@ export default function LeaguePage() {
  * who's in it, is there room — and gets out of the way.
  */
 function LeaguePreview({ league, members, entryCount, onJoin, joining }) {
-  const isSurvivor = league.compete_on === 'survivor';
   const TypeIcon = TYPE_ICON[league.compete_on] || Calendar;
+  const isSurvivor = league.compete_on === 'survivor';
+  // A survivor pool fills by entries, since one person may hold several.
+  // Everything else fills by people.
   const taken = isSurvivor ? entryCount : members.length;
   const full = league.max_capacity != null && taken >= league.max_capacity;
 
