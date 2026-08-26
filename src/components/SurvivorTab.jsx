@@ -39,6 +39,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
   const [buybacks, setBuybacks] = useState([]);
+  const [paidFilter, setPaidFilter] = useState('all');   // all | unpaid | paid
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
@@ -188,6 +189,17 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
   const myEntries = entries.filter(e => e.user_id === currentUserId);
   const withStatus = entries.map(e => ({ ...e, ...computeStatus(e) }));
+
+  // Payment tracker. Sorted by name then entry number so a person's entries
+  // sit together — at 71 entries across 37 people, a flat list ordered any
+  // other way is unreadable.
+  const paidCount = entries.filter(e => e.paid).length;
+  const unpaidCount = entries.length - paidCount;
+  const visibleEntries = [...entries]
+    .filter(e => paidFilter === 'all' || (paidFilter === 'paid' ? e.paid : !e.paid))
+    .sort((a, b) =>
+      (a.profiles?.username || '').localeCompare(b.profiles?.username || '') ||
+      a.entry_number - b.entry_number);
   const aliveCount = withStatus.filter(e => e.status === 'alive').length;
   const sorted = [...withStatus].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
@@ -499,11 +511,47 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
           <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
             <DollarSign size={18} style={{ color: 'var(--accent)' }} /> Payment tracker
           </h3>
+          {/* The count first. A filter without one just hides the number you
+              came to find — and at 71 entries "how many are outstanding" is
+              the whole question. */}
+          {entries.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
+              <span style={{ fontSize: 14, color: 'var(--ink-soft)' }}>
+                <strong style={{ color: 'var(--ink)' }}>{paidCount}</strong> of {entries.length} paid
+                {unpaidCount > 0 && (
+                  <> · <strong style={{ color: 'var(--warning)' }}>{unpaidCount}</strong> outstanding</>
+                )}
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[['all', `All ${entries.length}`], ['unpaid', `Unpaid ${unpaidCount}`], ['paid', `Paid ${paidCount}`]].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setPaidFilter(key)}
+                    aria-pressed={paidFilter === key}
+                    style={{
+                      padding: '5px 11px', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600,
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                      background: paidFilter === key ? 'var(--accent)' : 'var(--surface)',
+                      color: paidFilter === key ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                      border: `1px solid ${paidFilter === key ? 'var(--accent)' : 'var(--border-strong)'}`,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
             {entries.length === 0 ? (
               <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)' }}>No entries yet.</div>
+            ) : visibleEntries.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)' }}>
+                {paidFilter === 'unpaid' ? 'Everyone has paid.' : 'Nobody has paid yet.'}
+              </div>
             ) : (
-              [...entries].sort((a, b) => (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number).map((entry, idx, arr) => (
+              visibleEntries.map((entry, idx, arr) => (
                 <div key={entry.id} style={{
                   padding: '12px 20px', borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
