@@ -80,6 +80,13 @@ describe('the rules that cost people something are actually stated', () => {
     expect(proseOf(modeByKey('survivor'))).toMatch(/tie counts as a loss/i);
   });
 
+  it('says a buyback is a payment of its own', () => {
+    // The tracker charges for it separately and the entry reads unpaid until
+    // it is settled. Someone finding that out from an invoice rather than the
+    // rules would be entitled to be annoyed.
+    expect(proseOf(modeByKey('survivor'))).toMatch(/separate payment from your original entry/i);
+  });
+
   it('warns that missing a week eliminates in survivor', () => {
     expect(proseOf(modeByKey('survivor'))).toMatch(/miss a week/i);
   });

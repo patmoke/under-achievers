@@ -39,6 +39,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
   const [buybacks, setBuybacks] = useState([]);
+  const [charges, setCharges] = useState([]);
+  const [paidFilter, setPaidFilter] = useState('all');   // all | unpaid | paid
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
@@ -71,9 +73,18 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         .select('*')
         .in('entry_id', entryIds);
       setBuybacks(buybacksData || []);
+
+      // One row per thing owed. RLS hands the owner the whole league and
+      // everyone else only their own, so this is the same query either way.
+      const { data: chargesData } = await supabase
+        .from('survivor_charges')
+        .select('*')
+        .eq('league_id', leagueId);
+      setCharges(chargesData || []);
     } else {
       setPicks([]);
       setBuybacks([]);
+      setCharges([]);
     }
 
     const { data: gamesData } = await supabase
@@ -167,10 +178,14 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function togglePaid(entry) {
-    const { error } = await supabase.from('survivor_entries').update({ paid: !entry.paid }).eq('id', entry.id);
+  // Settles one charge, not one entry. An entry with a buyback against it has
+  // two, and marking the buy-in paid must not silently clear the rebuy.
+  async function toggleCharge(charge) {
+    const { error } = await supabase.rpc('set_charge_paid', {
+      p_charge_id: charge.id, p_paid: !charge.paid,
+    });
     if (error) { toast.error(error.message); return; }
-    setEntries(prev => prev.map(e => e.id === entry.id ? { ...e, paid: !e.paid } : e));
+    fetchAll();
   }
 
   async function submitPick(entryId, game, teamAbbr) {
@@ -188,6 +203,22 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
   const myEntries = entries.filter(e => e.user_id === currentUserId);
   const withStatus = entries.map(e => ({ ...e, ...computeStatus(e) }));
+
+  // Payment tracker. Sorted by name then entry number so a person's entries
+  // sit together — at 71 entries across 37 people, a flat list ordered any
+  // other way is unreadable.
+  const entryById = Object.fromEntries(entries.map(e => [e.id, e]));
+  const paidCount = charges.filter(c => c.paid).length;
+  const unpaidCount = charges.length - paidCount;
+  const owingPeople = new Set(charges.filter(c => !c.paid).map(c => c.user_id)).size;
+  const visibleCharges = charges
+    .filter(c => paidFilter === 'all' || (paidFilter === 'paid' ? c.paid : !c.paid))
+    .map(c => ({ ...c, entry: entryById[c.entry_id] }))
+    .sort((a, b) =>
+      (a.entry?.profiles?.username || '').localeCompare(b.entry?.profiles?.username || '') ||
+      (a.entry?.entry_number || 0) - (b.entry?.entry_number || 0) ||
+      // Buy-in above the rebuys it came before.
+      (a.kind === b.kind ? (a.week || 0) - (b.week || 0) : a.kind === 'buy_in' ? -1 : 1));
   const aliveCount = withStatus.filter(e => e.status === 'alive').length;
   const sorted = [...withStatus].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
@@ -499,23 +530,71 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
           <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
             <DollarSign size={18} style={{ color: 'var(--accent)' }} /> Payment tracker
           </h3>
+          {/* The count first. A filter without one just hides the number you
+              came to find — and at 71 entries "how many are outstanding" is
+              the whole question. */}
+          {charges.length > 0 && (
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 14, flexWrap: 'wrap', marginBottom: 12 }}>
+              <span style={{ fontSize: 14, color: 'var(--ink-soft)' }}>
+                <strong style={{ color: 'var(--ink)' }}>{paidCount}</strong> of {charges.length} paid
+                {unpaidCount > 0 && (
+                  <> · <strong style={{ color: 'var(--warning)' }}>{unpaidCount}</strong> outstanding
+                    across {owingPeople} {owingPeople === 1 ? 'person' : 'people'}</>
+                )}
+              </span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[['all', `All ${charges.length}`], ['unpaid', `Unpaid ${unpaidCount}`], ['paid', `Paid ${paidCount}`]].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setPaidFilter(key)}
+                    aria-pressed={paidFilter === key}
+                    style={{
+                      padding: '5px 11px', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600,
+                      cursor: 'pointer', whiteSpace: 'nowrap',
+                      background: paidFilter === key ? 'var(--accent)' : 'var(--surface)',
+                      color: paidFilter === key ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                      border: `1px solid ${paidFilter === key ? 'var(--accent)' : 'var(--border-strong)'}`,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-            {entries.length === 0 ? (
+            {charges.length === 0 ? (
               <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)' }}>No entries yet.</div>
+            ) : visibleCharges.length === 0 ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-soft)' }}>
+                {paidFilter === 'unpaid' ? 'Everything is settled.' : 'Nothing has been paid yet.'}
+              </div>
             ) : (
-              [...entries].sort((a, b) => (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number).map((entry, idx, arr) => (
-                <div key={entry.id} style={{
+              visibleCharges.map((charge, idx, arr) => (
+                <div key={charge.id} style={{
                   padding: '12px 20px', borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
                 }}>
                   <div style={{ fontSize: 14 }}>
-                    <strong>{entry.profiles?.username}</strong>
-                    {entries.filter(e => e.user_id === entry.user_id).length > 1 && <span style={{ color: 'var(--ink-soft)' }}> #{entry.entry_number}</span>}
-                    {entry.is_buyback && <span className="badge badge-gold" style={{ marginLeft: 8, fontSize: 10 }}>Buyback</span>}
+                    <strong>{charge.entry?.profiles?.username || '(unknown)'}</strong>
+                    {entries.filter(e => e.user_id === charge.user_id).length > 1 && (
+                      <span style={{ color: 'var(--ink-soft)' }}> #{charge.entry?.entry_number}</span>
+                    )}
+                    {charge.kind === 'buyback' && (
+                      <span className="badge badge-gold" style={{ marginLeft: 8, fontSize: 10 }}>
+                        Buyback wk {charge.week}
+                      </span>
+                    )}
+                    {charge.paid && charge.paid_at && (
+                      <span style={{ display: 'block', fontSize: 11.5, color: 'var(--ink-faint)', marginTop: 2 }}>
+                        Marked paid {new Date(charge.paid_at).toLocaleDateString()}
+                      </span>
+                    )}
                   </div>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: entry.paid ? 'var(--success)' : 'var(--ink-soft)', fontWeight: 600 }}>
-                    <input type="checkbox" checked={!!entry.paid} onChange={() => togglePaid(entry)} style={{ width: 16, height: 16 }} />
-                    {entry.paid ? 'Paid' : 'Unpaid'}
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontSize: 13, color: charge.paid ? 'var(--success)' : 'var(--ink-soft)', fontWeight: 600 }}>
+                    <input type="checkbox" checked={!!charge.paid} onChange={() => toggleCharge(charge)} style={{ width: 16, height: 16 }} />
+                    {charge.paid ? 'Paid' : 'Unpaid'}
                   </label>
                 </div>
               ))

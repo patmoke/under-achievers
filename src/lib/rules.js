@@ -99,6 +99,7 @@ export const MODES = [
         points: [
           'If the league owner turned buybacks on, an eliminated entry can pay back in. The owner sets the last week you can do it and how many times each person may.',
           'A buyback forgives the life you lost and restarts you from the week you bought back in. The teams you had already used stay used.',
+          'A buyback is a separate payment from your original entry, and it is tracked separately. Your entry reads as unpaid again until the rebuy is settled, even if you paid your buy-in months ago.',
           'If buybacks are off, one loss ends your season.',
         ],
       },
