@@ -54,9 +54,34 @@ owes nothing"** — true only when every charge against the entry is paid. The
 badge on a player's own entry card keeps working and now says something more
 useful: buy back, and it flips to Unpaid until the rebuy is settled.
 
-There is still exactly one write path. The old UPDATE policy that let any owner
-flip the flag directly is gone, replaced by one whose `with check` refuses any
-value the charges disagree with.
+### Both write paths work, and that was a bug once
+
+The first version of this closed the direct-write path with a `with check` on
+`survivor_entries` requiring `paid` to agree with the charges. That is correct
+for the new tracker, which settles charges and lets the trigger write `paid`.
+
+It broke the deployed one. The new tracker was still in an unmerged PR, so
+production was running the old code, which writes `survivor_entries.paid`
+directly — and the check refused every one of those writes:
+
+```
+new row violates row-level security policy for table "survivor_entries"
+```
+
+A migration was applied that required a client that was not live. **There is
+always a window where the deployed front end is older than the schema**, and the
+database has to tolerate both ends of it. A schema change that only works with
+an unshipped client is a broken schema change, however correct it looks.
+
+So the check is gone, and a direct flip of `paid` now propagates *down* to the
+charges it summarises — settling, or unsettling, every charge on that entry.
+That is what the old checkbox has always looked like it meant. `pg_trigger_depth()
+= 0` on the trigger restricts it to writes from outside, so it and
+`sync_entry_paid` cannot chase each other in a loop.
+
+The charges remain the source of truth. A buyback still creates its own charge
+and still makes the entry read unpaid until it is settled, which was the point
+of the whole exercise.
 
 ## Recording a payment
 
