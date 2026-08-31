@@ -87,6 +87,12 @@ describe('the rules that cost people something are actually stated', () => {
     expect(proseOf(modeByKey('survivor'))).toMatch(/separate payment from your original entry/i);
   });
 
+  it('says taking a team early clears the later pick', () => {
+    // It is destructive and it is confirmed in the UI, but someone planning a
+    // season around filed-ahead picks should meet the rule before the dialog.
+    expect(proseOf(modeByKey('survivor'))).toMatch(/clears that later pick/i);
+  });
+
   it('warns that missing a week eliminates in survivor', () => {
     expect(proseOf(modeByKey('survivor'))).toMatch(/miss a week/i);
   });

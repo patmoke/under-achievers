@@ -1,8 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Fragment } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2 } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { isGameLocked, computeEntryStatus, usedTeams as computeUsedTeams, pickOutcome } from '../lib/survivor';
+import {
+  isGameLocked, computeEntryStatus, pickOutcome,
+  pickableWeeks, teamConflict, teamUsage, weekHighlights,
+} from '../lib/survivor';
 
 function formatGameTime(iso) {
   const d = new Date(iso);
@@ -41,6 +44,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [buybacks, setBuybacks] = useState([]);
   const [charges, setCharges] = useState([]);
   const [paidFilter, setPaidFilter] = useState('all');   // all | unpaid | paid
+  // Which week each of my entries is currently picking for. Per entry, because
+  // you might be filing week 6 on one and this week on another.
+  const [pickWeek, setPickWeek] = useState({});
+  // A pending "this clears your week N pick" question, or null.
+  const [release, setRelease] = useState(null);
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
@@ -110,10 +118,6 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // Rules live in lib/survivor.js so they can be unit tested without React.
   function computeStatus(entry) {
     return computeEntryStatus({ entry, picks, games: allGames, currentWeek });
-  }
-
-  function usedTeams(entry) {
-    return computeUsedTeams({ entry, picks, currentWeek });
   }
 
   function myBuybackCount(userId) {
@@ -188,14 +192,32 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function submitPick(entryId, game, teamAbbr) {
+  // Everything goes through make_survivor_pick. It owns the rules — kickoff,
+  // the team you already spent, and clearing a later pick that held the team
+  // you want now — and does the clear and the write in one transaction, which
+  // two client calls could not.
+  async function submitPick(entryId, game, teamAbbr, week, releaseHeld = false) {
     setSubmitting(s => ({ ...s, [entryId]: true }));
-    const { error } = await supabase.from('survivor_picks').upsert({
-      entry_id: entryId, season, week: currentWeek, game_id: game.id, team_abbr: teamAbbr,
-    }, { onConflict: 'entry_id,week' });
+    const { data, error } = await supabase.rpc('make_survivor_pick', {
+      p_entry_id: entryId, p_week: week, p_game_id: game.id,
+      p_team: teamAbbr, p_release: releaseHeld,
+    });
     setSubmitting(s => ({ ...s, [entryId]: false }));
     if (error) { toast.error(error.message); return; }
-    toast.success('Pick locked in!');
+    if (data?.released_week) {
+      toast.success(`${teamAbbr} taken for week ${week}. Week ${data.released_week} now has no pick.`);
+    } else {
+      toast.success(week === currentWeek ? 'Pick locked in!' : `Filed for week ${week}`);
+    }
+    fetchAll();
+  }
+
+  // Taking back a future pick, rather than being stuck naming some team for a
+  // week you are not ready to decide.
+  async function removePick(pick) {
+    const { error } = await supabase.from('survivor_picks').delete().eq('id', pick.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Week ${pick.week} pick removed`);
     fetchAll();
   }
 
@@ -219,7 +241,19 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       (a.entry?.entry_number || 0) - (b.entry?.entry_number || 0) ||
       // Buy-in above the rebuys it came before.
       (a.kind === b.kind ? (a.week || 0) - (b.week || 0) : a.kind === 'buy_in' ? -1 : 1));
+  // Weeks still open to pick, current one first. More than one only once the
+  // schedule has games beyond this week that have not kicked off.
+  const weeksOpen = pickableWeeks(allGames, currentWeek);
   const aliveCount = withStatus.filter(e => e.status === 'alive').length;
+
+  // Every team in the season's schedule, so the board can show the ones nobody
+  // has touched rather than only the ones that are gone.
+  const gamesById = Object.fromEntries(allGames.map(g => [g.id, g]));
+  const allTeams = [...new Set(allGames.flatMap(g => [g.home_team_abbr, g.away_team_abbr]))]
+    .filter(Boolean).sort();
+  const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
+  const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
+  const usageMax = Math.max(1, ...usage.map(u => u.count));
   const sorted = [...withStatus].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
     if (a.status === 'eliminated') return (b.week || 0) - (a.week || 0);
@@ -276,6 +310,44 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
   return (
     <div>
+      {/* Asked, not announced. The person is right here having just tapped the
+          team, so this is the moment to say what it costs — and the cost is a
+          week left empty, which is exactly the week someone filing ahead was
+          trying to protect. */}
+      {release && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setRelease(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)',
+                   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div className="card" onClick={e => e.stopPropagation()} style={{ padding: 22, maxWidth: 420 }}>
+            <h3 style={{ fontSize: 19, textTransform: 'none', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={17} style={{ color: 'var(--warning)' }} />
+              {release.team} is your week {release.heldWeek} pick
+            </h3>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, margin: '0 0 18px' }}>
+              Use them in week {release.week} instead? <strong style={{ color: 'var(--ink)' }}>
+              Week {release.heldWeek} will be left with no pick</strong>, and a week with no pick
+              when its games kick off is an elimination.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={() => setRelease(null)}>Keep week {release.heldWeek}</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const r = release;
+                  setRelease(null);
+                  submitPick(r.entryId, r.game, r.team, r.week, true);
+                }}
+              >
+                Use {release.team} now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* YOUR ENTRIES */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
@@ -310,7 +382,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               const entryPicks = picksForEntry(entry.id);
               const thisWeekPick = entryPicks.find(p => p.week === currentWeek);
               const locked = thisWeekPick && isGameLocked(thisWeekPick.games);
-              const used = usedTeams(entry);
+              // Team availability is decided per pick-week now, by teamConflict
+              // below — a team held by an unlocked pick is offered with a
+              // warning rather than simply greyed out.
               const eligible = canBuyBack();
 
               return (
@@ -362,49 +436,131 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         'Buybacks are not enabled for this league.'
                       )}
                     </div>
-                  ) : thisWeekPick && locked ? (
-                    <div style={{ fontSize: 14 }}>
-                      <span style={{ color: 'var(--ink-soft)' }}>This week: </span>
-                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 17 }}>{thisWeekPick.team_abbr}</strong>
-                      <span className="badge badge-red" style={{ marginLeft: 10 }}><Lock size={9} style={{ marginRight: 4 }} />Locked</span>
-                    </div>
                   ) : (
-                    <div>
-                      <div className="label-muted" style={{ marginBottom: 10 }}>
-                        Pick a team to win — Week {currentWeek}
-                      </div>
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        {weekGames.filter(g => !isGameLocked(g)).map(game => (
-                          <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
-                            <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                              <Clock size={11} /> {formatGameTime(game.game_time)}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <TeamButton
-                                abbr={game.away_team_abbr}
-                                name={game.away_team}
-                                isUsed={used.has(game.away_team_abbr)}
-                                isSelected={thisWeekPick?.team_abbr === game.away_team_abbr}
-                                disabled={used.has(game.away_team_abbr) || submitting[entry.id]}
-                                onClick={() => submitPick(entry.id, game, game.away_team_abbr)}
-                              />
-                              <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>
-                              <TeamButton
-                                abbr={game.home_team_abbr}
-                                name={game.home_team}
-                                isUsed={used.has(game.home_team_abbr)}
-                                isSelected={thisWeekPick?.team_abbr === game.home_team_abbr}
-                                disabled={used.has(game.home_team_abbr) || submitting[entry.id]}
-                                onClick={() => submitPick(entry.id, game, game.home_team_abbr)}
-                              />
-                            </div>
+                    (() => {
+                      // Once this week's pick has locked the only weeks left are
+                      // ahead, so default there. Locking used to end the section
+                      // outright, which shut the door on filing ahead at exactly
+                      // the moment someone is most likely to want to.
+                      const openAhead = weeksOpen.filter(w => w !== currentWeek);
+                      const fallback = weeksOpen.includes(currentWeek) ? currentWeek : openAhead[0];
+                      const wk = pickWeek[entry.id] ?? fallback;
+                      const openGames = allGames.filter(g => g.week === wk && !isGameLocked(g));
+                      const pickThisWeek = entryPicks.find(p => p.week === wk);
+                      const clashFor = team =>
+                        teamConflict({ picks, entryId: entry.id, team, week: wk });
+                      const choose = (game, team) => {
+                        const clash = clashFor(team);
+                        // 'planned' is recoverable and needs consent; 'spent' is
+                        // already disabled below and never reaches here.
+                        if (clash?.kind === 'planned') {
+                          setRelease({ entryId: entry.id, game, team, week: wk, heldWeek: clash.week });
+                          return;
+                        }
+                        submitPick(entry.id, game, team, wk);
+                      };
+                      const laterPicks = entryPicks
+                        .filter(p => p.week !== currentWeek && !isGameLocked(p.games))
+                        .sort((a, b) => a.week - b.week);
+
+                      if (wk === undefined) {
+                        return (
+                          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+                            No games left to pick.
                           </div>
-                        ))}
-                      </div>
-                      {weekGames.filter(g => !isGameLocked(g)).length === 0 && (
-                        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>All of this week's games have started.</div>
-                      )}
-                    </div>
+                        );
+                      }
+
+                      return (
+                        <div>
+                          {thisWeekPick && locked && (
+                            <div style={{ fontSize: 14, marginBottom: 14 }}>
+                              <span style={{ color: 'var(--ink-soft)' }}>This week: </span>
+                              <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 17 }}>{thisWeekPick.team_abbr}</strong>
+                              <span className="badge badge-red" style={{ marginLeft: 10 }}><Lock size={9} style={{ marginRight: 4 }} />Locked</span>
+                            </div>
+                          )}
+
+                          {/* Filed ahead. Loud on purpose — a plan you have
+                              forgotten is how a week ends up empty. */}
+                          {laterPicks.length > 0 && (
+                            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+                                          background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                              <span className="label-muted">Filed ahead</span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                                {laterPicks.map(p => (
+                                  <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                                                            fontSize: 13, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
+                                                            background: 'var(--surface)', border: '1px solid var(--border-strong)' }}>
+                                    <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 14 }}>{p.team_abbr}</strong>
+                                    <span style={{ color: 'var(--ink-soft)' }}>wk {p.week}</span>
+                                    <button onClick={() => removePick(p)} aria-label={`Remove week ${p.week} pick`}
+                                            style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                                      <X size={12} />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                            <span className="label-muted">Pick a team to win</span>
+                            {weeksOpen.length > 1 && (
+                              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                                {weeksOpen.map(w => (
+                                  <button
+                                    key={w}
+                                    onClick={() => setPickWeek(prev => ({ ...prev, [entry.id]: w }))}
+                                    aria-pressed={w === wk}
+                                    style={{
+                                      padding: '3px 9px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 600,
+                                      cursor: 'pointer', whiteSpace: 'nowrap',
+                                      background: w === wk ? 'var(--accent)' : 'var(--surface)',
+                                      color: w === wk ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                                      border: `1px solid ${w === wk ? 'var(--accent)' : 'var(--border-strong)'}`,
+                                    }}
+                                  >
+                                    {w === currentWeek ? 'This week' : `Wk ${w}`}
+                                    {entryPicks.some(p => p.week === w) && ' ✓'}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'grid', gap: 10 }}>
+                            {openGames.map(game => (
+                              <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                                <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                                  <Clock size={11} /> {formatGameTime(game.game_time)}
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  {[game.away_team_abbr, game.home_team_abbr].map((abbr, i) => (
+                                    <Fragment key={abbr}>
+                                      {i === 1 && <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>}
+                                      <TeamButton
+                                        abbr={abbr}
+                                        name={i === 0 ? game.away_team : game.home_team}
+                                        isUsed={clashFor(abbr)?.kind === 'spent'}
+                                        isSelected={pickThisWeek?.team_abbr === abbr}
+                                        disabled={clashFor(abbr)?.kind === 'spent' || submitting[entry.id]}
+                                        onClick={() => choose(game, abbr)}
+                                      />
+                                    </Fragment>
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {openGames.length === 0 && (
+                            <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+                              Every game in week {wk} has started.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               );
@@ -412,6 +568,87 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
           </div>
         )}
       </div>
+
+      {/* THE WEEK'S PICKS — only once nobody can act on them */}
+      {highlights && (
+        <div style={{ marginBottom: 32 }}>
+          <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>
+            Week {currentWeek} in a nutshell
+          </h3>
+          <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+            Shown now that every pick this week has kicked off. Across {highlights.total} live
+            {highlights.total === 1 ? ' entry' : ' entries'}.
+          </p>
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+            <div className="card" style={{ padding: 18 }}>
+              <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Flame size={12} style={{ color: 'var(--accent)' }} /> Hot pick
+              </div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                {highlights.hot.team}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                {highlights.hot.count} of {highlights.total} took them
+                {' '}({Math.round(highlights.hot.share * 100)}%)
+              </div>
+            </div>
+
+            {highlights.risky && (
+              <div className="card" style={{ padding: 18 }}>
+                <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <AlertTriangle size={12} style={{ color: 'var(--warning)' }} /> Risky pick
+                </div>
+                <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                  {highlights.risky.team}
+                  <span style={{ fontSize: 17, color: 'var(--ink-soft)', marginLeft: 8, fontVariantNumeric: 'tabular-nums' }}>
+                    {highlights.risky.moneyline > 0 ? '+' : '−'}{Math.abs(highlights.risky.moneyline)}
+                  </span>
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                  Longest shot backed — the market gave them {Math.round(highlights.risky.chance * 100)}%
+                  {highlights.risky.count > 1 && `, and ${highlights.risky.count} entries took it`}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TEAM BOARD */}
+      {usage.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>Teams burned</h3>
+          <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+            How many live entries have already used each team. Counts a pick only once its
+            game has kicked off, so this never gives away what is still to come.
+          </p>
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ display: 'grid', gap: 6,
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
+              {usage.map(({ team, count }) => (
+                <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
+                     style={{
+                       padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                       background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
+                       border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
+                       opacity: count === 0 ? 0.55 : 1,
+                     }}>
+                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+                                color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
+                    {team}
+                  </div>
+                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
+                                fontVariantNumeric: 'tabular-nums',
+                                color: count === 0 ? 'var(--ink-faint)'
+                                       : count === usageMax ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
+                    {count}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* STANDINGS */}
       <div style={{ marginBottom: isOwner ? 32 : 0 }}>

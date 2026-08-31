@@ -77,6 +77,7 @@ export const MODES = [
         points: [
           'Pick one team to win each week. Straight up — the spread does not come into it.',
           'You can change your pick until that team\'s game kicks off.',
+          'You can also file picks for later weeks, not just the one in front of you — useful if you know you will be away. A pick filed ahead can be changed or withdrawn any time before that game starts.',
         ],
       },
       {
@@ -84,6 +85,7 @@ export const MODES = [
         points: [
           'Once your pick locks, that team is used up. You cannot pick them again for the rest of the season, which is what stops everyone riding the same team every week.',
           'A pick you have not locked in yet does not burn the team — swap it and the team is free again.',
+          'If you have filed a team for a later week and then want them sooner, the nearer week wins: taking them now clears that later pick, and you are asked first. The week you emptied is then left with no pick, so remember to fill it.',
         ],
       },
       {
@@ -108,6 +110,14 @@ export const MODES = [
         points: [
           'If the owner allowed it, you can run several entries at once, up to the limit they set. Each entry is separate — its own picks, its own used teams, its own life.',
           'Entries have to be added before the season starts. You cannot buy in extra lives once games are being played.',
+        ],
+      },
+      {
+        heading: 'What everyone else can see',
+        points: [
+          'Your pick stays hidden from the rest of the pool until its game kicks off. After that it is public, in the standings and in the pick history.',
+          'Once every live entry\'s pick for a week has kicked off, the pool shows that week\'s most-backed team and its longest shot by the betting odds. Nobody can act on either by then.',
+          'The team board shows how many live entries have used each team. It counts a pick only once that game has started, so it never gives away what is still to come.',
         ],
       },
       {
