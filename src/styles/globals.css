@@ -302,3 +302,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-faint); }
 .badge-gold { background: rgba(184, 134, 11, 0.12); color: var(--gold); border: 1px solid rgba(184, 134, 11, 0.28); }
 .badge-red { background: var(--danger-soft); color: var(--danger); border: 1px solid rgba(200, 50, 44, 0.25); }
 .badge-green { background: var(--success-soft); color: var(--success); border: 1px solid rgba(15, 122, 77, 0.25); }
+
+/* Scroll strips carry their own arrows and a peek of the next item, so the bar
+   itself is noise — and on desktop it steals vertical space inside the row. */
+.hide-scrollbar::-webkit-scrollbar { display: none; }

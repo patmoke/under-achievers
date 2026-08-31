@@ -1,17 +1,89 @@
-import { useState, useEffect, useCallback, Fragment } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   isGameLocked, computeEntryStatus, pickOutcome,
   pickableWeeks, teamConflict, teamUsage, weekHighlights,
 } from '../lib/survivor';
 
+/** Games per column in the picker. Four is about a phone screen. */
+const GAMES_PER_COLUMN = 4;
+
+const chunk = (xs, n) =>
+  Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
+
 function formatGameTime(iso) {
   const d = new Date(iso);
   const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return `${day} · ${time}`;
+}
+
+/**
+ * A horizontally scrolling strip with arrows.
+ *
+ * Native scrolling carries the touch case, which is the one that matters; the
+ * arrows exist for a mouse, where there is no swipe. Both drive the same
+ * element, so there is no window index to drift out of step with the scroll
+ * position.
+ */
+function Strip({ children, by = 240, label, caption, arrows = 'flank' }) {
+  const ref = useRef(null);
+  const nudge = dir => ref.current?.scrollBy({ left: dir * by, behavior: 'smooth' });
+  const arrow = (dir, icon) => (
+    <button
+      onClick={() => nudge(dir)}
+      aria-label={`${dir < 0 ? 'Previous' : 'Next'} ${label}`}
+      style={{
+        flexShrink: 0, width: 26, height: 26, borderRadius: '50%', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--ink-soft)',
+      }}
+    >
+      {icon}
+    </button>
+  );
+
+  const scroller = (
+    <div
+      ref={ref}
+      className="hide-scrollbar"
+      style={{
+        display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory',
+        flex: 1, minWidth: 0, paddingBottom: 2,
+        scrollbarWidth: 'none', msOverflowStyle: 'none',
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  // Flanking arrows suit a single short row. Over tall content they end up
+  // floating beside the middle card and, worse, eat about 64px of width on a
+  // phone — width the cards need more than the arrows do.
+  if (arrows === 'above') {
+    return (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{caption}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {arrow(-1, <ChevronLeft size={13} />)}
+            {arrow(1, <ChevronRight size={13} />)}
+          </div>
+        </div>
+        {scroller}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      {arrow(-1, <ChevronLeft size={13} />)}
+      {scroller}
+      {arrow(1, <ChevronRight size={13} />)}
+    </div>
+  );
 }
 
 function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
@@ -388,7 +460,12 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               const eligible = canBuyBack();
 
               return (
-                <div key={entry.id} className="card" style={{ padding: 20, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
+                // minWidth: 0 is load-bearing. This card is a grid item, and a
+                // grid item defaults to min-width:auto — it refuses to shrink
+                // below its content's intrinsic width. With a horizontal strip
+                // inside, that made the card 1268px wide on a 390px phone and
+                // scrolled the whole page sideways rather than the strip.
+                <div key={entry.id} className="card" style={{ padding: 20, minWidth: 0, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
@@ -504,17 +581,22 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                             </div>
                           )}
 
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
-                            <span className="label-muted">Pick a team to win</span>
-                            {weeksOpen.length > 1 && (
-                              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
+                          <div className="label-muted" style={{ marginBottom: 8 }}>Pick a team to win</div>
+                          {/* Eighteen chips in a wrapped row pushed the games
+                              off the screen before anyone had picked anything.
+                              A strip keeps the row one line deep however far
+                              ahead the schedule runs. */}
+                          {weeksOpen.length > 1 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <Strip by={200} label="weeks">
                                 {weeksOpen.map(w => (
                                   <button
                                     key={w}
                                     onClick={() => setPickWeek(prev => ({ ...prev, [entry.id]: w }))}
                                     aria-pressed={w === wk}
                                     style={{
-                                      padding: '3px 9px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 600,
+                                      flexShrink: 0, scrollSnapAlign: 'start',
+                                      padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 600,
                                       cursor: 'pointer', whiteSpace: 'nowrap',
                                       background: w === wk ? 'var(--accent)' : 'var(--surface)',
                                       color: w === wk ? 'var(--accent-ink)' : 'var(--ink-soft)',
@@ -525,34 +607,52 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                                     {entryPicks.some(p => p.week === w) && ' ✓'}
                                   </button>
                                 ))}
-                              </div>
-                            )}
-                          </div>
+                              </Strip>
+                            </div>
+                          )}
 
-                          <div style={{ display: 'grid', gap: 10 }}>
-                            {openGames.map(game => (
-                              <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
-                                <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                                  <Clock size={11} /> {formatGameTime(game.game_time)}
-                                </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  {[game.away_team_abbr, game.home_team_abbr].map((abbr, i) => (
-                                    <Fragment key={abbr}>
-                                      {i === 1 && <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>}
-                                      <TeamButton
-                                        abbr={abbr}
-                                        name={i === 0 ? game.away_team : game.home_team}
-                                        isUsed={clashFor(abbr)?.kind === 'spent'}
-                                        isSelected={pickThisWeek?.team_abbr === abbr}
-                                        disabled={clashFor(abbr)?.kind === 'spent' || submitting[entry.id]}
-                                        onClick={() => choose(game, abbr)}
-                                      />
-                                    </Fragment>
-                                  ))}
-                                </div>
+                          {/* Sixteen games stacked was most of a phone screen
+                              of scrolling before you reached the standings.
+                              Four per column, columns scrolling sideways, keeps
+                              the whole week about one screen tall — the same
+                              trade the pick history table already makes. */}
+                          <Strip
+                            by={280}
+                            label="games"
+                            arrows="above"
+                            caption={`${openGames.length} game${openGames.length === 1 ? '' : 's'} — swipe for more`}
+                          >
+                            {chunk(openGames, GAMES_PER_COLUMN).map((column, ci) => (
+                              <div key={ci} style={{
+                                flexShrink: 0, scrollSnapAlign: 'start',
+                                width: 'min(300px, 78vw)',
+                                display: 'grid', gap: 10, alignContent: 'start',
+                              }}>
+                                {column.map(game => (
+                                  <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                                    <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                                      <Clock size={11} /> {formatGameTime(game.game_time)}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      {[game.away_team_abbr, game.home_team_abbr].map((abbr, i) => (
+                                        <Fragment key={abbr}>
+                                          {i === 1 && <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>}
+                                          <TeamButton
+                                            abbr={abbr}
+                                            name={i === 0 ? game.away_team : game.home_team}
+                                            isUsed={clashFor(abbr)?.kind === 'spent'}
+                                            isSelected={pickThisWeek?.team_abbr === abbr}
+                                            disabled={clashFor(abbr)?.kind === 'spent' || submitting[entry.id]}
+                                            onClick={() => choose(game, abbr)}
+                                          />
+                                        </Fragment>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             ))}
-                          </div>
+                          </Strip>
                           {openGames.length === 0 && (
                             <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
                               Every game in week {wk} has started.
