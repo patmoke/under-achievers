@@ -4,7 +4,7 @@ import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, 
 import toast from 'react-hot-toast';
 import {
   isGameLocked, computeEntryStatus, pickOutcome,
-  pickableWeeks, teamConflict, teamUsage, weekHighlights,
+  pickableWeeks, teamConflict, teamUsage, weekHighlights, groupByPerson,
 } from '../lib/survivor';
 
 /** Games per column in the picker. Four is about a phone screen. */
@@ -121,6 +121,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [pickWeek, setPickWeek] = useState({});
   // A pending "this clears your week N pick" question, or null.
   const [release, setRelease] = useState(null);
+  // null means "nobody has said", so the default below can depend on data
+  // that has not loaded when this state is created.
+  const [showOutChoice, setShowOutChoice] = useState(null);
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
@@ -326,12 +329,20 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
   const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
   const usageMax = Math.max(1, ...usage.map(u => u.count));
-  const sorted = [...withStatus].sort((a, b) => {
-    if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
-    if (a.status === 'eliminated') return (b.week || 0) - (a.week || 0);
-    return 0;
-  });
 
+  const people = groupByPerson(withStatus, currentUserId);
+  const livePeople = people.filter(p => p.alive > 0);
+  const outPeople = people.filter(p => p.alive === 0);
+  // Pinning yourself to the top is worth nothing if you are inside the folded
+  // half — which is exactly where you are once your last entry dies, and the
+  // moment you are most likely to come looking. So the fold opens itself for
+  // anyone who is in it, until they close it.
+  const showOut = showOutChoice ?? outPeople.some(p => p.isMe);
+  const rowProps = {
+    currentUserId, currentWeek, isOwner,
+    picksForEntry, entryBuybacks, ownerRemoveEntry,
+    isChampionEntry: e => e.status === 'alive' && aliveCount === 1 && entries.length > 1,
+  };
   const historyEntries = [...withStatus].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
     return (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number;
@@ -752,68 +763,61 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
       {/* STANDINGS */}
       <div style={{ marginBottom: isOwner ? 32 : 0 }}>
-        <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none' }}>Standings</h3>
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          {sorted.map((entry, idx) => {
-            const isMe = entry.user_id === currentUserId;
-            const entryPicks = picksForEntry(entry.id);
-            const thisWeekPick = entryPicks.find(p => p.week === currentWeek);
-            const canSeePick = isMe || (thisWeekPick && isGameLocked(thisWeekPick.games));
-            const isChampion = entry.status === 'alive' && aliveCount === 1 && entries.length > 1;
+        <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>Standings</h3>
+        <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+          {aliveCount} of {entries.length} {entries.length === 1 ? 'entry' : 'entries'} still alive.
+          {' '}Each entry plays on its own — the last one standing wins.
+        </p>
 
-            return (
-              <div key={entry.id} style={{
-                padding: '14px 20px', borderBottom: idx === sorted.length - 1 ? 'none' : '1px solid var(--border)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                background: isMe ? 'var(--accent-soft)' : entry.status === 'eliminated' ? 'rgba(200,50,44,0.03)' : 'transparent',
-                opacity: entry.status === 'eliminated' ? 0.75 : 1,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {isChampion && <Trophy size={18} style={{ color: 'var(--gold)' }} aria-label="Champion" />}
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: isMe ? 'var(--accent-dark)' : 'var(--ink)' }}>
-                      {entry.profiles?.username}
-                      {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
-                        <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}> #{entry.entry_number}</span>
-                      )}
-                      {entryBuybacks(entry.id).map(b => (
-                        <span key={b.id} title={`Bought back in Week ${b.week}`} style={{ display: 'inline-flex', marginLeft: 6 }}>
-                          <RotateCcw size={11} style={{ color: 'var(--gold)' }} aria-label={`Bought back in Week ${b.week}`} />
-                        </span>
-                      ))}
-                      {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
-                    </div>
-                    {entry.status === 'eliminated' && (
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Out — Week {entry.week}{entry.reason === 'missed' ? ' (missed pick)' : ''}</div>
-                    )}
-                  </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ textAlign: 'right', fontSize: 13 }}>
-                    {canSeePick && thisWeekPick ? (
-                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 15 }}>{thisWeekPick.team_abbr}</strong>
-                    ) : thisWeekPick ? (
-                      <span style={{ color: 'var(--ink-faint)', display: 'flex', alignItems: 'center', gap: 4 }}><EyeOff size={11} /> hidden</span>
-                    ) : (
-                      <span style={{ color: 'var(--ink-faint)' }}>—</span>
-                    )}
-                  </div>
-                  <span className={entry.status === 'alive' ? 'badge badge-lime' : 'badge badge-red'} style={{ fontSize: 10 }}>
-                    {entry.status === 'alive' ? 'Alive' : 'Out'}
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {livePeople.map((person, idx) => (
+            <PersonRow
+              key={person.user_id}
+              person={person}
+              last={idx === livePeople.length - 1 && outPeople.length === 0}
+              {...rowProps}
+            />
+          ))}
+
+          {/* The dead pile. Nothing in week one, most of the league by week
+              eight — folding it is the only change here that gets more useful
+              as the season runs. */}
+          {outPeople.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowOutChoice(!showOut)}
+                aria-expanded={showOut}
+                style={{
+                  width: '100%', padding: '12px 20px', cursor: 'pointer', textAlign: 'left',
+                  background: 'var(--surface-alt)', border: 'none',
+                  borderTop: livePeople.length ? '1px solid var(--border)' : 'none',
+                  borderBottom: showOut ? '1px solid var(--border)' : 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  fontSize: 13.5, fontWeight: 600, color: 'var(--ink-soft)',
+                }}
+              >
+                <span>
+                  {outPeople.length} {outPeople.length === 1 ? 'person' : 'people'} out
+                  <span style={{ fontWeight: 400 }}>
+                    {' '}({outPeople.reduce((n, p) => n + p.total, 0)}{' '}
+                    {outPeople.reduce((n, p) => n + p.total, 0) === 1 ? 'entry' : 'entries'})
                   </span>
-                  {isOwner && (
-                    <button
-                      onClick={() => ownerRemoveEntry(entry)}
-                      title={`Remove ${entry.profiles?.username}'s entry #${entry.entry_number}`}
-                      style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', display: 'flex', padding: 2 }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                </span>
+                <ChevronRight
+                  size={15}
+                  style={{ transform: showOut ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}
+                />
+              </button>
+              {showOut && outPeople.map((person, idx) => (
+                <PersonRow
+                  key={person.user_id}
+                  person={person}
+                  last={idx === outPeople.length - 1}
+                  {...rowProps}
+                />
+              ))}
+            </>
+          )}
         </div>
       </div>
 
@@ -940,5 +944,104 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One person, however many entries they hold.
+ *
+ * The entries stay individually legible — each keeps its own pick, its own
+ * alive/out state and its own elimination week — because the entry is what
+ * actually competes. Grouping is only about not printing someone's name three
+ * times in a row.
+ */
+function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
+                     picksForEntry, entryBuybacks, ownerRemoveEntry, isChampionEntry }) {
+  const isMe = person.user_id === currentUserId;
+  const champion = person.entries.some(isChampionEntry);
+  const allOut = person.alive === 0;
+
+  return (
+    <div style={{
+      padding: '13px 20px', borderBottom: last ? 'none' : '1px solid var(--border)',
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      background: isMe ? 'var(--accent-soft)' : allOut ? 'rgba(200,50,44,0.03)' : 'transparent',
+      opacity: allOut ? 0.75 : 1,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+        {champion && <Trophy size={18} style={{ color: 'var(--gold)' }} aria-label="Champion" />}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 600, fontSize: 15, color: isMe ? 'var(--accent-dark)' : 'var(--ink)' }}>
+            {person.username}
+            {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
+          </div>
+          {person.total > 1 && (
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+              {allOut ? `All ${person.total} out` : `${person.alive} of ${person.total} alive`}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {person.entries.map(entry => (
+          <EntryChip
+            key={entry.id}
+            entry={entry}
+            showNumber={person.total > 1}
+            isMine={isMe}
+            currentWeek={currentWeek}
+            picks={picksForEntry(entry.id)}
+            buybacks={entryBuybacks(entry.id)}
+            onRemove={isOwner ? () => ownerRemoveEntry(entry) : null}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One entry: its number, this week's pick if it may be shown, and its fate. */
+function EntryChip({ entry, showNumber, isMine, currentWeek, picks, buybacks, onRemove }) {
+  const pick = picks.find(p => p.week === currentWeek);
+  const visible = isMine || (pick && isGameLocked(pick.games));
+  const out = entry.status !== 'alive';
+
+  return (
+    <span
+      title={out ? `Out in week ${entry.week}${entry.reason === 'missed' ? ' — missed pick' : ''}` : undefined}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12.5,
+        background: out ? 'transparent' : 'var(--surface-alt)',
+        border: `1px solid ${out ? 'var(--border)' : 'var(--border-strong)'}`,
+        color: out ? 'var(--ink-faint)' : 'var(--ink)',
+      }}
+    >
+      {showNumber && <span style={{ color: 'var(--ink-faint)' }}>#{entry.entry_number}</span>}
+
+      {buybacks.map(b => (
+        <RotateCcw key={b.id} size={10} style={{ color: 'var(--gold)' }} aria-label={`Bought back in week ${b.week}`} />
+      ))}
+
+      {out ? (
+        <span style={{ whiteSpace: 'nowrap' }}>
+          out wk {entry.week}{entry.reason === 'missed' ? '*' : ''}
+        </span>
+      ) : visible && pick ? (
+        <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 14 }}>{pick.team_abbr}</strong>
+      ) : pick ? (
+        <EyeOff size={11} style={{ color: 'var(--ink-faint)' }} aria-label="Hidden until kickoff" />
+      ) : (
+        <span style={{ color: 'var(--ink-faint)' }}>—</span>
+      )}
+
+      {onRemove && (
+        <button onClick={onRemove} aria-label={`Remove entry #${entry.entry_number}`}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+          <Trash2 size={11} />
+        </button>
+      )}
+    </span>
   );
 }

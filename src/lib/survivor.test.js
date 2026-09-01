@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
-  pickableWeeks, teamConflict, teamUsage, weekLockedIn, weekHighlights,
+  pickableWeeks, teamConflict, teamUsage, weekLockedIn, weekHighlights, groupByPerson,
 } from './survivor';
 import {
   deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
@@ -614,5 +614,59 @@ describe('weekHighlights', () => {
     const h = weekHighlights({ entries, picks: p, gamesById: unpriced, week: 1, now });
     expect(h.hot.team).toBe('DEN');
     expect(h.risky).toBeNull();
+  });
+});
+
+describe('groupByPerson', () => {
+  const entry = (id, user, n, status, week = null) => ({
+    id, user_id: user, entry_number: n, status, week,
+    profiles: { username: user },
+  });
+
+  it('collapses a person\'s entries onto one row, in entry order', () => {
+    const people = groupByPerson([
+      entry('a2', 'ann', 2, 'alive'),
+      entry('a1', 'ann', 1, 'eliminated', 3),
+      entry('b1', 'bob', 1, 'alive'),
+    ], null);
+    expect(people).toHaveLength(2);
+    const ann = people.find(p => p.username === 'ann');
+    expect(ann.entries.map(e => e.entry_number)).toEqual([1, 2]);
+    expect(ann.alive).toBe(1);
+    expect(ann.total).toBe(2);
+  });
+
+  it('puts you first however badly you are doing', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'alive'),
+      entry('b1', 'bob', 1, 'eliminated', 1),
+    ], 'bob');
+    expect(people[0].username).toBe('bob');
+  });
+
+  it('ranks by lives left', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'alive'),
+      entry('b1', 'bob', 1, 'alive'),
+      entry('b2', 'bob', 2, 'alive'),
+    ], null);
+    expect(people.map(p => p.username)).toEqual(['bob', 'ann']);
+  });
+
+  it('puts the freshest casualties above the week-one dead', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'eliminated', 1),
+      entry('b1', 'bob', 1, 'eliminated', 6),
+    ], null);
+    expect(people.map(p => p.username)).toEqual(['bob', 'ann']);
+  });
+
+  it('keeps every entry\'s own status, since the entry is what competes', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'eliminated', 2),
+      entry('a2', 'ann', 2, 'alive'),
+    ], null);
+    expect(people[0].entries.map(e => e.status)).toEqual(['eliminated', 'alive']);
+    expect(people[0].alive).toBe(1);
   });
 });

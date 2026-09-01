@@ -95,3 +95,45 @@ usually Sunday afternoon — but if a single entry backs a Monday night team, th
 week's hot and risky picks do not appear until Monday evening. That is the
 honest consequence of the no-edge rule; loosening it means publishing while
 someone can still act on it.
+
+
+## The standings, grouped
+
+98 entries across 55 people is 98 rows, and it stays 98 rows all season while
+most of them are dead. Three changes, in order of how much work they do:
+
+**The dead fold away.** Everyone with no live entry collapses into one row —
+*"35 people out (52 entries)"*. This does nothing in week 1 and progressively
+more every week after, which is the right shape: the list is worst exactly when
+most of it is history. Measured on a phone at week 6 with ~80% eliminated, the
+standings went from 3,334px to **1,198px**.
+
+**A person appears once.** `groupByPerson` puts someone's entries on one row as
+chips — `#1 out wk 4`, `#2 out wk 5`, `#3 👁`. Not only for length: three rows
+for one person misrepresents them as three competitors when they are one person
+holding three lives.
+
+The entry stays the unit of competition — the prize is the last *entry*
+standing — so every chip keeps its own pick, its own alive/out state and its own
+elimination week. Grouping is presentation, and it must not blur that.
+
+**You are pinned to the top**, because finding yourself among 55 names is a real
+annoyance and a highlight colour does not solve it.
+
+### The bug in pinning
+
+Pinning is worth nothing if you are inside the folded half — which is precisely
+where you are once your last entry dies, and the moment you are most likely to
+come looking. The fold therefore opens itself for anyone who is in it, until
+they close it.
+
+Found by asserting it rather than by looking: the probe checks whether "(you)"
+is on screen *without touching anything*, for both a live viewer and a dead one.
+A screenshot of a live viewer would have looked perfect and proved nothing.
+
+### Not an internal scrollbar
+
+A vertical scroll box inside a vertically scrolling page fights itself — trapped
+scroll on touch, the outer page jumping at the boundary, and no indication of how
+much is hidden. The picker strips scroll *laterally*, a different axis from the
+page, which is why that works and this would not.

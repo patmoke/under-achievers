@@ -229,3 +229,48 @@ export function weekHighlights({ entries, picks, gamesById, week, statusOf, now 
     total: forWeek.length,
   };
 }
+
+/**
+ * The standings, one row per person rather than one per entry.
+ *
+ * The entry stays the unit of competition — the prize is the last entry
+ * standing, not the last person — so this is a display grouping and the
+ * per-entry status has to survive it. What it fixes is that three rows for one
+ * person misrepresents them: they are one competitor holding three lives.
+ *
+ * Sorted so the answer to "where am I" is the top row, then by who has the most
+ * lives left, then by whose last entry died most recently — which keeps the
+ * fresh casualties above the week-one dead.
+ */
+export function groupByPerson(entries, currentUserId) {
+  const byUser = new Map();
+  for (const entry of entries) {
+    if (!byUser.has(entry.user_id)) {
+      byUser.set(entry.user_id, {
+        user_id: entry.user_id,
+        username: entry.profiles?.username || '(unnamed)',
+        isMe: entry.user_id === currentUserId,
+        entries: [],
+      });
+    }
+    byUser.get(entry.user_id).entries.push(entry);
+  }
+
+  return [...byUser.values()]
+    .map(person => {
+      const sorted = [...person.entries].sort((a, b) => a.entry_number - b.entry_number);
+      const out = sorted.filter(e => e.status !== 'alive');
+      return {
+        ...person,
+        entries: sorted,
+        alive: sorted.length - out.length,
+        total: sorted.length,
+        lastOut: out.length ? Math.max(...out.map(e => e.week || 0)) : 0,
+      };
+    })
+    .sort((a, b) =>
+      (b.isMe ? 1 : 0) - (a.isMe ? 1 : 0) ||
+      b.alive - a.alive ||
+      b.lastOut - a.lastOut ||
+      a.username.localeCompare(b.username));
+}
