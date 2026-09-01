@@ -1,5 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
-import { computeEntryStatus, usedTeams, pickOutcome, isGameLocked } from './survivor';
+import {
+  computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
+  pickableWeeks, teamConflict, teamUsage, weekLockedIn, weekHighlights, groupByPerson,
+} from './survivor';
 import {
   deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
   summarisePicks,
@@ -444,5 +447,226 @@ describe('summarisePicks', () => {
     const picks = [graded(-7, -7)];
     expect(summarisePicks(picks).picks).toBe(1);
     expect(summarisePicks(picks).picks).toBe(1); // recounting never grows
+  });
+});
+
+// ─── Advance picks, and what the field is doing ─────────────────────────────
+//
+// These reuse the file's fixed clock. `past` and `future` are just two
+// timestamps either side of NOW — which week they nominally belong to does not
+// matter here, only whether they have kicked off.
+const now = NOW;
+const past = PAST(1);
+const future = FUTURE(1);
+
+describe('pickableWeeks', () => {
+  const games = [
+    { week: 1, game_time: past },
+    { week: 1, game_time: future },
+    { week: 2, game_time: future },
+    { week: 4, game_time: future },
+  ];
+
+  it('offers the current week while any of it is still unstarted', () => {
+    expect(pickableWeeks(games, 1, now)).toEqual([1, 2, 4]);
+  });
+
+  it('drops a week once every game in it has kicked off', () => {
+    expect(pickableWeeks([{ week: 1, game_time: past }, { week: 2, game_time: future }], 1, now))
+      .toEqual([2]);
+  });
+
+  it('never offers a week behind the current one', () => {
+    expect(pickableWeeks(games, 2, now)).toEqual([2, 4]);
+  });
+});
+
+describe('teamConflict', () => {
+  const picks = [
+    { entry_id: 'e1', week: 1, team_abbr: 'KC', games: { game_time: past } },
+    { entry_id: 'e1', week: 6, team_abbr: 'BUF', games: { game_time: future } },
+  ];
+
+  it('calls a locked pick spent — that team is gone for the season', () => {
+    expect(teamConflict({ picks, entryId: 'e1', team: 'KC', week: 3, now }))
+      .toEqual({ kind: 'spent', week: 1 });
+  });
+
+  it('calls an unlocked pick planned — recoverable, the near week wins', () => {
+    expect(teamConflict({ picks, entryId: 'e1', team: 'BUF', week: 2, now }))
+      .toEqual({ kind: 'planned', week: 6 });
+  });
+
+  it('is not a conflict with itself', () => {
+    expect(teamConflict({ picks, entryId: 'e1', team: 'BUF', week: 6, now })).toBeNull();
+  });
+
+  it('does not see another entry\'s picks', () => {
+    expect(teamConflict({ picks, entryId: 'e2', team: 'KC', week: 3, now })).toBeNull();
+  });
+});
+
+describe('teamUsage', () => {
+  const entries = [{ id: 'a', status: 'alive' }, { id: 'b', status: 'alive' }, { id: 'c', status: 'eliminated' }];
+  const teams = ['KC', 'BUF', 'PHI'];
+
+  it('counts locked picks by entries that are still alive', () => {
+    const picks = [
+      { entry_id: 'a', team_abbr: 'KC', games: { game_time: past } },
+      { entry_id: 'b', team_abbr: 'KC', games: { game_time: past } },
+      { entry_id: 'c', team_abbr: 'BUF', games: { game_time: past } },  // eliminated
+    ];
+    expect(teamUsage({ entries, picks, teams, now })).toEqual([
+      { team: 'KC', count: 2 }, { team: 'BUF', count: 0 }, { team: 'PHI', count: 0 },
+    ]);
+  });
+
+  it('does not leak a pick that has not kicked off', () => {
+    // This is the one that matters. Counting unlocked picks would publish
+    // through the back door exactly what the pick history hides.
+    const picks = [{ entry_id: 'a', team_abbr: 'KC', games: { game_time: future } }];
+    expect(teamUsage({ entries, picks, teams, now }).every(t => t.count === 0)).toBe(true);
+  });
+
+  it('lists unused teams at zero, since "who is left" is the real question', () => {
+    expect(teamUsage({ entries, picks: [], teams, now })).toHaveLength(3);
+  });
+});
+
+describe('weekLockedIn', () => {
+  const entries = [{ id: 'a', status: 'alive' }, { id: 'b', status: 'alive' }];
+
+  it('is false while any alive entry\'s pick is still unstarted', () => {
+    const picks = [
+      { entry_id: 'a', week: 1, team_abbr: 'KC', games: { game_time: past } },
+      { entry_id: 'b', week: 1, team_abbr: 'BUF', games: { game_time: future } },
+    ];
+    expect(weekLockedIn({ entries, picks, week: 1, now })).toBe(false);
+  });
+
+  it('is true once they have all kicked off', () => {
+    const picks = [
+      { entry_id: 'a', week: 1, team_abbr: 'KC', games: { game_time: past } },
+      { entry_id: 'b', week: 1, team_abbr: 'BUF', games: { game_time: past } },
+    ];
+    expect(weekLockedIn({ entries, picks, week: 1, now })).toBe(true);
+  });
+
+  it('is not held open by someone who never picked', () => {
+    // They are about to be eliminated for missing the week. Waiting on them
+    // would mean waiting forever.
+    const picks = [{ entry_id: 'a', week: 1, team_abbr: 'KC', games: { game_time: past } }];
+    expect(weekLockedIn({ entries, picks, week: 1, now })).toBe(true);
+  });
+
+  it('is false when nobody picked at all', () => {
+    expect(weekLockedIn({ entries, picks: [], week: 1, now })).toBe(false);
+  });
+});
+
+describe('weekHighlights', () => {
+  const entries = [
+    { id: 'a', status: 'alive' }, { id: 'b', status: 'alive' },
+    { id: 'c', status: 'alive' }, { id: 'd', status: 'eliminated' },
+  ];
+  const gamesById = {
+    g1: { home_team_abbr: 'KC', away_team_abbr: 'LV', home_moneyline: -350, away_moneyline: 280 },
+    g2: { home_team_abbr: 'NYJ', away_team_abbr: 'BUF', home_moneyline: 165, away_moneyline: -195 },
+  };
+  const locked = t => ({ game_time: past, ...t });
+
+  const picks = [
+    { entry_id: 'a', week: 1, team_abbr: 'KC', game_id: 'g1', games: locked({}) },
+    { entry_id: 'b', week: 1, team_abbr: 'KC', game_id: 'g1', games: locked({}) },
+    { entry_id: 'c', week: 1, team_abbr: 'NYJ', game_id: 'g2', games: locked({}) },
+    { entry_id: 'd', week: 1, team_abbr: 'LV', game_id: 'g1', games: locked({}) },
+  ];
+
+  it('stays hidden until every alive pick has kicked off', () => {
+    const early = [{ entry_id: 'a', week: 1, team_abbr: 'KC', game_id: 'g1', games: { game_time: future } }];
+    expect(weekHighlights({ entries, picks: early, gamesById, week: 1, now })).toBeNull();
+  });
+
+  it('names the most-backed team as the hot pick', () => {
+    const h = weekHighlights({ entries, picks, gamesById, week: 1, now });
+    expect(h.hot).toEqual({ team: 'KC', count: 2, share: 2 / 3 });
+  });
+
+  it('names the longest shot as the risky pick', () => {
+    // NYJ at +165 is a 37.7% shot; KC at -350 is 77.8%. Compared as raw
+    // American numbers rather than probabilities, -350 would look "bigger".
+    const h = weekHighlights({ entries, picks, gamesById, week: 1, now });
+    expect(h.risky.team).toBe('NYJ');
+    expect(h.risky.moneyline).toBe(165);
+    expect(h.risky.chance).toBeCloseTo(0.3774, 4);
+  });
+
+  it('ignores entries that are already out', () => {
+    // LV at +280 is longer than NYJ, but the only entry on it is eliminated.
+    const h = weekHighlights({ entries, picks, gamesById, week: 1, now });
+    expect(h.total).toBe(3);
+    expect(h.risky.team).not.toBe('LV');
+  });
+
+  it('survives a game with no moneyline rather than crashing', () => {
+    const unpriced = { g3: { home_team_abbr: 'DEN', away_team_abbr: 'SEA' } };
+    const p = [{ entry_id: 'a', week: 1, team_abbr: 'DEN', game_id: 'g3', games: locked({}) }];
+    const h = weekHighlights({ entries, picks: p, gamesById: unpriced, week: 1, now });
+    expect(h.hot.team).toBe('DEN');
+    expect(h.risky).toBeNull();
+  });
+});
+
+describe('groupByPerson', () => {
+  const entry = (id, user, n, status, week = null) => ({
+    id, user_id: user, entry_number: n, status, week,
+    profiles: { username: user },
+  });
+
+  it('collapses a person\'s entries onto one row, in entry order', () => {
+    const people = groupByPerson([
+      entry('a2', 'ann', 2, 'alive'),
+      entry('a1', 'ann', 1, 'eliminated', 3),
+      entry('b1', 'bob', 1, 'alive'),
+    ], null);
+    expect(people).toHaveLength(2);
+    const ann = people.find(p => p.username === 'ann');
+    expect(ann.entries.map(e => e.entry_number)).toEqual([1, 2]);
+    expect(ann.alive).toBe(1);
+    expect(ann.total).toBe(2);
+  });
+
+  it('puts you first however badly you are doing', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'alive'),
+      entry('b1', 'bob', 1, 'eliminated', 1),
+    ], 'bob');
+    expect(people[0].username).toBe('bob');
+  });
+
+  it('ranks by lives left', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'alive'),
+      entry('b1', 'bob', 1, 'alive'),
+      entry('b2', 'bob', 2, 'alive'),
+    ], null);
+    expect(people.map(p => p.username)).toEqual(['bob', 'ann']);
+  });
+
+  it('puts the freshest casualties above the week-one dead', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'eliminated', 1),
+      entry('b1', 'bob', 1, 'eliminated', 6),
+    ], null);
+    expect(people.map(p => p.username)).toEqual(['bob', 'ann']);
+  });
+
+  it('keeps every entry\'s own status, since the entry is what competes', () => {
+    const people = groupByPerson([
+      entry('a1', 'ann', 1, 'eliminated', 2),
+      entry('a2', 'ann', 2, 'alive'),
+    ], null);
+    expect(people[0].entries.map(e => e.status)).toEqual(['eliminated', 'alive']);
+    expect(people[0].alive).toBe(1);
   });
 });

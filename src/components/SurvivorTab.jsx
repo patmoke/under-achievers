@@ -1,14 +1,89 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2 } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { isGameLocked, computeEntryStatus, usedTeams as computeUsedTeams, pickOutcome } from '../lib/survivor';
+import {
+  isGameLocked, computeEntryStatus, pickOutcome,
+  pickableWeeks, teamConflict, teamUsage, weekHighlights, groupByPerson,
+} from '../lib/survivor';
+
+/** Games per column in the picker. Four is about a phone screen. */
+const GAMES_PER_COLUMN = 4;
+
+const chunk = (xs, n) =>
+  Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n));
 
 function formatGameTime(iso) {
   const d = new Date(iso);
   const day = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
   const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   return `${day} · ${time}`;
+}
+
+/**
+ * A horizontally scrolling strip with arrows.
+ *
+ * Native scrolling carries the touch case, which is the one that matters; the
+ * arrows exist for a mouse, where there is no swipe. Both drive the same
+ * element, so there is no window index to drift out of step with the scroll
+ * position.
+ */
+function Strip({ children, by = 240, label, caption, arrows = 'flank' }) {
+  const ref = useRef(null);
+  const nudge = dir => ref.current?.scrollBy({ left: dir * by, behavior: 'smooth' });
+  const arrow = (dir, icon) => (
+    <button
+      onClick={() => nudge(dir)}
+      aria-label={`${dir < 0 ? 'Previous' : 'Next'} ${label}`}
+      style={{
+        flexShrink: 0, width: 26, height: 26, borderRadius: '50%', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: 'var(--surface)', border: '1px solid var(--border-strong)', color: 'var(--ink-soft)',
+      }}
+    >
+      {icon}
+    </button>
+  );
+
+  const scroller = (
+    <div
+      ref={ref}
+      className="hide-scrollbar"
+      style={{
+        display: 'flex', gap: 8, overflowX: 'auto', scrollSnapType: 'x mandatory',
+        flex: 1, minWidth: 0, paddingBottom: 2,
+        scrollbarWidth: 'none', msOverflowStyle: 'none',
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  // Flanking arrows suit a single short row. Over tall content they end up
+  // floating beside the middle card and, worse, eat about 64px of width on a
+  // phone — width the cards need more than the arrows do.
+  if (arrows === 'above') {
+    return (
+      <div style={{ minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: 'var(--ink-faint)' }}>{caption}</span>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {arrow(-1, <ChevronLeft size={13} />)}
+            {arrow(1, <ChevronRight size={13} />)}
+          </div>
+        </div>
+        {scroller}
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      {arrow(-1, <ChevronLeft size={13} />)}
+      {scroller}
+      {arrow(1, <ChevronRight size={13} />)}
+    </div>
+  );
 }
 
 function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
@@ -41,6 +116,14 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [buybacks, setBuybacks] = useState([]);
   const [charges, setCharges] = useState([]);
   const [paidFilter, setPaidFilter] = useState('all');   // all | unpaid | paid
+  // Which week each of my entries is currently picking for. Per entry, because
+  // you might be filing week 6 on one and this week on another.
+  const [pickWeek, setPickWeek] = useState({});
+  // A pending "this clears your week N pick" question, or null.
+  const [release, setRelease] = useState(null);
+  // null means "nobody has said", so the default below can depend on data
+  // that has not loaded when this state is created.
+  const [showOutChoice, setShowOutChoice] = useState(null);
   const [allGames, setAllGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState({});
@@ -110,10 +193,6 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // Rules live in lib/survivor.js so they can be unit tested without React.
   function computeStatus(entry) {
     return computeEntryStatus({ entry, picks, games: allGames, currentWeek });
-  }
-
-  function usedTeams(entry) {
-    return computeUsedTeams({ entry, picks, currentWeek });
   }
 
   function myBuybackCount(userId) {
@@ -188,14 +267,32 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function submitPick(entryId, game, teamAbbr) {
+  // Everything goes through make_survivor_pick. It owns the rules — kickoff,
+  // the team you already spent, and clearing a later pick that held the team
+  // you want now — and does the clear and the write in one transaction, which
+  // two client calls could not.
+  async function submitPick(entryId, game, teamAbbr, week, releaseHeld = false) {
     setSubmitting(s => ({ ...s, [entryId]: true }));
-    const { error } = await supabase.from('survivor_picks').upsert({
-      entry_id: entryId, season, week: currentWeek, game_id: game.id, team_abbr: teamAbbr,
-    }, { onConflict: 'entry_id,week' });
+    const { data, error } = await supabase.rpc('make_survivor_pick', {
+      p_entry_id: entryId, p_week: week, p_game_id: game.id,
+      p_team: teamAbbr, p_release: releaseHeld,
+    });
     setSubmitting(s => ({ ...s, [entryId]: false }));
     if (error) { toast.error(error.message); return; }
-    toast.success('Pick locked in!');
+    if (data?.released_week) {
+      toast.success(`${teamAbbr} taken for week ${week}. Week ${data.released_week} now has no pick.`);
+    } else {
+      toast.success(week === currentWeek ? 'Pick locked in!' : `Filed for week ${week}`);
+    }
+    fetchAll();
+  }
+
+  // Taking back a future pick, rather than being stuck naming some team for a
+  // week you are not ready to decide.
+  async function removePick(pick) {
+    const { error } = await supabase.from('survivor_picks').delete().eq('id', pick.id);
+    if (error) { toast.error(error.message); return; }
+    toast.success(`Week ${pick.week} pick removed`);
     fetchAll();
   }
 
@@ -219,13 +316,33 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       (a.entry?.entry_number || 0) - (b.entry?.entry_number || 0) ||
       // Buy-in above the rebuys it came before.
       (a.kind === b.kind ? (a.week || 0) - (b.week || 0) : a.kind === 'buy_in' ? -1 : 1));
+  // Weeks still open to pick, current one first. More than one only once the
+  // schedule has games beyond this week that have not kicked off.
+  const weeksOpen = pickableWeeks(allGames, currentWeek);
   const aliveCount = withStatus.filter(e => e.status === 'alive').length;
-  const sorted = [...withStatus].sort((a, b) => {
-    if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
-    if (a.status === 'eliminated') return (b.week || 0) - (a.week || 0);
-    return 0;
-  });
 
+  // Every team in the season's schedule, so the board can show the ones nobody
+  // has touched rather than only the ones that are gone.
+  const gamesById = Object.fromEntries(allGames.map(g => [g.id, g]));
+  const allTeams = [...new Set(allGames.flatMap(g => [g.home_team_abbr, g.away_team_abbr]))]
+    .filter(Boolean).sort();
+  const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
+  const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
+  const usageMax = Math.max(1, ...usage.map(u => u.count));
+
+  const people = groupByPerson(withStatus, currentUserId);
+  const livePeople = people.filter(p => p.alive > 0);
+  const outPeople = people.filter(p => p.alive === 0);
+  // Pinning yourself to the top is worth nothing if you are inside the folded
+  // half — which is exactly where you are once your last entry dies, and the
+  // moment you are most likely to come looking. So the fold opens itself for
+  // anyone who is in it, until they close it.
+  const showOut = showOutChoice ?? outPeople.some(p => p.isMe);
+  const rowProps = {
+    currentUserId, currentWeek, isOwner,
+    picksForEntry, entryBuybacks, ownerRemoveEntry,
+    isChampionEntry: e => e.status === 'alive' && aliveCount === 1 && entries.length > 1,
+  };
   const historyEntries = [...withStatus].sort((a, b) => {
     if (a.status !== b.status) return a.status === 'alive' ? -1 : 1;
     return (a.profiles?.username || '').localeCompare(b.profiles?.username || '') || a.entry_number - b.entry_number;
@@ -276,6 +393,44 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
   return (
     <div>
+      {/* Asked, not announced. The person is right here having just tapped the
+          team, so this is the moment to say what it costs — and the cost is a
+          week left empty, which is exactly the week someone filing ahead was
+          trying to protect. */}
+      {release && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setRelease(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)',
+                   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div className="card" onClick={e => e.stopPropagation()} style={{ padding: 22, maxWidth: 420 }}>
+            <h3 style={{ fontSize: 19, textTransform: 'none', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <AlertTriangle size={17} style={{ color: 'var(--warning)' }} />
+              {release.team} is your week {release.heldWeek} pick
+            </h3>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, margin: '0 0 18px' }}>
+              Use them in week {release.week} instead? <strong style={{ color: 'var(--ink)' }}>
+              Week {release.heldWeek} will be left with no pick</strong>, and a week with no pick
+              when its games kick off is an elimination.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={() => setRelease(null)}>Keep week {release.heldWeek}</button>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  const r = release;
+                  setRelease(null);
+                  submitPick(r.entryId, r.game, r.team, r.week, true);
+                }}
+              >
+                Use {release.team} now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {/* YOUR ENTRIES */}
       <div style={{ marginBottom: 32 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
@@ -310,11 +465,18 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               const entryPicks = picksForEntry(entry.id);
               const thisWeekPick = entryPicks.find(p => p.week === currentWeek);
               const locked = thisWeekPick && isGameLocked(thisWeekPick.games);
-              const used = usedTeams(entry);
+              // Team availability is decided per pick-week now, by teamConflict
+              // below — a team held by an unlocked pick is offered with a
+              // warning rather than simply greyed out.
               const eligible = canBuyBack();
 
               return (
-                <div key={entry.id} className="card" style={{ padding: 20, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
+                // minWidth: 0 is load-bearing. This card is a grid item, and a
+                // grid item defaults to min-width:auto — it refuses to shrink
+                // below its content's intrinsic width. With a horizontal strip
+                // inside, that made the card 1268px wide on a 390px phone and
+                // scrolled the whole page sideways rather than the strip.
+                <div key={entry.id} className="card" style={{ padding: 20, minWidth: 0, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
@@ -362,49 +524,154 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         'Buybacks are not enabled for this league.'
                       )}
                     </div>
-                  ) : thisWeekPick && locked ? (
-                    <div style={{ fontSize: 14 }}>
-                      <span style={{ color: 'var(--ink-soft)' }}>This week: </span>
-                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 17 }}>{thisWeekPick.team_abbr}</strong>
-                      <span className="badge badge-red" style={{ marginLeft: 10 }}><Lock size={9} style={{ marginRight: 4 }} />Locked</span>
-                    </div>
                   ) : (
-                    <div>
-                      <div className="label-muted" style={{ marginBottom: 10 }}>
-                        Pick a team to win — Week {currentWeek}
-                      </div>
-                      <div style={{ display: 'grid', gap: 10 }}>
-                        {weekGames.filter(g => !isGameLocked(g)).map(game => (
-                          <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
-                            <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                              <Clock size={11} /> {formatGameTime(game.game_time)}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <TeamButton
-                                abbr={game.away_team_abbr}
-                                name={game.away_team}
-                                isUsed={used.has(game.away_team_abbr)}
-                                isSelected={thisWeekPick?.team_abbr === game.away_team_abbr}
-                                disabled={used.has(game.away_team_abbr) || submitting[entry.id]}
-                                onClick={() => submitPick(entry.id, game, game.away_team_abbr)}
-                              />
-                              <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>
-                              <TeamButton
-                                abbr={game.home_team_abbr}
-                                name={game.home_team}
-                                isUsed={used.has(game.home_team_abbr)}
-                                isSelected={thisWeekPick?.team_abbr === game.home_team_abbr}
-                                disabled={used.has(game.home_team_abbr) || submitting[entry.id]}
-                                onClick={() => submitPick(entry.id, game, game.home_team_abbr)}
-                              />
-                            </div>
+                    (() => {
+                      // Once this week's pick has locked the only weeks left are
+                      // ahead, so default there. Locking used to end the section
+                      // outright, which shut the door on filing ahead at exactly
+                      // the moment someone is most likely to want to.
+                      const openAhead = weeksOpen.filter(w => w !== currentWeek);
+                      const fallback = weeksOpen.includes(currentWeek) ? currentWeek : openAhead[0];
+                      const wk = pickWeek[entry.id] ?? fallback;
+                      const openGames = allGames.filter(g => g.week === wk && !isGameLocked(g));
+                      const pickThisWeek = entryPicks.find(p => p.week === wk);
+                      const clashFor = team =>
+                        teamConflict({ picks, entryId: entry.id, team, week: wk });
+                      const choose = (game, team) => {
+                        const clash = clashFor(team);
+                        // 'planned' is recoverable and needs consent; 'spent' is
+                        // already disabled below and never reaches here.
+                        if (clash?.kind === 'planned') {
+                          setRelease({ entryId: entry.id, game, team, week: wk, heldWeek: clash.week });
+                          return;
+                        }
+                        submitPick(entry.id, game, team, wk);
+                      };
+                      const laterPicks = entryPicks
+                        .filter(p => p.week !== currentWeek && !isGameLocked(p.games))
+                        .sort((a, b) => a.week - b.week);
+
+                      if (wk === undefined) {
+                        return (
+                          <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+                            No games left to pick.
                           </div>
-                        ))}
-                      </div>
-                      {weekGames.filter(g => !isGameLocked(g)).length === 0 && (
-                        <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>All of this week's games have started.</div>
-                      )}
-                    </div>
+                        );
+                      }
+
+                      return (
+                        <div>
+                          {thisWeekPick && locked && (
+                            <div style={{ fontSize: 14, marginBottom: 14 }}>
+                              <span style={{ color: 'var(--ink-soft)' }}>This week: </span>
+                              <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 17 }}>{thisWeekPick.team_abbr}</strong>
+                              <span className="badge badge-red" style={{ marginLeft: 10 }}><Lock size={9} style={{ marginRight: 4 }} />Locked</span>
+                            </div>
+                          )}
+
+                          {/* Filed ahead. Loud on purpose — a plan you have
+                              forgotten is how a week ends up empty. */}
+                          {laterPicks.length > 0 && (
+                            <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 'var(--radius-sm)',
+                                          background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                              <span className="label-muted">Filed ahead</span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
+                                {laterPicks.map(p => (
+                                  <span key={p.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6,
+                                                            fontSize: 13, padding: '3px 8px', borderRadius: 'var(--radius-sm)',
+                                                            background: 'var(--surface)', border: '1px solid var(--border-strong)' }}>
+                                    <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 14 }}>{p.team_abbr}</strong>
+                                    <span style={{ color: 'var(--ink-soft)' }}>wk {p.week}</span>
+                                    <button onClick={() => removePick(p)} aria-label={`Remove week ${p.week} pick`}
+                                            style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+                                      <X size={12} />
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="label-muted" style={{ marginBottom: 8 }}>Pick a team to win</div>
+                          {/* Eighteen chips in a wrapped row pushed the games
+                              off the screen before anyone had picked anything.
+                              A strip keeps the row one line deep however far
+                              ahead the schedule runs. */}
+                          {weeksOpen.length > 1 && (
+                            <div style={{ marginBottom: 12 }}>
+                              <Strip by={200} label="weeks">
+                                {weeksOpen.map(w => (
+                                  <button
+                                    key={w}
+                                    onClick={() => setPickWeek(prev => ({ ...prev, [entry.id]: w }))}
+                                    aria-pressed={w === wk}
+                                    style={{
+                                      flexShrink: 0, scrollSnapAlign: 'start',
+                                      padding: '4px 10px', borderRadius: 'var(--radius-sm)', fontSize: 12, fontWeight: 600,
+                                      cursor: 'pointer', whiteSpace: 'nowrap',
+                                      background: w === wk ? 'var(--accent)' : 'var(--surface)',
+                                      color: w === wk ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                                      border: `1px solid ${w === wk ? 'var(--accent)' : 'var(--border-strong)'}`,
+                                    }}
+                                  >
+                                    {w === currentWeek ? 'This week' : `Wk ${w}`}
+                                    {entryPicks.some(p => p.week === w) && ' ✓'}
+                                  </button>
+                                ))}
+                              </Strip>
+                            </div>
+                          )}
+
+                          {/* Sixteen games stacked was most of a phone screen
+                              of scrolling before you reached the standings.
+                              Four per column, columns scrolling sideways, keeps
+                              the whole week about one screen tall — the same
+                              trade the pick history table already makes. */}
+                          <Strip
+                            by={280}
+                            label="games"
+                            arrows="above"
+                            caption={`${openGames.length} game${openGames.length === 1 ? '' : 's'} — swipe for more`}
+                          >
+                            {chunk(openGames, GAMES_PER_COLUMN).map((column, ci) => (
+                              <div key={ci} style={{
+                                flexShrink: 0, scrollSnapAlign: 'start',
+                                width: 'min(300px, 78vw)',
+                                display: 'grid', gap: 10, alignContent: 'start',
+                              }}>
+                                {column.map(game => (
+                                  <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                                    <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                                      <Clock size={11} /> {formatGameTime(game.game_time)}
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                      {[game.away_team_abbr, game.home_team_abbr].map((abbr, i) => (
+                                        <Fragment key={abbr}>
+                                          {i === 1 && <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>}
+                                          <TeamButton
+                                            abbr={abbr}
+                                            name={i === 0 ? game.away_team : game.home_team}
+                                            isUsed={clashFor(abbr)?.kind === 'spent'}
+                                            isSelected={pickThisWeek?.team_abbr === abbr}
+                                            disabled={clashFor(abbr)?.kind === 'spent' || submitting[entry.id]}
+                                            onClick={() => choose(game, abbr)}
+                                          />
+                                        </Fragment>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            ))}
+                          </Strip>
+                          {openGames.length === 0 && (
+                            <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+                              Every game in week {wk} has started.
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   )}
                 </div>
               );
@@ -413,70 +680,144 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         )}
       </div>
 
-      {/* STANDINGS */}
-      <div style={{ marginBottom: isOwner ? 32 : 0 }}>
-        <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none' }}>Standings</h3>
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          {sorted.map((entry, idx) => {
-            const isMe = entry.user_id === currentUserId;
-            const entryPicks = picksForEntry(entry.id);
-            const thisWeekPick = entryPicks.find(p => p.week === currentWeek);
-            const canSeePick = isMe || (thisWeekPick && isGameLocked(thisWeekPick.games));
-            const isChampion = entry.status === 'alive' && aliveCount === 1 && entries.length > 1;
+      {/* THE WEEK'S PICKS — only once nobody can act on them */}
+      {highlights && (
+        <div style={{ marginBottom: 32 }}>
+          <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>
+            Week {currentWeek} in a nutshell
+          </h3>
+          <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+            Shown now that every pick this week has kicked off. Across {highlights.total} live
+            {highlights.total === 1 ? ' entry' : ' entries'}.
+          </p>
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
+            <div className="card" style={{ padding: 18 }}>
+              <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Flame size={12} style={{ color: 'var(--accent)' }} /> Hot pick
+              </div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                {highlights.hot.team}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                {highlights.hot.count} of {highlights.total} took them
+                {' '}({Math.round(highlights.hot.share * 100)}%)
+              </div>
+            </div>
 
-            return (
-              <div key={entry.id} style={{
-                padding: '14px 20px', borderBottom: idx === sorted.length - 1 ? 'none' : '1px solid var(--border)',
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
-                background: isMe ? 'var(--accent-soft)' : entry.status === 'eliminated' ? 'rgba(200,50,44,0.03)' : 'transparent',
-                opacity: entry.status === 'eliminated' ? 0.75 : 1,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {isChampion && <Trophy size={18} style={{ color: 'var(--gold)' }} aria-label="Champion" />}
-                  <div>
-                    <div style={{ fontWeight: 600, fontSize: 15, color: isMe ? 'var(--accent-dark)' : 'var(--ink)' }}>
-                      {entry.profiles?.username}
-                      {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
-                        <span style={{ color: 'var(--ink-soft)', fontSize: 12 }}> #{entry.entry_number}</span>
-                      )}
-                      {entryBuybacks(entry.id).map(b => (
-                        <span key={b.id} title={`Bought back in Week ${b.week}`} style={{ display: 'inline-flex', marginLeft: 6 }}>
-                          <RotateCcw size={11} style={{ color: 'var(--gold)' }} aria-label={`Bought back in Week ${b.week}`} />
-                        </span>
-                      ))}
-                      {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
-                    </div>
-                    {entry.status === 'eliminated' && (
-                      <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>Out — Week {entry.week}{entry.reason === 'missed' ? ' (missed pick)' : ''}</div>
-                    )}
-                  </div>
+            {highlights.risky && (
+              <div className="card" style={{ padding: 18 }}>
+                <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <AlertTriangle size={12} style={{ color: 'var(--warning)' }} /> Risky pick
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ textAlign: 'right', fontSize: 13 }}>
-                    {canSeePick && thisWeekPick ? (
-                      <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 15 }}>{thisWeekPick.team_abbr}</strong>
-                    ) : thisWeekPick ? (
-                      <span style={{ color: 'var(--ink-faint)', display: 'flex', alignItems: 'center', gap: 4 }}><EyeOff size={11} /> hidden</span>
-                    ) : (
-                      <span style={{ color: 'var(--ink-faint)' }}>—</span>
-                    )}
-                  </div>
-                  <span className={entry.status === 'alive' ? 'badge badge-lime' : 'badge badge-red'} style={{ fontSize: 10 }}>
-                    {entry.status === 'alive' ? 'Alive' : 'Out'}
+                <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                  {highlights.risky.team}
+                  <span style={{ fontSize: 17, color: 'var(--ink-soft)', marginLeft: 8, fontVariantNumeric: 'tabular-nums' }}>
+                    {highlights.risky.moneyline > 0 ? '+' : '−'}{Math.abs(highlights.risky.moneyline)}
                   </span>
-                  {isOwner && (
-                    <button
-                      onClick={() => ownerRemoveEntry(entry)}
-                      title={`Remove ${entry.profiles?.username}'s entry #${entry.entry_number}`}
-                      style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', display: 'flex', padding: 2 }}
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                  Longest shot backed — the market gave them {Math.round(highlights.risky.chance * 100)}%
+                  {highlights.risky.count > 1 && `, and ${highlights.risky.count} entries took it`}
                 </div>
               </div>
-            );
-          })}
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* TEAM BOARD */}
+      {usage.length > 0 && (
+        <div style={{ marginBottom: 32 }}>
+          <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>Teams burned</h3>
+          <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+            How many live entries have already used each team. Counts a pick only once its
+            game has kicked off, so this never gives away what is still to come.
+          </p>
+          <div className="card" style={{ padding: 14 }}>
+            <div style={{ display: 'grid', gap: 6,
+                          gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
+              {usage.map(({ team, count }) => (
+                <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
+                     style={{
+                       padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                       background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
+                       border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
+                       opacity: count === 0 ? 0.55 : 1,
+                     }}>
+                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+                                color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
+                    {team}
+                  </div>
+                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
+                                fontVariantNumeric: 'tabular-nums',
+                                color: count === 0 ? 'var(--ink-faint)'
+                                       : count === usageMax ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
+                    {count}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* STANDINGS */}
+      <div style={{ marginBottom: isOwner ? 32 : 0 }}>
+        <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>Standings</h3>
+        <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+          {aliveCount} of {entries.length} {entries.length === 1 ? 'entry' : 'entries'} still alive.
+          {' '}Each entry plays on its own — the last one standing wins.
+        </p>
+
+        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          {livePeople.map((person, idx) => (
+            <PersonRow
+              key={person.user_id}
+              person={person}
+              last={idx === livePeople.length - 1 && outPeople.length === 0}
+              {...rowProps}
+            />
+          ))}
+
+          {/* The dead pile. Nothing in week one, most of the league by week
+              eight — folding it is the only change here that gets more useful
+              as the season runs. */}
+          {outPeople.length > 0 && (
+            <>
+              <button
+                onClick={() => setShowOutChoice(!showOut)}
+                aria-expanded={showOut}
+                style={{
+                  width: '100%', padding: '12px 20px', cursor: 'pointer', textAlign: 'left',
+                  background: 'var(--surface-alt)', border: 'none',
+                  borderTop: livePeople.length ? '1px solid var(--border)' : 'none',
+                  borderBottom: showOut ? '1px solid var(--border)' : 'none',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+                  fontSize: 13.5, fontWeight: 600, color: 'var(--ink-soft)',
+                }}
+              >
+                <span>
+                  {outPeople.length} {outPeople.length === 1 ? 'person' : 'people'} out
+                  <span style={{ fontWeight: 400 }}>
+                    {' '}({outPeople.reduce((n, p) => n + p.total, 0)}{' '}
+                    {outPeople.reduce((n, p) => n + p.total, 0) === 1 ? 'entry' : 'entries'})
+                  </span>
+                </span>
+                <ChevronRight
+                  size={15}
+                  style={{ transform: showOut ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}
+                />
+              </button>
+              {showOut && outPeople.map((person, idx) => (
+                <PersonRow
+                  key={person.user_id}
+                  person={person}
+                  last={idx === outPeople.length - 1}
+                  {...rowProps}
+                />
+              ))}
+            </>
+          )}
         </div>
       </div>
 
@@ -603,5 +944,129 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One person, however many entries they hold.
+ *
+ * The entries stay individually legible — each keeps its own pick, its own
+ * alive/out state and its own elimination week — because the entry is what
+ * actually competes. Grouping is only about not printing someone's name three
+ * times in a row.
+ */
+function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
+                     picksForEntry, entryBuybacks, ownerRemoveEntry, isChampionEntry }) {
+  const isMe = person.user_id === currentUserId;
+  const champion = person.entries.some(isChampionEntry);
+  const allOut = person.alive === 0;
+
+  return (
+    <div style={{
+      padding: '13px 20px', borderBottom: last ? 'none' : '1px solid var(--border)',
+      // nowrap on purpose. With wrap, flexbox takes the free option — it drops
+      // the chips to their own line rather than shrinking the name, so the
+      // ellipsis never fires and one long username makes a row half again as
+      // tall. Removing the escape route is what makes the name give way.
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'nowrap',
+      background: isMe ? 'var(--accent-soft)' : allOut ? 'rgba(200,50,44,0.03)' : 'transparent',
+      opacity: allOut ? 0.75 : 1,
+    }}>
+      {/* minWidth: 0 on both the row item and the name is what lets the name
+          shrink. Without it a long username refuses to give ground, shoves the
+          chips onto their own line and left-aligns them there — one ragged row
+          in a list where every other one is a tidy pair. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 auto' }}>
+        {champion && <Trophy size={18} style={{ color: 'var(--gold)', flexShrink: 0 }} aria-label="Champion" />}
+        <div style={{ minWidth: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+            <span
+              title={person.username}
+              style={{
+                fontWeight: 600, fontSize: 15, minWidth: 0,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                color: isMe ? 'var(--accent-dark)' : 'var(--ink)',
+              }}
+            >
+              {person.username}
+            </span>
+            {/* Outside the truncating span, so the one label you always want to
+                see is the one thing that cannot be cut off. */}
+            {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', flexShrink: 0 }}>(you)</span>}
+          </div>
+          {person.total > 1 && (
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+              {allOut ? `All ${person.total} out` : `${person.alive} of ${person.total} alive`}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* marginLeft:auto keeps the chips hard right even in the rare case they
+          do wrap — a four-entry row on a very narrow screen. */}
+      {/* flexShrink: 0 so the chips keep their line and the name yields
+          instead. Letting them shrink put two chips up and one orphaned
+          underneath, which reads worse than a shortened name — the entries are
+          a set and want to be seen as one. */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto', flexShrink: 0 }}>
+        {person.entries.map(entry => (
+          <EntryChip
+            key={entry.id}
+            entry={entry}
+            showNumber={person.total > 1}
+            isMine={isMe}
+            currentWeek={currentWeek}
+            picks={picksForEntry(entry.id)}
+            buybacks={entryBuybacks(entry.id)}
+            onRemove={isOwner ? () => ownerRemoveEntry(entry) : null}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** One entry: its number, this week's pick if it may be shown, and its fate. */
+function EntryChip({ entry, showNumber, isMine, currentWeek, picks, buybacks, onRemove }) {
+  const pick = picks.find(p => p.week === currentWeek);
+  const visible = isMine || (pick && isGameLocked(pick.games));
+  const out = entry.status !== 'alive';
+
+  return (
+    <span
+      title={out ? `Out in week ${entry.week}${entry.reason === 'missed' ? ' — missed pick' : ''}` : undefined}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 5,
+        padding: '4px 8px', borderRadius: 'var(--radius-sm)', fontSize: 12.5,
+        background: out ? 'transparent' : 'var(--surface-alt)',
+        border: `1px solid ${out ? 'var(--border)' : 'var(--border-strong)'}`,
+        color: out ? 'var(--ink-faint)' : 'var(--ink)',
+      }}
+    >
+      {showNumber && <span style={{ color: 'var(--ink-faint)' }}>#{entry.entry_number}</span>}
+
+      {buybacks.map(b => (
+        <RotateCcw key={b.id} size={10} style={{ color: 'var(--gold)' }} aria-label={`Bought back in week ${b.week}`} />
+      ))}
+
+      {out ? (
+        <span style={{ whiteSpace: 'nowrap' }}>
+          out wk {entry.week}{entry.reason === 'missed' ? '*' : ''}
+        </span>
+      ) : visible && pick ? (
+        <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 14 }}>{pick.team_abbr}</strong>
+      ) : pick ? (
+        <EyeOff size={11} style={{ color: 'var(--ink-faint)' }} aria-label="Hidden until kickoff" />
+      ) : (
+        <span style={{ color: 'var(--ink-faint)' }}>—</span>
+      )}
+
+      {onRemove && (
+        <button onClick={onRemove} aria-label={`Remove entry #${entry.entry_number}`}
+                style={{ background: 'none', border: 'none', color: 'var(--ink-faint)', cursor: 'pointer', padding: 0, display: 'flex' }}>
+          <Trash2 size={11} />
+        </button>
+      )}
+    </span>
   );
 }
