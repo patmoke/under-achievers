@@ -7,6 +7,13 @@ import {
   pickableWeeks, teamConflict, teamUsage, weekHighlights, groupByPerson,
 } from '../lib/survivor';
 
+// One scale for both tables. A username was 15px in the standings and 13px in
+// the pick history — the same fact about the same person, rendered two ways on
+// one screen. Rows differed in horizontal padding too.
+const ROW_PAD_X = 20;
+const NAME_SIZE = 14.5;
+const SUB_SIZE = 12.5;
+
 /** Games per column in the picker. Four is about a phone screen. */
 const GAMES_PER_COLUMN = 4;
 
@@ -82,6 +89,70 @@ function Strip({ children, by = 240, label, caption, arrows = 'flank' }) {
       {arrow(-1, <ChevronLeft size={13} />)}
       {scroller}
       {arrow(1, <ChevronRight size={13} />)}
+    </div>
+  );
+}
+
+/**
+ * A titled, collapsible block.
+ *
+ * Every section on this tab is one of these, which is the point: the header
+ * spacing used to be set per section by hand and had already drifted — three
+ * sections put 4px under the title and let a caption carry the gap, two put 16px
+ * and had no caption at all. Making the shell shared means it cannot drift
+ * again.
+ *
+ * Collapse state is remembered per section in localStorage. It is a
+ * convenience, not a setting, so a new device simply starts from the defaults.
+ */
+function Section({ id, title, caption, action, defaultOpen = true, children }) {
+  const key = `ua.section.${id}`;
+  const [open, setOpen] = useState(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return saved === null ? defaultOpen : saved === '1';
+    } catch { return defaultOpen; }
+  });
+
+  function toggle() {
+    const next = !open;
+    setOpen(next);
+    try { localStorage.setItem(key, next ? '1' : '0'); } catch { /* private browsing */ }
+  }
+
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <button
+          onClick={toggle}
+          aria-expanded={open}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 7, padding: 0,
+            background: 'none', border: 'none', cursor: 'pointer', color: 'inherit',
+          }}
+        >
+          <ChevronRight
+            size={17}
+            style={{
+              color: 'var(--ink-faint)', flexShrink: 0,
+              transform: open ? 'rotate(90deg)' : 'none', transition: 'transform .15s',
+            }}
+          />
+          <h3 style={{ fontSize: 20, textTransform: 'none', margin: 0 }}>{title}</h3>
+        </button>
+        {action}
+      </div>
+
+      {open && (
+        <>
+          {caption && (
+            <p style={{ fontSize: SUB_SIZE, color: 'var(--ink-faint)', margin: '6px 0 14px', lineHeight: 1.55 }}>
+              {caption}
+            </p>
+          )}
+          <div style={{ marginTop: caption ? 0 : 14 }}>{children}</div>
+        </>
+      )}
     </div>
   );
 }
@@ -432,21 +503,21 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         </div>
       )}
       {/* YOUR ENTRIES */}
-      <div style={{ marginBottom: 32 }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, flexWrap: 'wrap', gap: 8 }}>
-          <h3 style={{ fontSize: 20, textTransform: 'none' }}>Your entries</h3>
-          {(myEntries.length === 0 || entryCap > 1) && (
-            <button
-              className="btn btn-secondary"
-              onClick={addEntry}
-              disabled={myEntries.length > 0 && !canAddEntry()}
-              title={seasonStarted ? 'Entries closed — the season has started' : leagueFull() ? 'This league is full' : entryCap <= myEntryCount(currentUserId) ? `Max ${entryCap} entries per person` : undefined}
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13 }}
-            >
-              <Plus size={14} /> {myEntries.length === 0 ? 'Add entry' : 'Buy additional entry'}
-            </button>
-          )}
-        </div>
+      <Section
+        id="entries"
+        title="Your entries"
+        action={(myEntries.length === 0 || entryCap > 1) && (
+          <button
+            className="btn btn-secondary"
+            onClick={addEntry}
+            disabled={myEntries.length > 0 && !canAddEntry()}
+            title={seasonStarted ? 'Entries closed — the season has started' : leagueFull() ? 'This league is full' : entryCap <= myEntryCount(currentUserId) ? `Max ${entryCap} entries per person` : undefined}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', fontSize: 13 }}
+          >
+            <Plus size={14} /> {myEntries.length === 0 ? 'Add entry' : 'Buy additional entry'}
+          </button>
+        )}
+      >
         {myEntries.length > 0 && entryCap > 1 && (
           <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginBottom: 16 }}>
             {seasonStarted
@@ -678,18 +749,15 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
             })}
           </div>
         )}
-      </div>
+      </Section>
 
       {/* THE WEEK'S PICKS — only once nobody can act on them */}
       {highlights && (
-        <div style={{ marginBottom: 32 }}>
-          <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>
-            Week {currentWeek} in a nutshell
-          </h3>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
-            Shown now that every pick this week has kicked off. Across {highlights.total} live
-            {highlights.total === 1 ? ' entry' : ' entries'}.
-          </p>
+        <Section
+          id="nutshell"
+          title={`Week ${currentWeek} in a nutshell`}
+          caption={`Shown now that every pick this week has kicked off. Across ${highlights.total} live ${highlights.total === 1 ? 'entry' : 'entries'}.`}
+        >
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
             <div className="card" style={{ padding: 18 }}>
               <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
@@ -722,17 +790,16 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               </div>
             )}
           </div>
-        </div>
+        </Section>
       )}
 
       {/* TEAM BOARD */}
       {usage.length > 0 && (
-        <div style={{ marginBottom: 32 }}>
-          <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>Teams burned</h3>
-          <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
-            How many live entries have already used each team. Counts a pick only once its
-            game has kicked off, so this never gives away what is still to come.
-          </p>
+        <Section
+          id="burned"
+          title="Teams burned"
+          caption="How many live entries have already used each team. Counts a pick only once its game has kicked off, so this never gives away what is still to come."
+        >
           <div className="card" style={{ padding: 14 }}>
             <div style={{ display: 'grid', gap: 6,
                           gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
@@ -758,16 +825,15 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               ))}
             </div>
           </div>
-        </div>
+        </Section>
       )}
 
       {/* STANDINGS */}
-      <div style={{ marginBottom: isOwner ? 32 : 0 }}>
-        <h3 style={{ fontSize: 20, marginBottom: 4, textTransform: 'none' }}>Standings</h3>
-        <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
-          {aliveCount} of {entries.length} {entries.length === 1 ? 'entry' : 'entries'} still alive.
-          {' '}Each entry plays on its own — the last one standing wins.
-        </p>
+      <Section
+        id="standings"
+        title="Standings"
+        caption={`${aliveCount} of ${entries.length} ${entries.length === 1 ? 'entry' : 'entries'} still alive. Each entry plays on its own — the last one standing wins.`}
+      >
 
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
           {livePeople.map((person, idx) => (
@@ -819,19 +885,22 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
             </>
           )}
         </div>
-      </div>
+      </Section>
 
       {/* PICK HISTORY */}
       {picks.length > 0 && (
-        <div style={{ marginBottom: isOwner ? 32 : 0 }}>
-          <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none' }}>Pick history</h3>
+        <Section
+          id="history"
+          title="Pick history"
+          caption="Every pick so far. Someone else's is hidden until its game kicks off."
+        >
           <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                  <th style={{ textAlign: 'left', padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Entry</th>
+                  <th style={{ textAlign: 'left', padding: `10px ${ROW_PAD_X}px`, color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>Entry</th>
                   {historyWeeks.map(week => (
-                    <th key={week} style={{ textAlign: 'center', padding: '10px 16px', color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    <th key={week} style={{ textAlign: 'center', padding: `10px ${ROW_PAD_X}px`, color: 'var(--ink-soft)', fontWeight: 600, whiteSpace: 'nowrap' }}>
                       Wk {week}
                     </th>
                   ))}
@@ -844,16 +913,17 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                     opacity: entry.status === 'eliminated' ? 0.6 : 1,
                   }}>
                     <td style={{
-                      padding: '10px 16px', whiteSpace: 'nowrap', fontWeight: 600,
+                      padding: `10px ${ROW_PAD_X}px`, whiteSpace: 'nowrap', fontWeight: 600,
+                      fontSize: NAME_SIZE,
                       color: entry.user_id === currentUserId ? 'var(--accent-dark)' : 'var(--ink)',
                     }}>
                       {entry.profiles?.username}
                       {entries.filter(e => e.user_id === entry.user_id).length > 1 && (
-                        <span style={{ fontWeight: 400, color: 'var(--ink-soft)' }}> #{entry.entry_number}</span>
+                        <span style={{ fontWeight: 400, fontSize: SUB_SIZE, color: 'var(--ink-faint)' }}> #{entry.entry_number}</span>
                       )}
                     </td>
                     {historyWeeks.map(week => (
-                      <td key={week} style={{ textAlign: 'center', padding: '10px 16px' }}>
+                      <td key={week} style={{ textAlign: 'center', padding: `10px ${ROW_PAD_X}px` }}>
                         {renderHistoryCell(entry, week)}
                       </td>
                     ))}
@@ -862,15 +932,12 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               </tbody>
             </table>
           </div>
-        </div>
+        </Section>
       )}
 
       {/* PAYMENT TRACKER (owner only) */}
       {isOwner && (
-        <div>
-          <h3 style={{ fontSize: 20, marginBottom: 16, textTransform: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <DollarSign size={18} style={{ color: 'var(--accent)' }} /> Payment tracker
-          </h3>
+        <Section id="payments" title="Payment tracker">
           {/* The count first. A filter without one just hides the number you
               came to find — and at 71 entries "how many are outstanding" is
               the whole question. */}
@@ -914,10 +981,10 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
             ) : (
               visibleCharges.map((charge, idx, arr) => (
                 <div key={charge.id} style={{
-                  padding: '12px 20px', borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border)',
+                  padding: `12px ${ROW_PAD_X}px`, borderBottom: idx === arr.length - 1 ? 'none' : '1px solid var(--border)',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12
                 }}>
-                  <div style={{ fontSize: 14 }}>
+                  <div style={{ fontSize: NAME_SIZE }}>
                     <strong>{charge.entry?.profiles?.username || '(unknown)'}</strong>
                     {entries.filter(e => e.user_id === charge.user_id).length > 1 && (
                       <span style={{ color: 'var(--ink-soft)' }}> #{charge.entry?.entry_number}</span>
@@ -941,7 +1008,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               ))
             )}
           </div>
-        </div>
+        </Section>
       )}
     </div>
   );
@@ -963,7 +1030,7 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
 
   return (
     <div style={{
-      padding: '13px 20px', borderBottom: last ? 'none' : '1px solid var(--border)',
+      padding: `13px ${ROW_PAD_X}px`, borderBottom: last ? 'none' : '1px solid var(--border)',
       // nowrap on purpose. With wrap, flexbox takes the free option — it drops
       // the chips to their own line rather than shrinking the name, so the
       // ellipsis never fires and one long username makes a row half again as
@@ -983,7 +1050,7 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
             <span
               title={person.username}
               style={{
-                fontWeight: 600, fontSize: 15, minWidth: 0,
+                fontWeight: 600, fontSize: NAME_SIZE, minWidth: 0,
                 overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
                 color: isMe ? 'var(--accent-dark)' : 'var(--ink)',
               }}
@@ -995,7 +1062,7 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
             {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', flexShrink: 0 }}>(you)</span>}
           </div>
           {person.total > 1 && (
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: SUB_SIZE, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
               {allOut ? `All ${person.total} out` : `${person.alive} of ${person.total} alive`}
             </div>
           )}
