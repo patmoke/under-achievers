@@ -964,26 +964,51 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
   return (
     <div style={{
       padding: '13px 20px', borderBottom: last ? 'none' : '1px solid var(--border)',
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap',
+      // nowrap on purpose. With wrap, flexbox takes the free option — it drops
+      // the chips to their own line rather than shrinking the name, so the
+      // ellipsis never fires and one long username makes a row half again as
+      // tall. Removing the escape route is what makes the name give way.
+      display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'nowrap',
       background: isMe ? 'var(--accent-soft)' : allOut ? 'rgba(200,50,44,0.03)' : 'transparent',
       opacity: allOut ? 0.75 : 1,
     }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
-        {champion && <Trophy size={18} style={{ color: 'var(--gold)' }} aria-label="Champion" />}
+      {/* minWidth: 0 on both the row item and the name is what lets the name
+          shrink. Without it a long username refuses to give ground, shoves the
+          chips onto their own line and left-aligns them there — one ragged row
+          in a list where every other one is a tidy pair. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 auto' }}>
+        {champion && <Trophy size={18} style={{ color: 'var(--gold)', flexShrink: 0 }} aria-label="Champion" />}
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 600, fontSize: 15, color: isMe ? 'var(--accent-dark)' : 'var(--ink)' }}>
-            {person.username}
-            {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
+            <span
+              title={person.username}
+              style={{
+                fontWeight: 600, fontSize: 15, minWidth: 0,
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                color: isMe ? 'var(--accent-dark)' : 'var(--ink)',
+              }}
+            >
+              {person.username}
+            </span>
+            {/* Outside the truncating span, so the one label you always want to
+                see is the one thing that cannot be cut off. */}
+            {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', flexShrink: 0 }}>(you)</span>}
           </div>
           {person.total > 1 && (
-            <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
+            <div style={{ fontSize: 12, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
               {allOut ? `All ${person.total} out` : `${person.alive} of ${person.total} alive`}
             </div>
           )}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+      {/* marginLeft:auto keeps the chips hard right even in the rare case they
+          do wrap — a four-entry row on a very narrow screen. */}
+      {/* flexShrink: 0 so the chips keep their line and the name yields
+          instead. Letting them shrink put two chips up and one orphaned
+          underneath, which reads worse than a shortened name — the entries are
+          a set and want to be seen as one. */}
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', marginLeft: 'auto', flexShrink: 0 }}>
         {person.entries.map(entry => (
           <EntryChip
             key={entry.id}
