@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
+import { precacheAndRoute, createHandlerBoundToURL, cleanupOutdatedCaches } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 // Written by hand rather than generated because a generated service worker
@@ -8,11 +8,52 @@ import { NavigationRoute, registerRoute } from 'workbox-routing';
 
 precacheAndRoute(self.__WB_MANIFEST);
 
-// SPA routing: any navigation falls back to the cached shell, except the paths
-// Supabase owns — a cached response there would be actively wrong.
+// Precaches left by earlier builds are dead weight and, worse, a source of
+// half-matched shells. Drop them on activate.
+cleanupOutdatedCaches();
+
+/**
+ * SPA routing, with the network as a backstop.
+ *
+ * The cached shell answers navigations so deep links work offline and instantly.
+ * The try/catch is belt-and-braces: a navigation whose handler rejects gives the
+ * user a blank document — no error, no content, no way back except clearing site
+ * data — and that is the worst failure this worker can produce.
+ *
+ * Worth being precise about what this does and does not fix, because the
+ * obvious story is wrong. An *evicted* precache entry is already safe:
+ * Workbox's PrecacheStrategy defaults to fallbackToNetwork, and a controlled
+ * test — delete index.html from the precache, then load a deep link — renders
+ * fine with or without this handler. What is left uncovered is a handler that
+ * rejects outright, chiefly createHandlerBoundToURL throwing 'non-precached-url'
+ * when index.html never made it into the manifest. That is a build
+ * misconfiguration rather than a runtime event, so this is cheap insurance, not
+ * a bug fix.
+ *
+ * The denylist below is the part with a known trigger behind it.
+ */
+const serveShell = createHandlerBoundToURL('index.html');
+
+async function navigationHandler(params) {
+  try {
+    const cached = await serveShell(params);
+    if (cached) return cached;
+  } catch {
+    // Nothing to report — the point is that we carry on rather than reject.
+  }
+  return fetch(params.request);
+}
+
 registerRoute(
-  new NavigationRoute(createHandlerBoundToURL('index.html'), {
-    denylist: [/^\/rest\//, /^\/auth\//, /^\/functions\//],
+  new NavigationRoute(navigationHandler, {
+    denylist: [
+      // Paths Supabase owns — a cached response there would be actively wrong.
+      /^\/rest\//, /^\/auth\//, /^\/functions\//,
+      // Vercel's own routes, including the deployment-protection bounce. The
+      // worker must not shadow an auth redirect it cannot complete: that is
+      // exactly what turned a protected preview deep link into a blank page.
+      /^\/_vercel\//, /[?&]_vercel_share=/,
+    ],
   })
 );
 
