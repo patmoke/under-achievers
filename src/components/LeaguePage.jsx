@@ -819,12 +819,30 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
     <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>No data yet.</div>
   );
 
-  const cols = '44px 1fr 62px 62px 68px 62px';
+  // minWidth(0) on the flexible column, not bare 1fr. The header and every row
+  // are separate grid containers, so their 1fr resolves independently — and 1fr
+  // defaults to min-width:auto, meaning a long username refuses to shrink and
+  // drags the numeric columns out of step with the header above them. Measured
+  // at 390px before this: header Player 48.9px, data row 127.1px, everything
+  // after it off by 78px. It only surfaced when a sixth column left less slack.
+  // minmax with a floor rather than bare 1fr. The header and every row are
+  // separate grid containers, so their 1fr resolves independently — and 1fr
+  // defaults to min-width:auto, meaning a long username refuses to shrink and
+  // drags the numeric columns out of step with the header above them. Measured
+  // at 390px before this: header Player 48.9px, data row 127.1px, everything
+  // after off by 78px. A sixth column left less slack, which is what surfaced it.
+  //
+  // The 96px floor is the other half. Six columns do not fit a 390px phone —
+  // with a bare minmax(0,1fr) the name was squeezed to 10px — so below the
+  // floor the card scrolls sideways instead, the same trade the pick history
+  // table makes.
+  const cols = '44px minmax(96px, 1fr) 58px 58px 66px 58px';
+  const MIN_WIDTH = 424;
   const diffColor = (d) => d <= 1 ? 'var(--success)' : d <= 3 ? 'var(--warning)' : 'var(--danger)';
 
   return (
-    <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: cols, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+    <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: cols, minWidth: MIN_WIDTH, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
         {/* Games won matters more than games entered once scoring is
             competitive, but until picks are revealed there is nothing to win
             yet, so the column falls back to the pick count. */}
@@ -837,7 +855,7 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
         const showData = revealed || isMe;
         return (
           <div key={entry.user_id} style={{
-            display: 'grid', gridTemplateColumns: cols,
+            display: 'grid', gridTemplateColumns: cols, minWidth: MIN_WIDTH,
             padding: '14px 20px', borderBottom: idx === board.length - 1 ? 'none' : '1px solid var(--border)',
             background: isMe ? 'var(--accent-soft)' : 'transparent',
             alignItems: 'center'
@@ -847,7 +865,9 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
             }}>
               {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank - 1] : `#${entry.rank}`}
             </div>
-            <div style={{ fontWeight: 600, color: isMe ? 'var(--accent-dark)' : 'var(--ink)', fontSize: 15 }}>
+            <div style={{ fontWeight: 600, color: isMe ? 'var(--accent-dark)' : 'var(--ink)', fontSize: 15,
+                          minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                 title={entry.username}>
               {entry.username}
               {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
               {!showData && !isMe && <span style={{ fontSize: 11, color: 'var(--ink-faint)', marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}><EyeOff size={10} /> hidden</span>}
