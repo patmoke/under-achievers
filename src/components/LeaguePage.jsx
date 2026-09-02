@@ -3,6 +3,9 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, confidenceBudget, buildStandings } from '../lib/scoring';
+// Same 'has this kicked off' rule the survivor tab uses. One predicate rather
+// than a third hand-rolled comparison of now() against game_time.
+import { isGameLocked } from '../lib/survivor';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Coins, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -295,7 +298,7 @@ export default function LeaguePage() {
         .map(pl => ({
           ...pl,
           picks: mine.has(pl.user_id) ? myWeekPicks.length : 0,
-          points: null, wins: null, avgDiff: null,
+          points: null, wins: null, avgDiff: null, totalDiff: null,
         }))
         .map((pl, i) => ({ ...pl, rank: i + 1 }));
     }
@@ -586,6 +589,12 @@ export default function LeaguePage() {
             games.map(game => {
               const myPick = myWeekPicks.find(p => p.game_id === game.id);
               const allPicksForGame = weekAllSubmitted ? weeklyPicks.filter(p => p.game_id === game.id) : [];
+              // The line is the answer to this game. It is synced days ahead of
+              // kickoff and picks stay editable until kickoff, so showing it
+              // early let anyone copy it straight into their prediction and
+              // score a perfect zero. Nothing derived from it — the number or
+              // the delta against it — may appear before the game starts.
+              const revealed = isGameLocked(game);
               return (
                 <div key={game.id} className="card" style={{ padding: 20, marginBottom: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
@@ -595,7 +604,7 @@ export default function LeaguePage() {
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
                         {new Date(game.game_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                        {game.actual_spread !== null && <span style={{ marginLeft: 10 }}>Line: <strong>{formatSpread(game.actual_spread)}</strong></span>}
+                        {revealed && game.actual_spread !== null && <span style={{ marginLeft: 10 }}>Line: <strong>{formatSpread(game.actual_spread)}</strong></span>}
                       </div>
                     </div>
                     {game.home_score !== null && (
@@ -610,7 +619,7 @@ export default function LeaguePage() {
                       <div style={{ display: 'flex', gap: 20, fontSize: 14 }}>
                         <span>Spread: <strong>{formatSpread(myPick.predicted_spread)}</strong></span>
                         <span>Confidence: ×{myPick.confidence_points}</span>
-                        {game.actual_spread !== null && (
+                        {revealed && game.actual_spread !== null && (
                           <span style={{ color: Math.abs(myPick.predicted_spread - game.actual_spread) <= 1 ? 'var(--success)' : Math.abs(myPick.predicted_spread - game.actual_spread) <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
                             Δ{Math.abs(myPick.predicted_spread - game.actual_spread).toFixed(1)}
                           </span>
@@ -810,7 +819,7 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
     <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>No data yet.</div>
   );
 
-  const cols = '48px 1fr 80px 80px 80px';
+  const cols = '44px 1fr 62px 62px 68px 62px';
   const diffColor = (d) => d <= 1 ? 'var(--success)' : d <= 3 ? 'var(--warning)' : 'var(--danger)';
 
   return (
@@ -819,7 +828,7 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
         {/* Games won matters more than games entered once scoring is
             competitive, but until picks are revealed there is nothing to win
             yet, so the column falls back to the pick count. */}
-        {['#', 'Player', revealed ? 'Won' : 'Picks', 'Pts', 'Avg Δ'].map((h, i) => (
+        {['#', 'Player', revealed ? 'Won' : 'Picks', 'Pts', 'Total Δ', 'Avg Δ'].map((h, i) => (
           <div key={i} className="label-muted" style={{ textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
         ))}
       </div>
@@ -849,7 +858,16 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
             <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)', textAlign: 'right' }}>
               {showData && entry.points !== null && entry.points !== undefined ? entry.points : '—'}
             </div>
-            <div style={{ fontSize: 14, textAlign: 'right', color: showData && entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--ink-faint)' }}>
+            {/* Total before average: the season's accumulated distance, then
+                the per-pick rate. Uncoloured, because a big total can mean a
+                bad week or simply a long season — only the average is a fair
+                thing to grade on sight. */}
+            <div style={{ fontSize: 14, textAlign: 'right', color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
+              {showData && entry.totalDiff !== null && entry.totalDiff !== undefined
+                ? entry.totalDiff.toFixed(1) : '—'}
+            </div>
+            <div style={{ fontSize: 14, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                          color: showData && entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--ink-faint)' }}>
               {showData && entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}
             </div>
           </div>
