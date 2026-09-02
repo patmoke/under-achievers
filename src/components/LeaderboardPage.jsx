@@ -118,6 +118,8 @@ export default function LeaderboardPage() {
                 {entry.avgDiff !== null && entry.avgDiff !== undefined && (
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
                     Avg Δ {entry.avgDiff.toFixed(2)}
+                    {entry.totalDiff !== null && entry.totalDiff !== undefined &&
+                      <span style={{ color: 'var(--ink-faint)' }}> · {entry.totalDiff.toFixed(1)} total</span>}
                   </div>
                 )}
               </div>
@@ -143,7 +145,7 @@ export default function LeaderboardPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-                  {['Rank', 'Player', 'Won', 'Avg Δ', 'Points'].map(h => (
+                  {['Rank', 'Player', 'Won', 'Total Δ', 'Avg Δ', 'Points'].map(h => (
                     <th key={h} className="label-muted" style={{
                       padding: '12px 16px', textAlign: h === 'Rank' || h === 'Player' ? 'left' : 'right',
                     }}>{h}</th>
@@ -189,10 +191,20 @@ export default function LeaderboardPage() {
                       <td style={{ padding: '14px 16px', textAlign: 'right', color: 'var(--ink-soft)' }}>
                         {entry.wins} <span style={{ color: 'var(--ink-faint)', fontSize: 12 }}>/ {entry.graded}</span>
                       </td>
+                      {/* Total first, then the average it divides into. How
+                          much ground you have given up all season, and how
+                          sharp you are per pick — different questions, and they
+                          part company whenever people have graded different
+                          numbers of games. */}
+                      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
+                        {entry.totalDiff === null || entry.totalDiff === undefined
+                          ? <span style={{ color: 'var(--ink-faint)' }}>—</span>
+                          : <span style={{ color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>{entry.totalDiff.toFixed(1)}</span>}
+                      </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                         {entry.avgDiff === null
                           ? <span style={{ color: 'var(--ink-faint)' }}>—</span>
-                          : <span style={{ color: 'var(--success)', fontWeight: 600 }}>{entry.avgDiff.toFixed(2)}</span>}
+                          : <span style={{ color: 'var(--success)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{entry.avgDiff.toFixed(2)}</span>}
                       </td>
                       <td style={{ padding: '14px 16px', textAlign: 'right' }}>
                         <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>

@@ -215,10 +215,20 @@ export function buildStandings(picks, players = []) {
   });
 
   return Object.values(table)
-    .map(r => ({
-      ...r,
-      avgDiff: r.diffs.length ? r.diffs.reduce((a, b) => a + b, 0) / r.diffs.length : null,
-    }))
+    .map(r => {
+      // Total distance from the line across every graded game, alongside the
+      // average. They answer different questions: the average says how sharp
+      // someone is per pick, the total says how much ground they have given up
+      // over the season — and the two diverge whenever people have graded
+      // different numbers of games, which is exactly when a newcomer's tidy
+      // average would otherwise flatter them against a season-long player.
+      const totalDiff = r.diffs.length ? r.diffs.reduce((a, b) => a + b, 0) : null;
+      return {
+        ...r,
+        totalDiff,
+        avgDiff: totalDiff === null ? null : totalDiff / r.diffs.length,
+      };
+    })
     .sort((a, b) =>
       b.points - a.points ||
       (a.avgDiff ?? Infinity) - (b.avgDiff ?? Infinity) ||

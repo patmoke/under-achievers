@@ -617,6 +617,44 @@ describe('weekHighlights', () => {
   });
 });
 
+describe('buildStandings totals', () => {
+  // Two players, different numbers of graded games — the case where a total
+  // and an average tell different stories.
+  const pick = (user, game, predicted, actual, conf = 1) => ({
+    user_id: user, game_id: game, predicted_spread: predicted,
+    confidence_points: conf, games: { actual_spread: actual },
+  });
+
+  it('sums every graded distance from the line', () => {
+    const rows = buildStandings([
+      pick('a', 'g1', -3, -3),      // 0.0
+      pick('a', 'g2', -7, -4.5),    // 2.5
+      pick('b', 'g1', -1, -3),      // 2.0
+      pick('b', 'g2', -6, -4.5),    // 1.5
+    ]);
+    const a = rows.find(r => r.user_id === 'a');
+    const b = rows.find(r => r.user_id === 'b');
+    expect(a.totalDiff).toBeCloseTo(2.5, 6);
+    expect(b.totalDiff).toBeCloseTo(3.5, 6);
+  });
+
+  it('keeps the average consistent with the total it came from', () => {
+    const rows = buildStandings([pick('a', 'g1', -3, -3), pick('a', 'g2', -7, -4.5)]);
+    const a = rows.find(r => r.user_id === 'a');
+    expect(a.avgDiff).toBeCloseTo(a.totalDiff / a.graded, 9);
+  });
+
+  it('is null rather than zero when nothing has been graded', () => {
+    // Zero would read as a perfect score, which is the opposite of the truth.
+    const rows = buildStandings([{
+      user_id: 'a', game_id: 'g1', predicted_spread: -3,
+      confidence_points: 1, games: { actual_spread: null },
+    }]);
+    expect(rows[0].totalDiff).toBeNull();
+    expect(rows[0].avgDiff).toBeNull();
+  });
+});
+
 describe('groupByPerson', () => {
   const entry = (id, user, n, status, week = null) => ({
     id, user_id: user, entry_number: n, status, week,
