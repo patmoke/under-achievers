@@ -237,6 +237,72 @@ export function buildStandings(picks, players = []) {
     .map((r, i) => ({ ...r, rank: i + 1 }));
 }
 
+// ─── Weekly winners ─────────────────────────────────────────────────────────
+//
+// "Most points in a week wins the week" is a real rule, not just a sort order —
+// it names a winner, and a named winner should not un-name itself once a late
+// game changes the total. So it is only ever computed off a week that is
+// entirely finished.
+
+/**
+ * Weeks whose games have all finished, from a season's worth of games grouped
+ * by week number.
+ *
+ * A week only belongs here once nothing about it can change. Games lock
+ * independently at their own kickoff, so a week can sit "mostly done" with one
+ * Monday-night game still to play — crowning a winner off the other fifteen
+ * would move once that game resolves. gamesByWeek supplies what "every game"
+ * means for a week; a week missing from it, or with any game not yet graded,
+ * is left out rather than guessed at.
+ */
+export function finalizedWeeks(gamesByWeek) {
+  return new Set(
+    Object.keys(gamesByWeek || {})
+      .filter(week => {
+        const games = gamesByWeek[week];
+        return games.length > 0 &&
+          games.every(g => g.actual_spread !== null && g.actual_spread !== undefined);
+      })
+      .map(Number)
+  );
+}
+
+/**
+ * Who topped each finished week, and how many players share it.
+ *
+ * Literally the rule: score just that week's picks with buildStandings and
+ * take whoever is on top. Ties split the week the same way buildStandings
+ * already lets tied picks split a game — same rule, applied one level up. A
+ * week where the leader scored zero — nobody picked, or nothing graded — has
+ * no winner rather than a false one.
+ *
+ * Returns `{ [week]: [user_id, ...] }` for decided weeks only.
+ */
+export function weeklyWinners(picks, gamesByWeek, players = []) {
+  const decided = finalizedWeeks(gamesByWeek);
+  const byWeek = {};
+  picks.forEach(p => {
+    if (decided.has(p.week)) (byWeek[p.week] ||= []).push(p);
+  });
+
+  const winners = {};
+  decided.forEach(week => {
+    const rows = buildStandings(byWeek[week] || [], players);
+    const top = rows[0]?.points ?? 0;
+    if (top > 0) winners[week] = rows.filter(r => r.points === top).map(r => r.user_id);
+  });
+  return winners;
+}
+
+/** Weeks won per player — a trophy count built from weeklyWinners. */
+export function weeksWonCounts(picks, gamesByWeek, players = []) {
+  const counts = {};
+  Object.values(weeklyWinners(picks, gamesByWeek, players)).forEach(userIds => {
+    userIds.forEach(id => { counts[id] = (counts[id] || 0) + 1; });
+  });
+  return counts;
+}
+
 /**
  * @deprecated Absolute accuracy scoring, replaced by buildStandings. Kept only
  * so the meaning of historic points_earned values stays documented.

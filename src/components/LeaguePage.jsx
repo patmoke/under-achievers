@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, confidenceBudget, buildStandings } from '../lib/scoring';
+import { formatSpread, confidenceBudget, buildStandings, finalizedWeeks, weeksWonCounts } from '../lib/scoring';
 // Same 'has this kicked off' rule the survivor tab uses. One predicate rather
 // than a third hand-rolled comparison of now() against game_time.
 import { isGameLocked } from '../lib/survivor';
@@ -67,6 +67,14 @@ export default function LeaguePage() {
   const [weeklyPicks, setWeeklyPicks] = useState([]);
   const [games, setGames] = useState([]);
   const [myWeekPicks, setMyWeekPicks] = useState([]);
+
+  // Week vs season view on the leaderboard tab. Season is fetched lazily —
+  // null means "not fetched yet" rather than "empty" — since it pulls every
+  // member's picks across the whole schedule and most visits never open it.
+  const [leaderboardView, setLeaderboardView] = useState('week');
+  const [seasonPicks, setSeasonPicks] = useState(null);
+  const [seasonGamesByWeek, setSeasonGamesByWeek] = useState(null);
+  const [seasonLoading, setSeasonLoading] = useState(false);
 
   const isSurvivor = league?.compete_on === 'survivor';
   const isBankroll = league?.compete_on === 'bankroll';
@@ -152,6 +160,33 @@ export default function LeaguePage() {
     await fetchPicks(!!weekResult);
   }, [id, weeklyTab, fetchPicks]);
 
+  // Everyone's picks across the whole schedule, not just this week's. Season
+  // totals and "weeks won" both need it, and both only trust a week once
+  // finalizedWeeks says every game in it is graded — a game locks at its own
+  // kickoff, not at the week's, so a week can be mostly done with one
+  // Monday-night game still to move the total. Gating on "all games final"
+  // rather than "everyone locked in" is deliberate: once a week is actually
+  // over there is nothing left to hide, whether or not someone skipped a pick.
+  const fetchSeasonBoard = useCallback(async () => {
+    const memberIds = members.map(m => m.user_id);
+    if (memberIds.length === 0) return;
+    setSeasonLoading(true);
+
+    const [{ data: picksData }, { data: gamesData }] = await Promise.all([
+      supabase.from('predictions')
+        .select('user_id, game_id, week, predicted_spread, confidence_points, games(actual_spread)')
+        .in('user_id', memberIds).eq('season', CURRENT_SEASON),
+      supabase.from('games').select('week, actual_spread').eq('season', CURRENT_SEASON).lte('week', 18),
+    ]);
+
+    const byWeek = {};
+    (gamesData || []).forEach(g => { (byWeek[g.week] ||= []).push(g); });
+
+    setSeasonPicks(picksData || []);
+    setSeasonGamesByWeek(byWeek);
+    setSeasonLoading(false);
+  }, [members]);
+
   useEffect(() => { fetchLeague(); }, [fetchLeague]);
 
   useEffect(() => {
@@ -159,6 +194,12 @@ export default function LeaguePage() {
     // loading the week's picks would be work nobody sees.
     if (league && myMembership && members.length > 0 && !isSurvivor && !isBankroll) checkAllSubmittedThenFetch();
   }, [league, myMembership, members, isSurvivor, isBankroll, checkAllSubmittedThenFetch]);
+
+  useEffect(() => {
+    if (leaderboardView === 'season' && league && myMembership && members.length > 0 && !isSurvivor && !isBankroll) {
+      fetchSeasonBoard();
+    }
+  }, [leaderboardView, league, myMembership, members, isSurvivor, isBankroll, fetchSeasonBoard]);
 
   // Owner-only, because chasing buy-ins is the reason to have the list at all.
   // RLS on user_contacts is what actually enforces that; the role check here
@@ -290,16 +331,15 @@ export default function LeaguePage() {
     }));
 
     // Scoring is relative, so it needs the whole field. Until every member has
-    // submitted we only hold our own picks, and scoring those alone would show
-    // us winning every game. Show pick counts and withhold points instead.
+    // submitted, nobody's total means anything yet — not even your own, since
+    // "closest" can't be judged without the rest of the field to be closer
+    // than. This used to show your own pick count here and 0 for everyone
+    // else, which read as "everyone has the same" only by accident: it wasn't
+    // a real count for anyone but you. Every column is withheld the same way
+    // now, so the row genuinely reads the same for every player until reveal.
     if (!weekAllSubmitted) {
-      const mine = new Set(myWeekPicks.map(p => p.user_id));
       return players
-        .map(pl => ({
-          ...pl,
-          picks: mine.has(pl.user_id) ? myWeekPicks.length : 0,
-          points: null, wins: null, avgDiff: null, totalDiff: null,
-        }))
+        .map(pl => ({ ...pl, points: null, wins: null, avgDiff: null, totalDiff: null }))
         .map((pl, i) => ({ ...pl, rank: i + 1 }));
     }
 
@@ -336,6 +376,21 @@ export default function LeaguePage() {
   const tab = availableTabs.includes(tabOverride) ? tabOverride : availableTabs[0];
   const isOwner = myMembership?.role === 'owner';
   const weeklyBoard = (isSurvivor || isBankroll) ? [] : buildWeeklyLeaderboard();
+
+  // Season totals, restricted to weeks finalizedWeeks says are actually over.
+  // A week with any game still open is dropped entirely rather than partially
+  // counted — the same rule weeklyWinners uses, for the same reason: a total
+  // that moved once a Monday-night game finished would be a total nobody
+  // could trust the day before.
+  const seasonDecidedWeeks = seasonGamesByWeek ? finalizedWeeks(seasonGamesByWeek) : new Set();
+  const seasonRows = (() => {
+    if (!seasonPicks || !seasonGamesByWeek || seasonDecidedWeeks.size === 0) return [];
+    const players = members.map(m => ({ user_id: m.user_id, username: m.profiles?.username || 'Unknown' }));
+    const eligiblePicks = seasonPicks.filter(p => seasonDecidedWeeks.has(p.week));
+    const standings = buildStandings(eligiblePicks, players);
+    const weeksWon = weeksWonCounts(seasonPicks, seasonGamesByWeek, players);
+    return standings.map(r => ({ ...r, weeksWon: weeksWon[r.user_id] || 0 }));
+  })();
   const competeOn = league.compete_on;
   const TypeIcon = TYPE_ICON[competeOn] || Calendar;
 
@@ -560,17 +615,60 @@ export default function LeaguePage() {
       {!isSurvivor && !isBankroll && tab === 'leaderboard' && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 12 }}>
-            <h3 style={{ fontSize: 20, textTransform: 'none' }}>Week {weeklyTab} standings</h3>
-            <select value={weeklyTab} onChange={e => setWeeklyTab(Number(e.target.value))} style={{ width: 80, padding: '6px 10px' }}>
-              {Array.from({ length: 18 }, (_, i) => i + 1).map(w => <option key={w} value={w}>Wk {w}</option>)}
-            </select>
-          </div>
-          {!weekAllSubmitted && (
-            <div style={{ marginBottom: 12, padding: '10px 16px', background: 'var(--warning-soft)', border: '1px solid rgba(184,114,11,0.25)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <EyeOff size={14} /> Other members' picks are hidden until everyone has submitted for Week {weeklyTab}.
+            <h3 style={{ fontSize: 20, textTransform: 'none' }}>
+              {leaderboardView === 'season' ? 'Season standings' : `Week ${weeklyTab} standings`}
+            </h3>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ display: 'flex', gap: 6 }}>
+                {[['week', 'Week'], ['season', 'Season']].map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setLeaderboardView(key)}
+                    aria-pressed={leaderboardView === key}
+                    style={{
+                      padding: '5px 11px', borderRadius: 'var(--radius-sm)', fontSize: 12.5, fontWeight: 600,
+                      cursor: 'pointer',
+                      background: leaderboardView === key ? 'var(--accent)' : 'var(--surface)',
+                      color: leaderboardView === key ? 'var(--accent-ink)' : 'var(--ink-soft)',
+                      border: `1px solid ${leaderboardView === key ? 'var(--accent)' : 'var(--border-strong)'}`,
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {leaderboardView === 'week' && (
+                <select value={weeklyTab} onChange={e => setWeeklyTab(Number(e.target.value))} style={{ width: 80, padding: '6px 10px' }}>
+                  {Array.from({ length: 18 }, (_, i) => i + 1).map(w => <option key={w} value={w}>Wk {w}</option>)}
+                </select>
+              )}
             </div>
+          </div>
+
+          {leaderboardView === 'week' ? (
+            <>
+              {!weekAllSubmitted && (
+                <div style={{ marginBottom: 12, padding: '10px 16px', background: 'var(--warning-soft)', border: '1px solid rgba(184,114,11,0.25)', borderRadius: 'var(--radius-sm)', fontSize: 13, color: 'var(--warning)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <EyeOff size={14} /> Other members' picks are hidden until everyone has submitted for Week {weeklyTab}.
+                </div>
+              )}
+              <LeaderboardTable board={weeklyBoard} currentUserId={user.id} revealed={weekAllSubmitted} />
+            </>
+          ) : seasonLoading ? (
+            <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>Loading season standings…</div>
+          ) : seasonDecidedWeeks.size === 0 ? (
+            <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>
+              No finished weeks yet — check back once Week 1 wraps up.
+            </div>
+          ) : (
+            <>
+              <p style={{ fontSize: 12.5, color: 'var(--ink-faint)', margin: '0 0 14px' }}>
+                Every week that has fully finished, {seasonDecidedWeeks.size} so far. Weeks is how many of
+                them you had the most points in this league — ties split the week.
+              </p>
+              <SeasonStandingsTable board={seasonRows} currentUserId={user.id} />
+            </>
           )}
-          <LeaderboardTable board={weeklyBoard} currentUserId={user.id} revealed={weekAllSubmitted} />
         </div>
       )}
 
@@ -814,39 +912,34 @@ function LeaguePreview({ league, members, entryCount, onJoin, joining }) {
 
 // ─── Leaderboard Table ──────────────────────────────────────────────────────
 
+// Shared by LeaderboardTable and SeasonStandingsTable, so the two tables can
+// never drift out of step with each other the way the header and the data
+// rows once did within a single one of them.
+//
+// minmax with a floor rather than bare 1fr. The header and every row are
+// separate grid containers, so their 1fr resolves independently — and 1fr
+// defaults to min-width:auto, meaning a long username refuses to shrink and
+// drags the numeric columns out of step with the header above them. Measured
+// at 390px before this: header Player 48.9px, data row 127.1px, everything
+// after off by 78px. A sixth column left less slack, which is what surfaced it.
+//
+// The 96px floor is the other half. Six columns do not fit a 390px phone —
+// with a bare minmax(0,1fr) the name was squeezed to 10px — so below the
+// floor the card scrolls sideways instead, the same trade the pick history
+// table makes.
+const LEADERBOARD_COLS = '44px minmax(96px, 1fr) 58px 58px 66px 58px';
+const LEADERBOARD_MIN_WIDTH = 424;
+const diffColor = (d) => d <= 1 ? 'var(--success)' : d <= 3 ? 'var(--warning)' : 'var(--danger)';
+
 function LeaderboardTable({ board, currentUserId, revealed }) {
   if (board.length === 0) return (
     <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>No data yet.</div>
   );
 
-  // minWidth(0) on the flexible column, not bare 1fr. The header and every row
-  // are separate grid containers, so their 1fr resolves independently — and 1fr
-  // defaults to min-width:auto, meaning a long username refuses to shrink and
-  // drags the numeric columns out of step with the header above them. Measured
-  // at 390px before this: header Player 48.9px, data row 127.1px, everything
-  // after it off by 78px. It only surfaced when a sixth column left less slack.
-  // minmax with a floor rather than bare 1fr. The header and every row are
-  // separate grid containers, so their 1fr resolves independently — and 1fr
-  // defaults to min-width:auto, meaning a long username refuses to shrink and
-  // drags the numeric columns out of step with the header above them. Measured
-  // at 390px before this: header Player 48.9px, data row 127.1px, everything
-  // after off by 78px. A sixth column left less slack, which is what surfaced it.
-  //
-  // The 96px floor is the other half. Six columns do not fit a 390px phone —
-  // with a bare minmax(0,1fr) the name was squeezed to 10px — so below the
-  // floor the card scrolls sideways instead, the same trade the pick history
-  // table makes.
-  const cols = '44px minmax(96px, 1fr) 58px 58px 66px 58px';
-  const MIN_WIDTH = 424;
-  const diffColor = (d) => d <= 1 ? 'var(--success)' : d <= 3 ? 'var(--warning)' : 'var(--danger)';
-
   return (
     <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
-      <div style={{ display: 'grid', gridTemplateColumns: cols, minWidth: MIN_WIDTH, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-        {/* Games won matters more than games entered once scoring is
-            competitive, but until picks are revealed there is nothing to win
-            yet, so the column falls back to the pick count. */}
-        {['#', 'Player', revealed ? 'Won' : 'Picks', 'Pts', 'Total Δ', 'Avg Δ'].map((h, i) => (
+      <div style={{ display: 'grid', gridTemplateColumns: LEADERBOARD_COLS, minWidth: LEADERBOARD_MIN_WIDTH, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+        {['#', 'Player', 'Won', 'Pts', 'Total Δ', 'Avg Δ'].map((h, i) => (
           <div key={i} className="label-muted" style={{ textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
         ))}
       </div>
@@ -855,7 +948,7 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
         const showData = revealed || isMe;
         return (
           <div key={entry.user_id} style={{
-            display: 'grid', gridTemplateColumns: cols, minWidth: MIN_WIDTH,
+            display: 'grid', gridTemplateColumns: LEADERBOARD_COLS, minWidth: LEADERBOARD_MIN_WIDTH,
             padding: '14px 20px', borderBottom: idx === board.length - 1 ? 'none' : '1px solid var(--border)',
             background: isMe ? 'var(--accent-soft)' : 'transparent',
             alignItems: 'center'
@@ -872,8 +965,11 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
               {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
               {!showData && !isMe && <span style={{ fontSize: 11, color: 'var(--ink-faint)', marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 3 }}><EyeOff size={10} /> hidden</span>}
             </div>
+            {/* Withheld the same way as every other column pre-reveal — see the
+                comment in buildWeeklyLeaderboard for why "Won" cannot be judged
+                for anyone, including yourself, until the whole field is in. */}
             <div style={{ color: 'var(--ink-soft)', fontSize: 14, textAlign: 'right' }}>
-              {!showData ? '—' : revealed ? (entry.wins ?? '—') : entry.picks}
+              {showData && entry.wins !== null && entry.wins !== undefined ? entry.wins : '—'}
             </div>
             <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)', textAlign: 'right' }}>
               {showData && entry.points !== null && entry.points !== undefined ? entry.points : '—'}
@@ -889,6 +985,68 @@ function LeaderboardTable({ board, currentUserId, revealed }) {
             <div style={{ fontSize: 14, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
                           color: showData && entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--ink-faint)' }}>
               {showData && entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * The season view of the same board: total points across every finished week,
+ * plus how many of those weeks each player actually won outright.
+ *
+ * "Won" here means something different from the weekly table's "Won" — that
+ * one counts individual games; this counts whole weeks, per weeklyWinners.
+ * Sharing a label between two different things would be worse than the column
+ * width cost of spelling it out, so this one reads "Weeks".
+ */
+function SeasonStandingsTable({ board, currentUserId }) {
+  if (board.length === 0) return (
+    <div className="card" style={{ padding: 32, textAlign: 'center', color: 'var(--ink-soft)' }}>No data yet.</div>
+  );
+
+  return (
+    <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: LEADERBOARD_COLS, minWidth: LEADERBOARD_MIN_WIDTH, padding: '10px 20px', borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
+        {['#', 'Player', 'Weeks', 'Pts', 'Total Δ', 'Avg Δ'].map((h, i) => (
+          <div key={i} className="label-muted" style={{ textAlign: i >= 2 ? 'right' : 'left' }}>{h}</div>
+        ))}
+      </div>
+      {board.map((entry, idx) => {
+        const isMe = entry.user_id === currentUserId;
+        return (
+          <div key={entry.user_id} style={{
+            display: 'grid', gridTemplateColumns: LEADERBOARD_COLS, minWidth: LEADERBOARD_MIN_WIDTH,
+            padding: '14px 20px', borderBottom: idx === board.length - 1 ? 'none' : '1px solid var(--border)',
+            background: isMe ? 'var(--accent-soft)' : 'transparent',
+            alignItems: 'center'
+          }}>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 900, fontSize: 20,
+              color: entry.rank === 1 ? 'var(--gold)' : entry.rank === 2 ? 'var(--silver)' : entry.rank === 3 ? 'var(--bronze)' : 'var(--ink-faint)'
+            }}>
+              {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank - 1] : `#${entry.rank}`}
+            </div>
+            <div style={{ fontWeight: 600, color: isMe ? 'var(--accent-dark)' : 'var(--ink)', fontSize: 15,
+                          minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                 title={entry.username}>
+              {entry.username}
+              {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', marginLeft: 6 }}>(you)</span>}
+            </div>
+            <div style={{ fontSize: 14, textAlign: 'right', fontWeight: entry.weeksWon > 0 ? 700 : 400,
+                          color: entry.weeksWon > 0 ? 'var(--accent)' : 'var(--ink-faint)' }}>
+              {entry.weeksWon > 0 ? `🏆 ${entry.weeksWon}` : '—'}
+            </div>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)', textAlign: 'right' }}>
+              {entry.points}
+            </div>
+            <div style={{ fontSize: 14, textAlign: 'right', color: 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
+              {entry.totalDiff !== null && entry.totalDiff !== undefined ? entry.totalDiff.toFixed(1) : '—'}
+            </div>
+            <div style={{ fontSize: 14, textAlign: 'right', fontVariantNumeric: 'tabular-nums',
+                          color: entry.avgDiff !== null ? diffColor(entry.avgDiff) : 'var(--ink-faint)' }}>
+              {entry.avgDiff !== null ? `Δ${entry.avgDiff.toFixed(1)}` : '—'}
             </div>
           </div>
         );
