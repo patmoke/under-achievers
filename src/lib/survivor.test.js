@@ -5,7 +5,7 @@ import {
 } from './survivor';
 import {
   deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
-  summarisePicks,
+  summarisePicks, finalizedWeeks, weeklyWinners, weeksWonCounts,
   CONFIDENCE_MIN, CONFIDENCE_MAX,
 } from './scoring';
 
@@ -287,6 +287,88 @@ describe('describeSpread', () => {
     expect(describeSpread('', 'LAC', 'ARI')).toBeNull();
     expect(describeSpread(null, 'LAC', 'ARI')).toBeNull();
     expect(describeSpread(undefined, 'LAC', 'ARI')).toBeNull();
+  });
+});
+
+describe('finalizedWeeks', () => {
+  const final = { actual_spread: -3 };
+  const open = { actual_spread: null };
+
+  it('includes a week only once every one of its games is graded', () => {
+    const gamesByWeek = { 1: [final, final], 2: [final, open] };
+    expect([...finalizedWeeks(gamesByWeek)]).toEqual([1]);
+  });
+
+  it('excludes a week with no games at all', () => {
+    expect([...finalizedWeeks({ 1: [] })]).toEqual([]);
+  });
+
+  it('is empty for an empty schedule', () => {
+    expect([...finalizedWeeks({})]).toEqual([]);
+    expect([...finalizedWeeks(undefined)]).toEqual([]);
+  });
+});
+
+describe('weeklyWinners and weeksWonCounts', () => {
+  // Two finished weeks and one still in progress. Week 1: a wins outright.
+  // Week 2: a and b tie. Week 3 has a graded game but is not itself decided —
+  // one game in it is still open — so it must not appear anywhere.
+  const g1 = { actual_spread: -7 };
+  const g2 = { actual_spread: -3 };
+  const g3open = { actual_spread: null };
+
+  const gamesByWeek = {
+    1: [g1],
+    2: [g2],
+    3: [g1, g3open],
+  };
+
+  const p = (user, week, game, spread, conf, actual) => ({
+    user_id: user, week, game_id: `${week}-${game}`, predicted_spread: spread,
+    confidence_points: conf, games: actual,
+  });
+
+  const picks = [
+    // Week 1: a is closest.
+    p('a', 1, 'x', -7, 3, g1),
+    p('b', 1, 'x', -10, 3, g1),
+    // Week 2: a and b tied, exactly equidistant.
+    p('a', 2, 'x', -2, 2, g2),
+    p('b', 2, 'x', -4, 2, g2),
+    p('c', 2, 'x', -9, 2, g2),
+    // Week 3: graded, but the week itself is not finalized — must be ignored.
+    p('a', 3, 'x', -7, 5, g1),
+  ];
+
+  it('names the sole leader of a decided week', () => {
+    const winners = weeklyWinners(picks, gamesByWeek);
+    expect(winners[1]).toEqual(['a']);
+  });
+
+  it('splits a tied week between everyone on top', () => {
+    const winners = weeklyWinners(picks, gamesByWeek);
+    expect(new Set(winners[2])).toEqual(new Set(['a', 'b']));
+  });
+
+  it('never names a winner for a week that is not finalized', () => {
+    const winners = weeklyWinners(picks, gamesByWeek);
+    expect(winners[3]).toBeUndefined();
+  });
+
+  it('crowns nobody in a decided week where nothing was graded', () => {
+    const winners = weeklyWinners([], { 4: [g1] });
+    expect(winners[4]).toBeUndefined();
+  });
+
+  it('rolls the per-week winners up into a season count', () => {
+    const counts = weeksWonCounts(picks, gamesByWeek);
+    expect(counts).toEqual({ a: 2, b: 1 });
+    expect(counts.c).toBeUndefined();
+  });
+
+  it('seeds every player, so someone with zero weeks reads as absent rather than erroring', () => {
+    const counts = weeksWonCounts(picks, gamesByWeek, [{ user_id: 'd', username: 'd' }]);
+    expect(counts.d).toBeUndefined();
   });
 });
 
