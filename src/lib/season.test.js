@@ -14,13 +14,8 @@
 
 import { describe, it, expect } from 'vitest';
 import { SEASON_2026, WEEKS, gamesForWeek, kickoff } from './__fixtures__/season2026';
-import { deriveCurrentWeek } from './scoring';
-import {
-  CONFIDENCE_MIN, CONFIDENCE_MAX,
-  confidenceBudget, confidenceSpent, starsAvailable, buildStandings,
-} from './scoring';
+import { deriveCurrentWeek, buildStandings } from './scoring';
 import { computeEntryStatus, usedTeams, isGameLocked, pickOutcome } from './survivor';
-import { lineFreezeSchedule, easternParts } from './lines';
 
 const SECOND = 1000;
 const sorted = [...SEASON_2026].sort((a, b) => kickoff(a) - kickoff(b));
@@ -103,82 +98,6 @@ describe('deriving the current week, all season', () => {
     ];
     expect(deriveCurrentWeek(withJunk, new Date(firstKick(1) - SECOND))).toBe(1);
     expect(deriveCurrentWeek(withJunk, new Date(lastKick(18)))).toBe(18);
-  });
-});
-
-// ─── When the lines settle ──────────────────────────────────────────────────
-
-describe('the line freeze schedule', () => {
-  const schedule = lineFreezeSchedule(SEASON_2026);
-
-  // Recorded from a live sync-games run against this same schedule. The Edge
-  // Function carries its own copy of the freeze rule, so this is what keeps
-  // the two implementations honest: if either drifts, this fails.
-  const PRODUCTION = {
-    1: '2026-09-07T04:20:00.000Z', 2: '2026-09-14T04:20:00.000Z', 3: '2026-09-21T04:20:00.000Z',
-    4: '2026-09-28T04:20:00.000Z', 5: '2026-10-05T04:20:00.000Z', 6: '2026-10-12T04:20:00.000Z',
-    7: '2026-10-19T04:20:00.000Z', 8: '2026-10-26T04:20:00.000Z', 9: '2026-11-02T05:20:00.000Z',
-    10: '2026-11-09T05:20:00.000Z', 11: '2026-11-16T05:20:00.000Z', 12: '2026-11-23T05:20:00.000Z',
-    13: '2026-11-30T05:20:00.000Z', 14: '2026-12-07T05:20:00.000Z', 15: '2026-12-14T05:20:00.000Z',
-    16: '2026-12-21T05:20:00.000Z', 17: '2026-12-28T05:20:00.000Z', 18: '2027-01-04T05:20:00.000Z',
-  };
-
-  it('agrees with what the deployed sync actually computed', () => {
-    const mine = Object.fromEntries(
-      Object.entries(schedule).map(([w, at]) => [w, new Date(at).toISOString()]),
-    );
-    expect(mine).toEqual(PRODUCTION);
-  });
-
-  it('lands every week just after midnight Eastern on a Monday', () => {
-    for (const w of WEEKS) {
-      const p = easternParts(schedule[w]);
-      expect({ week: w, weekday: p.weekday, hour: p.hour, minute: p.minute })
-        .toEqual({ week: w, weekday: 1, hour: 0, minute: 20 });
-    }
-  });
-
-  it('settles a week before any of that week\'s games kick off', () => {
-    // The point of the rule. A freeze landing after a kickoff would mean the
-    // line for an already-played game was still moving.
-    for (const w of WEEKS) {
-      expect(schedule[w], `week ${w}`).toBeLessThan(firstKick(w));
-    }
-  });
-
-  it('leaves a clear run between the freeze and the first kickoff', () => {
-    // Most weeks get the full Monday-to-Thursday gap. The two that don't are
-    // the ones opening on a Wednesday — week 1 and Thanksgiving week — and
-    // they still get more than two days of nobody's lines moving, which is
-    // the property that matters.
-    for (const w of WEEKS) {
-      const days = (firstKick(w) - schedule[w]) / (24 * 60 * 60 * 1000);
-      expect(days, `week ${w}`).toBeGreaterThan(2.5);
-    }
-    const short = WEEKS.filter(w => (firstKick(w) - schedule[w]) / (24 * 60 * 60 * 1000) < 3);
-    expect(short).toEqual([1, 12]);
-  });
-
-  it('moves forward one week at a time and never backwards', () => {
-    for (let w = 1; w < 18; w++) {
-      expect(schedule[w + 1]).toBeGreaterThan(schedule[w]);
-    }
-  });
-
-  it('handles the Thanksgiving and Christmas weeks like any other', () => {
-    // Week 12 opens on a Wednesday and week 16 on a Thursday before Christmas;
-    // both still freeze on the ordinary Monday, from the prior week's Sunday.
-    expect(easternParts(firstKick(12)).weekday).toBe(3);
-    expect(easternParts(schedule[12]).weekday).toBe(1);
-    expect(easternParts(schedule[16]).weekday).toBe(1);
-  });
-
-  it('crosses the November clock change without shifting the local hour', () => {
-    // Week 8 freezes under daylight time, week 9 under standard time. The UTC
-    // instants differ by an hour; the Eastern wall clock does not.
-    expect(new Date(schedule[9]).getUTCHours()).toBe(5);
-    expect(new Date(schedule[8]).getUTCHours()).toBe(4);
-    expect(easternParts(schedule[9]).hour).toBe(easternParts(schedule[8]).hour);
   });
 });
 
@@ -502,79 +421,6 @@ describe('the window while Monday night football is being played', () => {
   });
 });
 
-// ─── The weekly confidence budget ───────────────────────────────────────────
-
-describe('the confidence budget, week by week', () => {
-  it('gives two stars a game, every week of the season', () => {
-    for (const w of WEEKS) {
-      const n = gamesForWeek(w).length;
-      expect(confidenceBudget(n)).toBe(n * 2);
-    }
-  });
-
-  it('lets a full slate be picked at the average, exactly spending the budget', () => {
-    for (const w of WEEKS) {
-      const ids = gamesForWeek(w).map(g => g.id);
-      const allTwos = Object.fromEntries(ids.map(id => [id, 2]));
-      expect(confidenceSpent(allTwos, ids)).toBe(confidenceBudget(ids.length));
-      expect(starsAvailable({
-        budget: confidenceBudget(ids.length),
-        spent: confidenceSpent(allTwos, ids),
-        unpickedCount: 0,
-      })).toBe(0);
-    }
-  });
-
-  it('holds back a star for every game still unpicked', () => {
-    for (const w of WEEKS) {
-      const ids = gamesForWeek(w).map(g => g.id);
-      const budget = confidenceBudget(ids.length);
-      // One game picked at the cap, the rest untouched.
-      const spent = confidenceSpent({ [ids[0]]: CONFIDENCE_MAX }, [ids[0]]);
-      const free = starsAvailable({ budget, spent, unpickedCount: ids.length - 1 });
-      // Spending everything free plus the reserved minimums lands exactly on
-      // the budget — the reserve is what makes the remaining games affordable.
-      expect(spent + free + (ids.length - 1) * CONFIDENCE_MIN).toBe(budget);
-      expect(free).toBeGreaterThanOrEqual(0);
-    }
-  });
-
-  it('cannot be gamed by pouring the budget into the early games', () => {
-    // Maxing half a slate costs more than the whole week is worth. The guard
-    // is starsAvailable going negative, which is what the UI reads to stop
-    // you — confidenceSpent is just arithmetic and doesn't refuse anything.
-    for (const w of WEEKS) {
-      const ids = gamesForWeek(w).map(g => g.id);
-      const half = ids.slice(0, Math.ceil(ids.length / 2));
-      const maxed = Object.fromEntries(half.map(id => [id, CONFIDENCE_MAX]));
-      const free = starsAvailable({
-        budget: confidenceBudget(ids.length),
-        spent: confidenceSpent(maxed, half),
-        unpickedCount: ids.length - half.length,
-      });
-      expect(free, `week ${w}`).toBeLessThan(0);
-    }
-  });
-
-  it('always leaves a legal way to finish the week', () => {
-    // Whatever you have spent, if the tracker says you have stars free then
-    // picking every remaining game at the minimum stays inside the budget.
-    for (const w of WEEKS) {
-      const ids = gamesForWeek(w).map(g => g.id);
-      const budget = confidenceBudget(ids.length);
-      for (let picked = 0; picked <= ids.length; picked++) {
-        const chosen = ids.slice(0, picked);
-        const spread = Object.fromEntries(chosen.map((id, i) => [id, (i % CONFIDENCE_MAX) + 1]));
-        const spent = confidenceSpent(spread, chosen);
-        const unpicked = ids.length - picked;
-        if (starsAvailable({ budget, spent, unpickedCount: unpicked }) < 0) continue;
-        expect(spent + unpicked * CONFIDENCE_MIN, `week ${w}, ${picked} picked`)
-          .toBeLessThanOrEqual(budget);
-      }
-    }
-  });
-});
-
 // ─── Scoring a field ────────────────────────────────────────────────────────
 
 describe('standings over a scored week', () => {
@@ -584,17 +430,16 @@ describe('standings over a scored week', () => {
   }));
 
   const field = [
-    { user_id: 'a', username: 'ana', offsets: [0, 0, 0, 0], stars: [5, 4, 3, 2] },     // nails everything
-    { user_id: 'b', username: 'bo', offsets: [0, 3, 1, 2], stars: [5, 1, 1, 1] },      // ties game 1
-    { user_id: 'c', username: 'cy', offsets: [6, 1, 4, 9], stars: [1, 5, 1, 1] },      // wins nothing
-    { user_id: 'd', username: 'di', offsets: null, stars: null },                       // never picked
+    { user_id: 'a', username: 'ana', offsets: [0, 0, 0, 0] },     // nails everything
+    { user_id: 'b', username: 'bo', offsets: [0, 3, 1, 2] },      // ties game 1
+    { user_id: 'c', username: 'cy', offsets: [6, 1, 4, 9] },      // wins nothing
+    { user_id: 'd', username: 'di', offsets: null },              // never picked
   ];
 
   const picks = field.flatMap(p => p.offsets === null ? [] : slate.map((g, i) => ({
     user_id: p.user_id,
     game_id: g.id,
     predicted_spread: g.actual_spread + p.offsets[i],
-    confidence_points: p.stars[i],
     profiles: { username: p.username },
     games: g,
   })));
@@ -607,10 +452,11 @@ describe('standings over a scored week', () => {
     expect(row('d')).toMatchObject({ picks: 0, points: 0, graded: 0, avgDiff: null });
   });
 
-  it('pays the closest pick, and pays every tie for closest', () => {
-    // Ana and Bo are both exact on game 1, so both bank their stars on it.
-    expect(row('a').points).toBe(5 + 4 + 3 + 2);
-    expect(row('b').points).toBe(5);
+  it('pays a point for the closest pick, and pays every tie for closest', () => {
+    // Ana and Bo are both exact on game 1, so both win it — one point each,
+    // regardless of the other three games each of them also nails or misses.
+    expect(row('a').points).toBe(4); // wins all four games outright
+    expect(row('b').points).toBe(1); // wins only the tied game 1
     expect(row('c').points).toBe(0);
   });
 

@@ -1,10 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import {
-  formatSpread, getAccuracyColor,
-  CONFIDENCE_MIN, CONFIDENCE_MAX, confidenceBudget, confidenceSpent, describeSpread, starsAvailable,
-} from '../lib/scoring';
+import { formatSpread, getAccuracyColor, describeSpread } from '../lib/scoring';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { useUnsavedWork } from '../lib/unsavedWork';
 import { Clock, CheckCircle, Lock, ChevronUp, ChevronDown, Save } from 'lucide-react';
@@ -17,7 +14,6 @@ export default function GamesPage() {
   const [games, setGames] = useState([]);
   const [predictions, setPredictions] = useState({});
   const [savedPredictions, setSavedPredictions] = useState({});
-  const [confidence, setConfidence] = useState({});
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const currentWeek = useCurrentWeek(CURRENT_SEASON);
@@ -49,14 +45,11 @@ export default function GamesPage() {
       .eq('season', CURRENT_SEASON);
     if (data) {
       const predMap = {};
-      const confMap = {};
       data.forEach(p => {
         predMap[p.game_id] = String(p.predicted_spread);
-        confMap[p.game_id] = p.confidence_points;
         setSavedPredictions(prev => ({ ...prev, [p.game_id]: p }));
       });
       setPredictions(predMap);
-      setConfidence(confMap);
     }
   }, [selectedWeek, user]);
 
@@ -77,17 +70,10 @@ export default function GamesPage() {
           week: selectedWeek,
           season: CURRENT_SEASON,
           predicted_spread: parseFloat(predictions[g.id]),
-          confidence_points: confidence[g.id] || 1,
         }));
 
       if (rows.length < unlocked.length) {
         toast.error(`Every game needs a pick — ${unlocked.length - rows.length} still to go.`);
-        return;
-      }
-
-      const spend = rows.reduce((sum, r) => sum + r.confidence_points, 0);
-      if (spend > starBudget) {
-        toast.error(`That's ${spend} stars but you only have ${starBudget} this week.`);
         return;
       }
 
@@ -96,6 +82,11 @@ export default function GamesPage() {
 
       toast.success(`${rows.length} prediction${rows.length !== 1 ? 's' : ''} locked in!`);
       fetchUserPredictions();
+      // A submission can be the one that completes the week -- the database
+      // locks the whole week the moment everyone's picks are in, not just at
+      // kickoff. Refetching games picks that up immediately instead of
+      // leaving the board showing games as open until the next reload.
+      fetchGames();
     } catch (err) {
       toast.error(err.message);
     } finally {
@@ -108,27 +99,18 @@ export default function GamesPage() {
     .filter(g => predictions[g.id] !== undefined && predictions[g.id] !== '')
     .map(g => g.id);
   const picksMade = pickedGameIds.length;
-
-  // Stars are a weekly pool, so the budget covers every game on the slate --
-  // including ones already locked, which can no longer be picked.
-  const starBudget = confidenceBudget(games.length);
-  const starsSpent = confidenceSpent(confidence, pickedGameIds);
   const unpickedCount = unlocked.length - picksMade;
-  // Free stars, i.e. what's left after holding back the compulsory one star
-  // for each game still to be picked.
-  const starsFree = starsAvailable({ budget: starBudget, spent: starsSpent, unpickedCount });
   const allPicked = unpickedCount === 0;
 
-  // A week of spreads and stars lives in component state until it's submitted,
-  // so a service-worker reload here would throw it away. Declaring it lets the
+  // A week of spreads lives in component state until it's submitted, so a
+  // service-worker reload here would throw it away. Declaring it lets the
   // update hold off until the week is in.
   const hasUnsavedEdits = unlocked.some(g => {
     const entered = predictions[g.id];
     if (entered === undefined || entered === '') return false;
     const saved = savedPredictions[g.id];
     if (!saved) return true;
-    return Number(entered) !== Number(saved.predicted_spread)
-      || (confidence[g.id] || CONFIDENCE_MIN) !== saved.confidence_points;
+    return Number(entered) !== Number(saved.predicted_spread);
   });
   useUnsavedWork('weekly-picks', hasUnsavedEdits);
 
@@ -173,7 +155,6 @@ export default function GamesPage() {
           {games.map(game => {
             const saved = savedPredictions[game.id];
             const userPick = predictions[game.id];
-            const conf = confidence[game.id] || CONFIDENCE_MIN;
             const spreadReading = describeSpread(userPick, game.home_team_abbr, game.away_team_abbr);
 
             return (
@@ -250,41 +231,9 @@ export default function GamesPage() {
                             {spreadReading}
                           </div>
                         )}
-                        <div>
-                          <div className="label-muted" style={{ marginBottom: 6 }}>
-                            Confidence (×{conf}) · {starsFree} spare star{starsFree === 1 ? '' : 's'}
-                          </div>
-                          <div role="group" aria-label="Confidence level" style={{ display: 'flex', gap: 4 }}>
-                            {Array.from({ length: CONFIDENCE_MAX }, (_, i) => i + CONFIDENCE_MIN).map(n => {
-                              // Raising this game to n costs the difference; a
-                              // game with no pick yet also starts costing its base.
-                              // An unpicked game already has one star held
-                              // back for it, so raising it to n only costs the
-                              // difference above that minimum.
-                              const isPicked = pickedGameIds.includes(game.id);
-                              const extraCost = n - (isPicked ? conf : CONFIDENCE_MIN);
-                              const unaffordable = extraCost > starsFree;
-                              return (
-                                <button key={n}
-                                  onClick={() => setConfidence(prev => ({ ...prev, [game.id]: n }))}
-                                  disabled={unaffordable}
-                                  aria-label={`Set confidence to ${n}`} aria-pressed={conf >= n}
-                                  title={unaffordable ? 'Not enough stars left this week' : `Confidence ×${n}`}
-                                  style={{
-                                    width: 28, height: 28, borderRadius: 4, background: conf >= n ? 'var(--accent)' : 'var(--surface-alt)',
-                                    border: `1px solid ${conf >= n ? 'var(--accent)' : 'var(--border)'}`,
-                                    cursor: unaffordable ? 'not-allowed' : 'pointer', fontSize: 14,
-                                    color: conf >= n ? 'var(--accent-ink)' : 'var(--ink-faint)',
-                                    opacity: unaffordable ? 0.35 : 1,
-                                    fontWeight: 700, transition: 'all 0.1s'
-                                  }}>★</button>
-                              );
-                            })}
-                          </div>
-                        </div>
                         {saved && (
                           <div style={{ marginTop: 10, fontSize: 12, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                            <CheckCircle size={12} /> Saved: {formatSpread(saved.predicted_spread)} (×{saved.confidence_points})
+                            <CheckCircle size={12} /> Saved: {formatSpread(saved.predicted_spread)}
                           </div>
                         )}
                       </div>
@@ -311,18 +260,17 @@ export default function GamesPage() {
               <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>{picksMade}</span>
               <span style={{ color: 'var(--ink-soft)', fontSize: 15 }}> / {unlocked.length} picks made</span>
             </div>
-            <div style={{ fontSize: 12, color: starsFree < 0 ? 'var(--danger)' : 'var(--ink-soft)', marginTop: 2 }}>
-              ★ {starsSpent} / {starBudget} stars used this week
-              {starsFree < 0
-                ? ` — over by ${-starsFree}, lower a confidence rating`
-                : !allPicked && ` · every game needs a pick`}
-            </div>
+            {!allPicked && (
+              <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
+                every game needs a pick
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', gap: 12 }}>
             <button
               className="btn btn-primary"
               onClick={submitPredictions}
-              disabled={submitting || !allPicked || starsFree < 0}
+              disabled={submitting || !allPicked}
               title={!allPicked ? `Pick every game first — ${unpickedCount} still to go` : undefined}
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
@@ -359,7 +307,6 @@ function LockedGame({ game, saved }) {
         <div>
           <div className="label-muted">Your pick</div>
           <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 19 }}>{formatSpread(saved.predicted_spread)}</div>
-          <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>×{saved.confidence_points} conf</div>
         </div>
         {game.actual_spread !== null && (
           <div>

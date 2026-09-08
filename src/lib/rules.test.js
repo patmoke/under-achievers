@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { MODES, UNIVERSAL, modeByKey } from './rules';
-import { CONFIDENCE_MAX, confidenceBudget } from './scoring';
 import { MAX_LEGS, PLAYOFF_WEEKS, PLAYOFF_ROUNDS } from './odds';
 
 /** Every sentence in a mode, as one searchable string. */
@@ -51,12 +50,6 @@ describe('rules content', () => {
 // because someone will plan around it.
 
 describe('the stated numbers match the constants', () => {
-  it('states the real star budget and the real per-game cap', () => {
-    const weekly = proseOf(modeByKey('weekly'));
-    expect(weekly).toContain(`${confidenceBudget(1)} stars`);
-    expect(weekly).toContain(`${CONFIDENCE_MAX} stars on a single game`);
-  });
-
   it('states the real parlay limit', () => {
     expect(proseOf(modeByKey('bankroll'))).toContain(`up to ${MAX_LEGS} picks`);
   });
@@ -97,8 +90,11 @@ describe('the rules that cost people something are actually stated', () => {
     expect(proseOf(modeByKey('survivor'))).toMatch(/miss a week/i);
   });
 
-  it('warns that unspent stars are lost on a game you did not win', () => {
-    expect(proseOf(modeByKey('weekly'))).toMatch(/scores nothing, and those stars are gone/i);
+  it('warns that the week can lock before kickoff', () => {
+    // The whole point of the change: someone who assumes they have until
+    // kickoff to pick can be locked out earlier than that, by other people's
+    // picks rather than the clock.
+    expect(proseOf(modeByKey('weekly'))).toMatch(/no need to wait for kickoff/i);
   });
 
   it('warns that moneyline and spread cannot be parlayed together', () => {

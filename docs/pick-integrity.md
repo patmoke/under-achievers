@@ -23,6 +23,16 @@ Either alone leaves a gap. `is_locked` is written by the hourly sync, so it
 lags reality by up to an hour after a game starts; `now() < game_time` is exact
 and depends on nothing having run. Both are required, on INSERT and on UPDATE.
 
+`is_locked` now has a second writer besides the sync: `weekly_all_submitted()`
+/ `lock_week_when_all_submitted()`, a statement-level trigger on `predictions`
+that locks a whole week's games early, the moment every Call the Line player
+has a pick on every game in it — see `docs/games-sync.md`. Nothing about the
+RLS check above changed to support this; `is_locked = false` already covered
+it, since it doesn't care *why* the flag is true, only that it is. A save that
+happens to be the one completing the week is still accepted — the trigger
+fires after the statement, in the same transaction — but no further save is,
+by anyone, until the next kickoff-eligible game rolls around next week.
+
 ### What this closed
 
 The INSERT policy used to check only that you were writing as yourself. The

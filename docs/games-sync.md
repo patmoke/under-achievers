@@ -76,43 +76,50 @@ This applies to **`actual_spread` only**. The betting markets do not freeze —
 they track right up to kickoff and stop there, so what is left on a played game
 is the closing line. A bet stores the price it was struck at, so a line moving
 underneath it changes nothing already placed; the freeze exists because the
-weekly game grades everyone against one shared number, and the betting game
-does not.
+weekly picks game grades everyone against one shared number, and the betting
+game does not.
 
-**A week's lines stop moving after the last Sunday game before that week's
-first kickoff** — in practice, Sunday night's game plus four hours, so a little
-past midnight Eastern on Monday.
+**A game's line freezes the moment `is_locked` flips true for it, and never
+before.** `is_locked` itself flips true from either of two places:
 
-The whole week freezes at a single moment rather than each game freezing on its
-own clock. Everyone is then picking against the same set of numbers, and a
-Thursday game isn't graded against a line that was still moving days after a
-Sunday game's was settled.
+- **This function, at that game's own kickoff** — unchanged, per-game, exactly
+  as it always was.
+- **A database trigger on `predictions`, the instant every Call the Line
+  player has a pick on every game in that week** — `weekly_all_submitted()` /
+  `lock_week_when_all_submitted()`, applied statement-level so a whole-week
+  batch upsert (how the app actually saves picks) is judged once, after every
+  row in it has landed. This locks the *entire week's* games at once, however
+  far off kickoff still is — there is no need to wait for it once everyone is
+  in. "Every Call the Line player" means every distinct member across every
+  `compete_on='weekly'` league, not just one league's roster, because picks
+  aren't league-scoped — one set of predictions counts in every weekly league
+  a player is in.
 
-Week 1 has no NFL Sunday before it, so its freeze point is synthesised: the
-calendar Sunday before the opener, at the hour a Sunday night game would have
-kicked off, plus the same four hours.
+Either writer freezes the same way: once `is_locked` is true, this function
+never touches that game's `actual_spread` again — with one exception, a game
+we never captured a line for at all still accepts a late one, because a late
+line beats no line.
 
-Before the freeze the number tracks the market on every run. After it the
-number is settled and never rewritten — with one exception: a game we never
-captured a line for at all still accepts a late one, because a late line beats
-no line.
-
-The previous rule was "write a line only if the column is empty", which sounds
-equivalent and isn't. nflverse publishes lookahead lines months ahead, so a
-January game was being graded against a number captured in August.
+The old rule froze a whole week together at a fixed clock instant (the last
+Sunday game before the week, plus four hours) regardless of whether anyone had
+picked. That clock-based schedule is retired — `src/lib/lines.js` and the
+Edge Function's matching freeze-schedule code are both gone. The kickoff flip
+remains as the backstop for a week nobody finishes early: worst case, it locks
+exactly the way it always did.
 
 ## Reading the outcome
 
-The sync returns `{ synced, linesWritten, linesFrozen, freezePoints, errors }`,
-and the Admin toast shows the first three. `freezePoints` is the computed
-freeze instant for every week — useful for confirming the rule at a glance,
-since every week should land on Monday at 00:20 Eastern.
+The sync returns `{ synced, linesWritten, linesFrozen, marketsWritten,
+marketsClosed, playoffGames, errors }`, and the Admin toast shows the first
+few. `linesFrozen` counts games this run found already locked with a line on
+file — the only visible sign the freeze is holding; a sudden zero mid-season
+would mean settled numbers had started moving again.
 
 Runs are also recorded in `sync_runs`, surfaced under Admin → Health.
 
 ## Rules that hold regardless
 
-- `is_locked` only ever flips false → true, at kickoff. Never back.
+- `is_locked` only ever flips false → true. Never back — true of both writers.
 - Regular season only (`game_type = 'REG'`); the week numbering doesn't model
   playoff weeks.
 - nflverse's `spread_line` is positive when the home team is favoured. Ours is
@@ -124,12 +131,13 @@ Runs are also recorded in `sync_runs`, surfaced under Admin → Health.
 `src/lib/season.test.js` plays the whole 2026 season through the real synced
 schedule — 272 games, bye weeks, Thanksgiving, Christmas, the week 18
 all-at-once slate, the November clock change — and asserts the week derivation,
-the freeze schedule, a survivor pool, the confidence budget, and the standings
-all stay coherent at every step. The schedule it runs on is a fixture pulled
-straight from the `games` table, so it is the same data production reads.
+a survivor pool, and the standings all stay coherent at every step. The
+schedule it runs on is a fixture pulled straight from the `games` table, so it
+is the same data production reads.
 
-The freeze rule lives in two places: `src/lib/lines.js` in the app, and a copy
-inside the Edge Function. They are independent implementations — the app's uses
-`Intl` for Eastern time, the function's a hand-rolled offset table — and the
-test pins both to the freeze points a live sync actually returned. If either
-drifts, that test fails and names the week.
+The early-lock trigger itself (`weekly_all_submitted` /
+`lock_week_when_all_submitted`) lives in Postgres, not in this repo — it was
+verified directly against the live database with a throwaway week and two
+real users: a valid same-total pick reallocation succeeds, a week locks the
+moment the last required player's picks land, and a locked week's rows reject
+further writes under RLS.

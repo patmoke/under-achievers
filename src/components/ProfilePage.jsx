@@ -195,10 +195,7 @@ export default function ProfilePage() {
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
                       {diff !== null ? (
-                        <>
-                          <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>Δ {diff.toFixed(1)}</div>
-                          <div style={{ fontSize: 11, color: 'var(--ink-soft)', marginTop: 2 }}>×{p.confidence_points}</div>
-                        </>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: diff <= 1 ? 'var(--success)' : diff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>Δ {diff.toFixed(1)}</div>
                       ) : (
                         <span className="badge badge-lime" style={{ fontSize: 10 }}>Pending</span>
                       )}
