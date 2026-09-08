@@ -63,7 +63,7 @@ export default function GamesPage() {
     setSubmitting(true);
     try {
       const rows = games
-        .filter(g => !g.is_locked && predictions[g.id] !== undefined && predictions[g.id] !== '')
+        .filter(g => !g.weekly_locked && predictions[g.id] !== undefined && predictions[g.id] !== '')
         .map(g => ({
           user_id: user.id,
           game_id: g.id,
@@ -94,7 +94,7 @@ export default function GamesPage() {
     }
   }
 
-  const unlocked = games.filter(g => !g.is_locked);
+  const unlocked = games.filter(g => !g.weekly_locked);
   const pickedGameIds = unlocked
     .filter(g => predictions[g.id] !== undefined && predictions[g.id] !== '')
     .map(g => g.id);
@@ -160,8 +160,8 @@ export default function GamesPage() {
             return (
               <div key={game.id} className="card" style={{
                 padding: 22,
-                borderLeft: game.is_locked ? '3px solid var(--border-strong)' : saved ? '3px solid var(--success)' : '3px solid var(--accent)',
-                opacity: game.is_locked ? 0.9 : 1
+                borderLeft: game.weekly_locked ? '3px solid var(--border-strong)' : saved ? '3px solid var(--success)' : '3px solid var(--accent)',
+                opacity: game.weekly_locked ? 0.9 : 1
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                   {/* Teams */}
@@ -190,7 +190,7 @@ export default function GamesPage() {
 
                   {/* Prediction Area */}
                   <div style={{ minWidth: 200 }}>
-                    {game.is_locked ? (
+                    {game.weekly_locked ? (
                       <LockedGame game={game} saved={saved} />
                     ) : (
                       <div>

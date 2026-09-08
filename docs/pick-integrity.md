@@ -16,22 +16,29 @@ A pick may only be filed on a game that **has not kicked off**, and the row's
 
 Kickoff is guarded twice, on purpose:
 
-- `is_locked = false` — the flag the sync maintains
+- `weekly_locked = false` — the flag the sync (and the trigger below) maintain
 - `now() < game_time` — the clock
 
-Either alone leaves a gap. `is_locked` is written by the hourly sync, so it
-lags reality by up to an hour after a game starts; `now() < game_time` is exact
-and depends on nothing having run. Both are required, on INSERT and on UPDATE.
+Either alone leaves a gap. `weekly_locked` lags reality by up to an hour after
+a game starts if only the hourly sync were writing it; `now() < game_time` is
+exact and depends on nothing having run. Both are required, on INSERT and on
+UPDATE.
 
-`is_locked` now has a second writer besides the sync: `weekly_all_submitted()`
-/ `lock_week_when_all_submitted()`, a statement-level trigger on `predictions`
-that locks a whole week's games early, the moment every Call the Line player
-has a pick on every game in it — see `docs/games-sync.md`. Nothing about the
-RLS check above changed to support this; `is_locked = false` already covered
-it, since it doesn't care *why* the flag is true, only that it is. A save that
-happens to be the one completing the week is still accepted — the trigger
-fires after the statement, in the same transaction — but no further save is,
-by anyone, until the next kickoff-eligible game rolls around next week.
+`weekly_locked` is Call the Line's **own** column, not `is_locked` — that
+distinction is load-bearing. It has two writers: the sync, at a game's own
+kickoff, and `weekly_all_submitted()` / `lock_week_when_all_submitted()`, a
+statement-level trigger on `predictions` that locks a whole week's games
+early, the moment every Call the Line player has a pick on every game in it —
+see `docs/games-sync.md`. A save that happens to be the one completing the
+week is still accepted — the trigger fires after the statement, in the same
+transaction — but no further save is, by anyone, until the next
+kickoff-eligible game rolls around next week.
+
+It used to be `is_locked`, and that was a real bug: `is_locked` is also what
+Survivor's own RLS depends on (below), so an early Call the Line lock was
+locking Survivor out of games days before they'd actually kicked off. Split
+into its own column so Call the Line finishing early can never again reach
+into a different game mode's locking.
 
 ### What this closed
 
@@ -56,8 +63,10 @@ app actually issues.
 
 Already enforced, and unchanged:
 
-- The game must exist, match the row's week and season, be unlocked, and not
-  have kicked off — the same rule the weekly picks now carry.
+- The game must exist, match the row's week and season, be unlocked
+  (`is_locked = false`, Survivor's own column — see the note above), and not
+  have kicked off. Same shape of rule as the weekly picks, deliberately on a
+  separate flag.
 - The team must be one of the two actually playing in that game.
 - The entry must belong to you.
 - `UNIQUE (entry_id, team_abbr)` — a team cannot be used twice, whatever the

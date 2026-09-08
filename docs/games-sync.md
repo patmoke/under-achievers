@@ -79,11 +79,13 @@ underneath it changes nothing already placed; the freeze exists because the
 weekly picks game grades everyone against one shared number, and the betting
 game does not.
 
-**A game's line freezes the moment `is_locked` flips true for it, and never
-before.** `is_locked` itself flips true from either of two places:
+**A game's line freezes the moment `weekly_locked` flips true for it, and
+never before.** `weekly_locked` is a **Call the Line-only** flag, deliberately
+kept separate from `is_locked` — see "Two locks, not one" below. It flips true
+from either of two places:
 
-- **This function, at that game's own kickoff** — unchanged, per-game, exactly
-  as it always was.
+- **This function, at that game's own kickoff** — the same moment `is_locked`
+  flips, for the same reason.
 - **A database trigger on `predictions`, the instant every Call the Line
   player has a pick on every game in that week** — `weekly_all_submitted()` /
   `lock_week_when_all_submitted()`, applied statement-level so a whole-week
@@ -95,10 +97,10 @@ before.** `is_locked` itself flips true from either of two places:
   aren't league-scoped — one set of predictions counts in every weekly league
   a player is in.
 
-Either writer freezes the same way: once `is_locked` is true, this function
-never touches that game's `actual_spread` again — with one exception, a game
-we never captured a line for at all still accepts a late one, because a late
-line beats no line.
+Either writer freezes the same way: once `weekly_locked` is true, this
+function never touches that game's `actual_spread` again — with one
+exception, a game we never captured a line for at all still accepts a late
+one, because a late line beats no line.
 
 The old rule froze a whole week together at a fixed clock instant (the last
 Sunday game before the week, plus four hours) regardless of whether anyone had
@@ -106,6 +108,26 @@ picked. That clock-based schedule is retired — `src/lib/lines.js` and the
 Edge Function's matching freeze-schedule code are both gone. The kickoff flip
 remains as the backstop for a week nobody finishes early: worst case, it locks
 exactly the way it always did.
+
+### Two locks, not one
+
+`is_locked` and `weekly_locked` look alike and both live on `games`, but they
+answer different questions and must never be merged:
+
+- **`is_locked`** — has this game's own kickoff passed? Nothing else. Survivor
+  picks its own RLS policies off this exact flag (`docs/pick-integrity.md`),
+  and general tooling (Admin's manual lock toggle, entering a final score)
+  treats it the same way. It only ever flips at kickoff.
+- **`weekly_locked`** — is Call the Line done with this game? Same as
+  `is_locked` at kickoff, but can also flip early once everyone's picked.
+
+The two were one column at first, and that was a real bug: an early Call the
+Line lock flipped `is_locked` for the whole week, which also locked Survivor
+out of games that hadn't actually kicked off yet, since Survivor's own picking
+window depends on that same flag. `weekly_locked` exists precisely so Call the
+Line's completion state can never leak into a different game mode's locking
+again. Both still flip true together at kickoff — they only diverge on the
+early side.
 
 ## Reading the outcome
 
@@ -119,7 +141,8 @@ Runs are also recorded in `sync_runs`, surfaced under Admin → Health.
 
 ## Rules that hold regardless
 
-- `is_locked` only ever flips false → true. Never back — true of both writers.
+- `is_locked` and `weekly_locked` each only ever flip false → true. Never
+  back — true of every writer of either one.
 - Regular season only (`game_type = 'REG'`); the week numbering doesn't model
   playoff weeks.
 - nflverse's `spread_line` is positive when the home team is favoured. Ours is

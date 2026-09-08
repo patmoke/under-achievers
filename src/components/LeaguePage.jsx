@@ -685,12 +685,12 @@ export default function LeaguePage() {
               const myPick = myWeekPicks.find(p => p.game_id === game.id);
               const allPicksForGame = weekAllSubmitted ? weeklyPicks.filter(p => p.game_id === game.id) : [];
               // The line is the answer to this game, so it can only appear once
-              // the game is actually locked — is_locked, not just kickoff having
-              // passed, since a week can now lock early once everyone in Call
-              // the Line has picked. Before that, showing it (or anything
-              // derived from it, like a delta) would let someone still picking
-              // copy it straight into their prediction and score a perfect zero.
-              const revealed = game.is_locked && game.actual_spread !== null;
+              // the game is actually locked for Call the Line — weekly_locked,
+              // a dedicated flag rather than is_locked, which Survivor's own
+              // picking window also depends on and which must only ever flip
+              // at kickoff. weekly_locked can flip earlier, the moment
+              // everyone in Call the Line has picked; is_locked never does.
+              const revealed = game.weekly_locked && game.actual_spread !== null;
               const graded = revealed
                 ? allPicksForGame.map(p => ({ ...p, diff: Math.abs(Number(p.predicted_spread) - Number(game.actual_spread)) }))
                 : [];
