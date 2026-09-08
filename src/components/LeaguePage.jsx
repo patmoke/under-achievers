@@ -3,9 +3,6 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
 import { formatSpread, buildStandings, finalizedWeeks, weeksWonCounts } from '../lib/scoring';
-// Same 'has this kicked off' rule the survivor tab uses. One predicate rather
-// than a third hand-rolled comparison of now() against game_time.
-import { isGameLocked } from '../lib/survivor';
 import { useCurrentWeek } from '../lib/useCurrentWeek';
 import { Users, Copy, Check, Eye, EyeOff, LogOut, Calendar, Skull, Coins, Settings, UserMinus, X, Share2, FlaskConical, PenLine, ChevronRight, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -687,12 +684,20 @@ export default function LeaguePage() {
             games.map(game => {
               const myPick = myWeekPicks.find(p => p.game_id === game.id);
               const allPicksForGame = weekAllSubmitted ? weeklyPicks.filter(p => p.game_id === game.id) : [];
-              // The line is the answer to this game. It is synced days ahead of
-              // kickoff and picks stay editable until kickoff, so showing it
-              // early let anyone copy it straight into their prediction and
-              // score a perfect zero. Nothing derived from it — the number or
-              // the delta against it — may appear before the game starts.
-              const revealed = isGameLocked(game);
+              // The line is the answer to this game, so it can only appear once
+              // the game is actually locked — is_locked, not just kickoff having
+              // passed, since a week can now lock early once everyone in Call
+              // the Line has picked. Before that, showing it (or anything
+              // derived from it, like a delta) would let someone still picking
+              // copy it straight into their prediction and score a perfect zero.
+              const revealed = game.is_locked && game.actual_spread !== null;
+              const graded = revealed
+                ? allPicksForGame.map(p => ({ ...p, diff: Math.abs(Number(p.predicted_spread) - Number(game.actual_spread)) }))
+                : [];
+              const bestDiff = graded.length ? Math.min(...graded.map(p => p.diff)) : null;
+              const wonGame = p => bestDiff !== null && p.diff <= bestDiff + 1e-9;
+              const myDiff = revealed && myPick ? Math.abs(Number(myPick.predicted_spread) - Number(game.actual_spread)) : null;
+              const iWon = graded.length ? graded.some(p => p.user_id === user.id && wonGame(p)) : null;
               return (
                 <div key={game.id} className="card" style={{ padding: 20, marginBottom: 12 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 12 }}>
@@ -702,7 +707,7 @@ export default function LeaguePage() {
                       </div>
                       <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
                         {new Date(game.game_time).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
-                        {revealed && game.actual_spread !== null && <span style={{ marginLeft: 10 }}>Line: <strong>{formatSpread(game.actual_spread)}</strong></span>}
+                        {revealed && <span style={{ marginLeft: 10 }}>Line: <strong>{formatSpread(game.actual_spread)}</strong></span>}
                       </div>
                     </div>
                     {game.home_score !== null && (
@@ -714,29 +719,57 @@ export default function LeaguePage() {
                   {myPick && (
                     <div style={{ padding: '10px 14px', background: 'var(--accent-soft)', border: '1px solid rgba(15,122,77,0.18)', borderRadius: 'var(--radius-sm)', marginBottom: allPicksForGame.length > 0 ? 10 : 0 }}>
                       <div className="label-muted" style={{ marginBottom: 4 }}>Your pick</div>
-                      <div style={{ display: 'flex', gap: 20, fontSize: 14 }}>
+                      <div style={{ display: 'flex', gap: 20, alignItems: 'center', fontSize: 14 }}>
                         <span>Spread: <strong>{formatSpread(myPick.predicted_spread)}</strong></span>
-                        {revealed && game.actual_spread !== null && (
-                          <span style={{ color: Math.abs(myPick.predicted_spread - game.actual_spread) <= 1 ? 'var(--success)' : Math.abs(myPick.predicted_spread - game.actual_spread) <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
-                            Δ{Math.abs(myPick.predicted_spread - game.actual_spread).toFixed(1)}
+                        {myDiff !== null && (
+                          <span style={{ color: myDiff <= 1 ? 'var(--success)' : myDiff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
+                            Δ{myDiff.toFixed(1)}
                           </span>
                         )}
+                        {iWon && <span className="badge badge-lime" style={{ fontSize: 11 }}>🏆 Won this game</span>}
                       </div>
                     </div>
                   )}
                   {weekAllSubmitted && allPicksForGame.length > 0 && (
                     <div>
                       <div className="label-muted" style={{ marginBottom: 6, display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <Eye size={11} />All picks revealed
+                        <Eye size={11} />{revealed ? 'Score breakdown' : 'All picks revealed'}
                       </div>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {allPicksForGame.filter(p => p.user_id !== user.id).map(p => (
-                          <div key={p.id} style={{ padding: '6px 12px', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
-                            <span style={{ color: 'var(--ink-soft)', marginRight: 6 }}>{p.profiles?.username}:</span>
-                            <strong>{formatSpread(p.predicted_spread)}</strong>
-                          </div>
-                        ))}
-                      </div>
+                      {revealed ? (
+                        <div style={{ display: 'grid', gap: 6 }}>
+                          {[...graded].sort((a, b) => a.diff - b.diff).map(p => {
+                            const isMe = p.user_id === user.id;
+                            const won = wonGame(p);
+                            return (
+                              <div key={p.id} style={{
+                                display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
+                                padding: '6px 12px', borderRadius: 'var(--radius-sm)', fontSize: 13,
+                                background: won ? 'var(--accent-soft)' : 'var(--surface-alt)',
+                                border: `1px solid ${won ? 'rgba(15,122,77,0.25)' : 'var(--border)'}`,
+                              }}>
+                                <span>
+                                  <span style={{ color: 'var(--ink-soft)', marginRight: 6 }}>
+                                    {isMe ? 'You' : p.profiles?.username}{won && ' 🏆'}
+                                  </span>
+                                  <strong>{formatSpread(p.predicted_spread)}</strong>
+                                </span>
+                                <span style={{ color: won ? 'var(--success)' : 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
+                                  Δ{p.diff.toFixed(1)}{won && ' · +1'}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {allPicksForGame.filter(p => p.user_id !== user.id).map(p => (
+                            <div key={p.id} style={{ padding: '6px 12px', background: 'var(--surface-alt)', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', fontSize: 13 }}>
+                              <span style={{ color: 'var(--ink-soft)', marginRight: 6 }}>{p.profiles?.username}:</span>
+                              <strong>{formatSpread(p.predicted_spread)}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                   {!myPick && <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>You haven't submitted a pick for this game yet.</div>}
