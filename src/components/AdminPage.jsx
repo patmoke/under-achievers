@@ -636,15 +636,14 @@ function describeChange(row) {
   }
 
   if (row.action === 'insert') {
-    return `picked ${n.predicted_spread} at ${n.confidence_points}★`;
+    return `picked ${n.predicted_spread}`;
   }
   if (row.action === 'delete') {
-    return `pick removed — had been ${o.predicted_spread} at ${o.confidence_points}★`;
+    return `pick removed — had been ${o.predicted_spread}`;
   }
-  const parts = [];
-  if (o.predicted_spread !== n.predicted_spread) parts.push(`spread ${o.predicted_spread} → ${n.predicted_spread}`);
-  if (o.confidence_points !== n.confidence_points) parts.push(`${o.confidence_points}★ → ${n.confidence_points}★`);
-  return parts.length ? `changed ${parts.join(', ')}` : 'changed';
+  return o.predicted_spread !== n.predicted_spread
+    ? `changed spread ${o.predicted_spread} → ${n.predicted_spread}`
+    : 'changed';
 }
 
 function PickLogRow({ row, last, username, actorName }) {

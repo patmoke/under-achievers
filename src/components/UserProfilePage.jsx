@@ -170,7 +170,6 @@ export default function UserProfilePage() {
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
                     Spread: <strong style={{ color: 'var(--ink)' }}>{formatSpread(p.predicted_spread)}</strong>
                     {g?.actual_spread !== null && g?.actual_spread !== undefined && <> · Actual: <strong style={{ color: 'var(--ink)' }}>{formatSpread(g.actual_spread)}</strong></>}
-                    <span style={{ marginLeft: 10 }}>Conf: ×{p.confidence_points}</span>
                   </div>
                 </div>
                 {diff !== null && <span style={{ color: diffColor, fontWeight: 700, fontSize: 14, flexShrink: 0 }}>Δ{diff.toFixed(1)}</span>}

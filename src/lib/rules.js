@@ -9,11 +9,7 @@
 // Kept free of React so the same content feeds the rules page, the short panel
 // inside a league, and the landing page.
 
-import { CONFIDENCE_MIN, CONFIDENCE_MAX, confidenceBudget } from './scoring';
 import { MAX_LEGS, PLAYOFF_WEEKS, PLAYOFF_ROUNDS } from './odds';
-
-/** Stars per game, stated the way the budget actually works. */
-const STARS_PER_GAME = confidenceBudget(1);
 
 const playoffFloors = PLAYOFF_WEEKS
   .map(w => `${Math.round(PLAYOFF_ROUNDS[w].floor * 100)}%`)
@@ -25,38 +21,37 @@ export const MODES = [
     title: 'Call the Line',
     blurb: 'Predict the point spread for every game. Closest to the real line wins it.',
     summary: [
-      'Predict the spread for every game before it kicks off.',
-      `Closest prediction wins the game and scores its stars — everyone else scores nothing on it.`,
-      `You get ${STARS_PER_GAME} stars per game to spread across the week, ${CONFIDENCE_MAX} on any one game at most.`,
+      'Predict the spread for every game before the week locks.',
+      'Closest prediction wins the game and scores a point — everyone else scores nothing on it.',
+      'The week locks, and the lines reveal, the moment everyone has submitted every pick — no need to wait for kickoff.',
     ],
     sections: [
       {
         heading: 'What you do',
         points: [
           'Each week, predict the closing point spread for every game on the slate. Spreads are written from the home team\'s side, so −3 means the home team is favoured by three.',
-          'You can change a prediction as often as you like until that game kicks off. Each game locks on its own, so a Sunday game stays open after the Thursday one has closed.',
+          'You can change any prediction as often as you like until the week locks.',
         ],
       },
       {
         heading: 'How it scores',
         points: [
-          'For each game, whoever came closest to the actual line wins that game. Everyone else scores nothing on it — this is a contest against the room, not against a points table.',
+          'For each game, whoever came closest to the actual line wins that game and scores a point. Everyone else scores nothing on it — this is a contest against the room, not against a points table.',
           'If two people are equally close, they both win it.',
-          'Your score for the week is the stars you had on the games you won.',
+          'Your score for the week is the number of games you won.',
         ],
       },
       {
-        heading: 'Stars',
+        heading: 'When it locks',
         points: [
-          `Every week you get ${STARS_PER_GAME} stars for each game on the slate. Every game has to be picked, and a pick costs at least ${CONFIDENCE_MIN} star, so that much of the budget is always spoken for.`,
-          `You can put up to ${CONFIDENCE_MAX} stars on a single game.`,
-          'Stars are only scored if you win the game. Five stars on a game you miss scores nothing, and those stars are gone.',
+          'The whole week locks together, all at once, the moment every player has a pick on every game — there is no need to wait for kickoff. Lines reveal at the same moment.',
+          'If someone never gets around to it, the week still has a backstop: each game locks at its own kickoff regardless, same as everywhere else in Under Achievers.',
         ],
       },
       {
         heading: 'Standings',
         points: [
-          'Ranked on total stars won. Level scores are separated by average distance from the line, so the more accurate player finishes higher.',
+          'Ranked on total games won. Level scores are separated by average distance from the line, so the more accurate player finishes higher.',
         ],
       },
     ],

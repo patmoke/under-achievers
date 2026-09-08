@@ -35,7 +35,7 @@ export default function LeaderboardPage() {
 
     let query = supabase
       .from('predictions')
-      .select('user_id, game_id, predicted_spread, confidence_points, profiles(username, display_name), games(actual_spread)')
+      .select('user_id, game_id, predicted_spread, profiles(username, display_name), games(actual_spread)')
       .eq('season', CURRENT_SEASON);
 
     if (tab === 'weekly') query = query.eq('week', selectedWeek);
@@ -113,7 +113,7 @@ export default function LeaderboardPage() {
                   {username}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 4 }}>
-                  {entry.points} pts · {entry.wins} won
+                  {entry.wins} won
                 </div>
                 {entry.avgDiff !== null && entry.avgDiff !== undefined && (
                   <div style={{ fontSize: 12, color: 'var(--ink-soft)', marginTop: 2 }}>
@@ -145,7 +145,7 @@ export default function LeaderboardPage() {
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--border)', background: 'var(--surface-alt)' }}>
-                  {['Rank', 'Player', 'Won', 'Total Δ', 'Avg Δ', 'Points'].map(h => (
+                  {['Rank', 'Player', 'Won', 'Total Δ', 'Avg Δ'].map(h => (
                     <th key={h} className="label-muted" style={{
                       padding: '12px 16px', textAlign: h === 'Rank' || h === 'Player' ? 'left' : 'right',
                     }}>{h}</th>
@@ -205,11 +205,6 @@ export default function LeaderboardPage() {
                         {entry.avgDiff === null
                           ? <span style={{ color: 'var(--ink-faint)' }}>—</span>
                           : <span style={{ color: 'var(--success)', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{entry.avgDiff.toFixed(2)}</span>}
-                      </td>
-                      <td style={{ padding: '14px 16px', textAlign: 'right' }}>
-                        <span style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>
-                          {entry.points}
-                        </span>
                       </td>
                     </tr>
                   );

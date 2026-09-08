@@ -58,45 +58,6 @@ export function isNFLSeason(season = 2026) {
   return now >= seasonStart && now <= seasonEnd;
 }
 
-// ─── Confidence budget ──────────────────────────────────────────────────────
-//
-// Confidence multiplies the points a pick earns, and base points are always
-// positive, so an unlimited multiplier makes "max everything" strictly
-// optimal — no decision, and a hidden edge for whoever notices. Instead each
-// week hands out a fixed pool of stars to spread across that week's games.
-//
-// Two stars per game means you could put x2 on everything, or bank x1s to
-// afford a few x5s. Picking fewer games doesn't concentrate the pool, because
-// each game is still capped at CONFIDENCE_MAX.
-
-export const CONFIDENCE_MIN = 1;
-export const CONFIDENCE_MAX = 5;
-
-export function confidenceBudget(gameCount) {
-  return gameCount * 2;
-}
-
-/** Stars committed so far. Only games with an actual pick cost anything. */
-export function confidenceSpent(confidenceByGame, pickedGameIds) {
-  return pickedGameIds.reduce(
-    (sum, id) => sum + (confidenceByGame[id] || CONFIDENCE_MIN),
-    0
-  );
-}
-
-/**
- * Stars free to spend above the compulsory minimums.
- *
- * Every game has to be picked, and a pick costs at least one star, so the
- * games still outstanding have a claim on the budget before anything else
- * does. Without holding that back, someone could pour the whole budget into
- * the first few games and then be unable to afford the games they're still
- * required to pick.
- */
-export function starsAvailable({ budget, spent, unpickedCount }) {
-  return budget - spent - unpickedCount * CONFIDENCE_MIN;
-}
-
 /**
  * Plain-language reading of a spread.
  *
@@ -144,18 +105,13 @@ export function summarisePicks(picks = []) {
 // ─── Competitive scoring ────────────────────────────────────────────────────
 //
 // Scoring is relative, not absolute: for each graded game, whoever in the
-// field lands closest to the actual spread wins that game and banks the stars
-// they put on it. Ties all win. Everyone else scores nothing for that game.
+// field lands closest to the actual spread wins that game and banks a point
+// for it. Ties all win. Everyone else scores nothing for that game.
 //
-// Two things follow from this that are worth being explicit about:
-//
-//   1. A pick has no point value on its own — it depends who you're up
-//      against. The same pick can win in one league and lose in another, so
-//      points belong to (pick, field) rather than to the pick. Personal views
-//      therefore show accuracy, not points.
-//   2. Stars now carry real risk. Five stars on a game you don't win scores
-//      nothing, and those stars are spent. A player's weekly ceiling is their
-//      whole star budget, reached only by winning every game they starred.
+// A pick has no point value on its own — it depends who you're up against.
+// The same pick can win in one league and lose in another, so points belong
+// to (pick, field) rather than to the pick. Personal views therefore show
+// accuracy, not points.
 
 // Spreads move in half-point steps, so exact comparison would do; the epsilon
 // just keeps float noise from silently dropping a legitimate tie.
@@ -209,7 +165,7 @@ export function buildStandings(picks, players = []) {
       row.diffs.push(diff);
       if (diff <= best + TIE_EPSILON) {
         row.wins++;
-        row.points += pick.confidence_points || CONFIDENCE_MIN;
+        row.points += 1;
       }
     });
   });

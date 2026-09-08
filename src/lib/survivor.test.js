@@ -4,9 +4,8 @@ import {
   pickableWeeks, teamConflict, teamUsage, weekLockedIn, weekHighlights, groupByPerson,
 } from './survivor';
 import {
-  deriveCurrentWeek, confidenceBudget, confidenceSpent, describeSpread, buildStandings, starsAvailable,
+  deriveCurrentWeek, describeSpread, buildStandings,
   summarisePicks, finalizedWeeks, weeklyWinners, weeksWonCounts,
-  CONFIDENCE_MIN, CONFIDENCE_MAX,
 } from './scoring';
 
 // A fixed "now" so these tests never depend on the real clock.
@@ -237,35 +236,6 @@ describe('deriveCurrentWeek', () => {
   });
 });
 
-describe('confidence budget', () => {
-  it('grants two stars per scheduled game', () => {
-    expect(confidenceBudget(16)).toBe(32);
-    expect(confidenceBudget(0)).toBe(0);
-  });
-
-  it('charges only for games actually picked', () => {
-    const conf = { a: 5, b: 3, c: 4 };
-    expect(confidenceSpent(conf, ['a', 'b'])).toBe(8); // c not picked
-  });
-
-  it('charges the minimum for a pick with no explicit confidence', () => {
-    expect(confidenceSpent({}, ['a', 'b'])).toBe(2 * CONFIDENCE_MIN);
-  });
-
-  // The whole point: maxing every game must not fit inside the budget.
-  it('cannot afford max confidence on every game', () => {
-    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
-    const allMax = Object.fromEntries(games.map(g => [g, CONFIDENCE_MAX]));
-    expect(confidenceSpent(allMax, games)).toBeGreaterThan(confidenceBudget(games.length));
-  });
-
-  it('exactly affords the middle confidence on every game', () => {
-    const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
-    const allTwo = Object.fromEntries(games.map(g => [g, 2]));
-    expect(confidenceSpent(allTwo, games)).toBe(confidenceBudget(games.length));
-  });
-});
-
 describe('describeSpread', () => {
   it('reads a negative spread as the home team favoured', () => {
     expect(describeSpread(-11.5, 'LAC', 'ARI')).toBe('LAC wins by 11.5');
@@ -323,21 +293,20 @@ describe('weeklyWinners and weeksWonCounts', () => {
     3: [g1, g3open],
   };
 
-  const p = (user, week, game, spread, conf, actual) => ({
-    user_id: user, week, game_id: `${week}-${game}`, predicted_spread: spread,
-    confidence_points: conf, games: actual,
+  const p = (user, week, game, spread, actual) => ({
+    user_id: user, week, game_id: `${week}-${game}`, predicted_spread: spread, games: actual,
   });
 
   const picks = [
     // Week 1: a is closest.
-    p('a', 1, 'x', -7, 3, g1),
-    p('b', 1, 'x', -10, 3, g1),
+    p('a', 1, 'x', -7, g1),
+    p('b', 1, 'x', -10, g1),
     // Week 2: a and b tied, exactly equidistant.
-    p('a', 2, 'x', -2, 2, g2),
-    p('b', 2, 'x', -4, 2, g2),
-    p('c', 2, 'x', -9, 2, g2),
+    p('a', 2, 'x', -2, g2),
+    p('b', 2, 'x', -4, g2),
+    p('c', 2, 'x', -9, g2),
     // Week 3: graded, but the week itself is not finalized — must be ignored.
-    p('a', 3, 'x', -7, 5, g1),
+    p('a', 3, 'x', -7, g1),
   ];
 
   it('names the sole leader of a decided week', () => {
@@ -373,71 +342,59 @@ describe('weeklyWinners and weeksWonCounts', () => {
 });
 
 describe('buildStandings — competitive scoring', () => {
-  // Actual line is -7. Closest wins the game and banks their stars.
+  // Actual line is -7. Closest wins the game and banks a point.
   const g1 = { actual_spread: -7 };
   const g2 = { actual_spread: -3 };
 
-  const p = (user, game, spread, conf, actual) => ({
-    user_id: user, game_id: game, predicted_spread: spread,
-    confidence_points: conf, games: actual,
+  const p = (user, game, spread, actual) => ({
+    user_id: user, game_id: game, predicted_spread: spread, games: actual,
   });
 
-  it('awards the closest player their stars, and others nothing', () => {
+  it('awards the closest player a point, and others nothing', () => {
     const rows = buildStandings([
-      p('a', 'g1', -7.5, 3, g1),  // 0.5 off  -> wins, +3
-      p('b', 'g1', -10, 5, g1),   // 3 off
-      p('c', 'g1', -1, 5, g1),    // 6 off
+      p('a', 'g1', -7.5, g1),  // 0.5 off  -> wins
+      p('b', 'g1', -10, g1),   // 3 off
+      p('c', 'g1', -1, g1),    // 6 off
     ]);
     const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
-    expect(by.a.points).toBe(3);
+    expect(by.a.points).toBe(1);
     expect(by.b.points).toBe(0);
     expect(by.c.points).toBe(0);
   });
 
-  it('gives every tied player the point, each times their own stars', () => {
+  it('gives every tied player a point', () => {
     const rows = buildStandings([
-      p('a', 'g1', -6, 2, g1),  // 1 off
-      p('b', 'g1', -8, 4, g1),  // 1 off — tie
-      p('c', 'g1', -9, 5, g1),  // 2 off
+      p('a', 'g1', -6, g1),  // 1 off
+      p('b', 'g1', -8, g1),  // 1 off — tie
+      p('c', 'g1', -9, g1),  // 2 off
     ]);
     const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
-    expect(by.a.points).toBe(2);
-    expect(by.b.points).toBe(4);
+    expect(by.a.points).toBe(1);
+    expect(by.b.points).toBe(1);
     expect(by.c.points).toBe(0);
   });
 
-  it('scores an exact hit as a win, not as extra points', () => {
-    const rows = buildStandings([p('a', 'g1', -7, 1, g1), p('b', 'g1', -7.5, 5, g1)]);
+  it('scores an exact hit as one win, not extra points', () => {
+    const rows = buildStandings([p('a', 'g1', -7, g1), p('b', 'g1', -7.5, g1)]);
     const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
-    expect(by.a.points).toBe(1); // exact, but only 1 star
-    expect(by.b.points).toBe(0); // more stars, still lost
-  });
-
-  it('makes wasted stars cost the player', () => {
-    // Same accuracy across two games, opposite star placement.
-    const picks = [
-      p('saver', 'g1', -7, 1, g1), p('saver', 'g2', -20, 5, g2),
-      p('waster', 'g1', -20, 5, g1), p('waster', 'g2', -3, 1, g2),
-    ];
-    const by = Object.fromEntries(buildStandings(picks).map(r => [r.user_id, r]));
-    expect(by.saver.points).toBe(1);  // won g1 with 1 star, lost g2
-    expect(by.waster.points).toBe(1); // lost g1 despite 5 stars, won g2 with 1
+    expect(by.a.points).toBe(1);
+    expect(by.b.points).toBe(0);
   });
 
   it('ignores games that are not graded yet', () => {
-    const rows = buildStandings([p('a', 'gX', -7, 5, { actual_spread: null })]);
+    const rows = buildStandings([p('a', 'gX', -7, { actual_spread: null })]);
     expect(rows[0].points).toBe(0);
     expect(rows[0].graded).toBe(0);
     expect(rows[0].picks).toBe(1);
   });
 
   it('awards the point when only one player picked the game', () => {
-    const rows = buildStandings([p('a', 'g1', -20, 2, g1)]);
-    expect(rows[0].points).toBe(2);
+    const rows = buildStandings([p('a', 'g1', -20, g1)]);
+    expect(rows[0].points).toBe(1);
   });
 
   it('includes players who never picked, at zero', () => {
-    const rows = buildStandings([p('a', 'g1', -7, 1, g1)], [
+    const rows = buildStandings([p('a', 'g1', -7, g1)], [
       { user_id: 'a', username: 'ana' }, { user_id: 'z', username: 'zed' },
     ]);
     const by = Object.fromEntries(rows.map(r => [r.user_id, r]));
@@ -447,8 +404,8 @@ describe('buildStandings — competitive scoring', () => {
 
   it('ranks on points, breaking ties on average accuracy', () => {
     const rows = buildStandings([
-      p('a', 'g1', -7, 1, g1), p('a', 'g2', -3.5, 1, g2),
-      p('b', 'g1', -9, 1, g1), p('b', 'g2', -3, 1, g2),
+      p('a', 'g1', -7, g1), p('a', 'g2', -3.5, g2),
+      p('b', 'g1', -9, g1), p('b', 'g2', -3, g2),
     ]);
     // a wins g1, b wins g2 -> 1 point each; a's average diff is smaller.
     expect(rows[0].points).toBe(rows[1].points);
@@ -456,43 +413,11 @@ describe('buildStandings — competitive scoring', () => {
     expect(rows.map(r => r.rank)).toEqual([1, 2]);
   });
 
-  it("caps a player's week at their star budget", () => {
+  it('gives a point per game won, with no cap on the week', () => {
     const games = Array.from({ length: 16 }, (_, i) => `g${i}`);
-    const picks = games.map(id => p('a', id, -7, 2, g1)); // wins all 16 at x2
+    const picks = games.map(id => p('a', id, -7, g1)); // wins all 16
     const total = buildStandings(picks)[0].points;
-    expect(total).toBe(confidenceBudget(16));
-  });
-});
-
-describe('starsAvailable — compulsory minimums', () => {
-  const budget = confidenceBudget(16); // 32
-
-  it('holds back one star for each game still to be picked', () => {
-    // Nothing picked yet: 16 games each owe a star, so half the budget is spoken for.
-    expect(starsAvailable({ budget, spent: 0, unpickedCount: 16 })).toBe(16);
-  });
-
-  it('frees up the reserve as games get picked', () => {
-    // 8 picked at the minimum, 8 outstanding.
-    expect(starsAvailable({ budget, spent: 8, unpickedCount: 8 })).toBe(16);
-  });
-
-  it('leaves nothing spare once every star is committed', () => {
-    expect(starsAvailable({ budget, spent: 32, unpickedCount: 0 })).toBe(0);
-  });
-
-  // The dead end this exists to prevent: without the reserve, spending big
-  // early leaves you unable to afford games you are still required to pick.
-  it('stops an early spending spree from stranding later games', () => {
-    // 6 games at x5 = 30 spent, 10 games still to pick.
-    const free = starsAvailable({ budget, spent: 30, unpickedCount: 10 });
-    expect(free).toBeLessThan(0); // flagged as over budget rather than silently stranding
-    // The naive check would have said 2 stars were still spendable.
-    expect(budget - 30).toBe(2);
-  });
-
-  it('reports the overspend when a player is over budget', () => {
-    expect(starsAvailable({ budget, spent: 40, unpickedCount: 0 })).toBe(-8);
+    expect(total).toBe(16);
   });
 });
 
@@ -702,9 +627,9 @@ describe('weekHighlights', () => {
 describe('buildStandings totals', () => {
   // Two players, different numbers of graded games — the case where a total
   // and an average tell different stories.
-  const pick = (user, game, predicted, actual, conf = 1) => ({
+  const pick = (user, game, predicted, actual) => ({
     user_id: user, game_id: game, predicted_spread: predicted,
-    confidence_points: conf, games: { actual_spread: actual },
+    games: { actual_spread: actual },
   });
 
   it('sums every graded distance from the line', () => {
@@ -730,7 +655,7 @@ describe('buildStandings totals', () => {
     // Zero would read as a perfect score, which is the opposite of the truth.
     const rows = buildStandings([{
       user_id: 'a', game_id: 'g1', predicted_spread: -3,
-      confidence_points: 1, games: { actual_spread: null },
+      games: { actual_spread: null },
     }]);
     expect(rows[0].totalDiff).toBeNull();
     expect(rows[0].avgDiff).toBeNull();

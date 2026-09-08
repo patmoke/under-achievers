@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../context/AuthContext';
-import { formatSpread, confidenceBudget, buildStandings, finalizedWeeks, weeksWonCounts } from '../lib/scoring';
+import { formatSpread, buildStandings, finalizedWeeks, weeksWonCounts } from '../lib/scoring';
 // Same 'has this kicked off' rule the survivor tab uses. One predicate rather
 // than a third hand-rolled comparison of now() against game_time.
 import { isGameLocked } from '../lib/survivor';
@@ -174,7 +174,7 @@ export default function LeaguePage() {
 
     const [{ data: picksData }, { data: gamesData }] = await Promise.all([
       supabase.from('predictions')
-        .select('user_id, game_id, week, predicted_spread, confidence_points, games(actual_spread)')
+        .select('user_id, game_id, week, predicted_spread, games(actual_spread)')
         .in('user_id', memberIds).eq('season', CURRENT_SEASON),
       supabase.from('games').select('week, actual_spread').eq('season', CURRENT_SEASON).lte('week', 18),
     ]);
@@ -716,7 +716,6 @@ export default function LeaguePage() {
                       <div className="label-muted" style={{ marginBottom: 4 }}>Your pick</div>
                       <div style={{ display: 'flex', gap: 20, fontSize: 14 }}>
                         <span>Spread: <strong>{formatSpread(myPick.predicted_spread)}</strong></span>
-                        <span>Confidence: ×{myPick.confidence_points}</span>
                         {revealed && game.actual_spread !== null && (
                           <span style={{ color: Math.abs(myPick.predicted_spread - game.actual_spread) <= 1 ? 'var(--success)' : Math.abs(myPick.predicted_spread - game.actual_spread) <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
                             Δ{Math.abs(myPick.predicted_spread - game.actual_spread).toFixed(1)}
@@ -1066,8 +1065,6 @@ function SeasonStandingsTable({ board, currentUserId }) {
 function WeeklyPicksHub({ week, myPicks, weekGames, onGoToPicks }) {
   const submitted = myPicks.length;
   const total = weekGames.length;
-  const starsUsed = myPicks.reduce((sum, p) => sum + (p.confidence_points || 1), 0);
-  const budget = confidenceBudget(total);
   const none = submitted === 0;
 
   if (total === 0) return null;
@@ -1086,7 +1083,6 @@ function WeeklyPicksHub({ week, myPicks, weekGames, onGoToPicks }) {
             : `Week ${week} picks: ${submitted} of ${total} submitted`}
         </div>
         <div style={{ fontSize: 12, color: 'var(--ink-soft)' }}>
-          {!none && <>★ {starsUsed} / {budget} stars used · </>}
           Your picks count in every weekly league you're in.
         </div>
       </div>

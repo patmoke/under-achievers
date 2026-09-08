@@ -34,10 +34,9 @@ export default function HistoryPage() {
 
   function getWeekSummary(picks) {
     const withResults = picks.filter(p => p.games?.actual_spread !== null && p.games?.actual_spread !== undefined);
-    const stars = picks.reduce((sum, p) => sum + (p.confidence_points || 1), 0);
     const avgDiff = withResults.length > 0
       ? withResults.reduce((sum, p) => sum + Math.abs(p.predicted_spread - p.games.actual_spread), 0) / withResults.length : null;
-    return { stars, avgDiff, total: picks.length, graded: withResults.length };
+    return { avgDiff, total: picks.length, graded: withResults.length };
   }
 
   if (loading) return (
@@ -63,7 +62,7 @@ export default function HistoryPage() {
         <div style={{ display: 'grid', gap: 20 }}>
           {availableWeeks.map(week => {
             const picks = history[week] || [];
-            const { stars, avgDiff, total, graded } = getWeekSummary(picks);
+            const { avgDiff, total, graded } = getWeekSummary(picks);
             const isOpen = selectedWeek === week;
             return (
               <div key={week} className="card" style={{ overflow: 'hidden' }}>
@@ -74,12 +73,8 @@ export default function HistoryPage() {
                       <div style={{ fontSize: 12, color: 'var(--ink-soft)', textAlign: 'left' }}>{total} pick{total !== 1 ? 's' : ''} · {graded} graded</div>
                     </div>
                     <div style={{ display: 'flex', gap: 24 }}>
-                      {/* Stars spent, not points: points depend on the field
+                      {/* Accuracy only, not points: points depend on the field
                           you were scored against, so they live in standings. */}
-                      <div>
-                        <div className="label-muted">Stars</div>
-                        <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 22, color: 'var(--accent)' }}>{stars}</div>
-                      </div>
                       {avgDiff !== null && (
                         <div>
                           <div className="label-muted">Avg Δ</div>
@@ -106,7 +101,6 @@ export default function HistoryPage() {
                             <div style={{ textAlign: 'center' }}>
                               <div className="label-muted">Your pick</div>
                               <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 19 }}>{formatSpread(p.predicted_spread)}</div>
-                              <div style={{ fontSize: 11, color: 'var(--ink-soft)' }}>×{p.confidence_points}</div>
                             </div>
                             {hasResult && (
                               <div style={{ textAlign: 'center' }}>
