@@ -86,6 +86,7 @@ export default function AdminPage() {
     setSaving(s => ({ ...s, [`score_${game.id}`]: true }));
     const updates = {
       is_locked: true,
+      weekly_locked: true,
       status: 'final',
     };
     if (homeScore !== '') updates.home_score = parseInt(homeScore);
