@@ -97,6 +97,16 @@ from either of two places:
   aren't league-scoped — one set of predictions counts in every weekly league
   a player is in.
 
+  Requires at least two such players to ever fire. A brand-new league starts
+  with just its owner in it, and without this floor, the owner finishing
+  their own picks would trivially satisfy "everyone's submitted" — there's
+  nobody else to be waiting on. Worse, it doesn't fix itself: joining a
+  league isn't a write to `predictions`, so nothing re-checks when a second
+  member arrives, and by then `weekly_locked` may already be true, which
+  blocks that new member's very first pick before they get a chance to
+  trigger a re-check that would have counted them. Below two required
+  players, this always defers to the normal kickoff backstop instead.
+
 Either writer freezes the same way: once `weekly_locked` is true, this
 function never touches that game's `actual_spread` again — with one
 exception, a game we never captured a line for at all still accepts a late
