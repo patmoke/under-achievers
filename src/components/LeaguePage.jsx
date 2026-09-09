@@ -721,12 +721,19 @@ export default function LeaguePage() {
                       <div className="label-muted" style={{ marginBottom: 4 }}>Your pick</div>
                       <div style={{ display: 'flex', gap: 20, alignItems: 'center', fontSize: 14 }}>
                         <span>Spread: <strong>{formatSpread(myPick.predicted_spread)}</strong></span>
+                        {/* Whether this pick won is stated once, here: green
+                            for a win, red for a graded loss, and only falls
+                            back to the accuracy scale when the win isn't
+                            known yet (the score breakdown below is the one
+                            place the win itself gets said out loud). */}
                         {myDiff !== null && (
-                          <span style={{ color: myDiff <= 1 ? 'var(--success)' : myDiff <= 3 ? 'var(--warning)' : 'var(--danger)' }}>
+                          <span style={{
+                            color: iWon === true ? 'var(--success)' : iWon === false ? 'var(--danger)'
+                              : myDiff <= 1 ? 'var(--success)' : myDiff <= 3 ? 'var(--warning)' : 'var(--danger)',
+                          }}>
                             Δ{myDiff.toFixed(1)}
                           </span>
                         )}
-                        {iWon && <span className="badge badge-lime" style={{ fontSize: 11 }}>🏆 Won this game</span>}
                       </div>
                     </div>
                   )}
@@ -743,18 +750,17 @@ export default function LeaguePage() {
                             return (
                               <div key={p.id} style={{
                                 display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12,
-                                padding: '6px 12px', borderRadius: 'var(--radius-sm)', fontSize: 13,
+                                padding: '8px 12px', borderRadius: 'var(--radius-sm)', fontSize: 13,
                                 background: won ? 'var(--accent-soft)' : 'var(--surface-alt)',
                                 border: `1px solid ${won ? 'rgba(15,122,77,0.25)' : 'var(--border)'}`,
                               }}>
-                                <span>
-                                  <span style={{ color: 'var(--ink-soft)', marginRight: 6 }}>
-                                    {isMe ? 'You' : p.profiles?.username}{won && ' 🏆'}
-                                  </span>
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <span style={{ color: 'var(--ink-soft)' }}>{isMe ? 'You' : p.profiles?.username}</span>
                                   <strong>{formatSpread(p.predicted_spread)}</strong>
                                 </span>
-                                <span style={{ color: won ? 'var(--success)' : 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
-                                  Δ{p.diff.toFixed(1)}{won && ' · +1'}
+                                <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: won ? 'var(--success)' : 'var(--ink-soft)', fontVariantNumeric: 'tabular-nums' }}>
+                                  Δ{p.diff.toFixed(1)}
+                                  {won && <span>· +1 🏆</span>}
                                 </span>
                               </div>
                             );
