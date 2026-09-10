@@ -601,9 +601,26 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                       // ahead, so default there. Locking used to end the section
                       // outright, which shut the door on filing ahead at exactly
                       // the moment someone is most likely to want to.
-                      const openAhead = weeksOpen.filter(w => w !== currentWeek);
-                      const fallback = weeksOpen.includes(currentWeek) ? currentWeek : openAhead[0];
-                      const wk = pickWeek[entry.id] ?? fallback;
+                      //
+                      // weeksOpen is "does this week have any game left to pick
+                      // at all" — true for week 1 here even after this entry's
+                      // own pick has locked, because *other* games in the week
+                      // are still unplayed. That doesn't mean anything for this
+                      // entry: one pick per week, and it already has one. Drop
+                      // any week this entry has a locked pick in before offering
+                      // it as a tab or a default, so the picker (and the choice
+                      // to change a decided week) simply isn't there — same as
+                      // an eliminated entry not getting a picker at all.
+                      const lockedEntryWeeks = new Set(
+                        entryPicks.filter(p => isGameLocked(p.games)).map(p => p.week)
+                      );
+                      const weeksOpenForEntry = weeksOpen.filter(w => !lockedEntryWeeks.has(w));
+                      const fallback = weeksOpenForEntry.includes(currentWeek) ? currentWeek : weeksOpenForEntry[0];
+                      // A week picked before it locked (a manual tab click)
+                      // must not linger as the selection once it has — that
+                      // would bring the picker right back for a decided week.
+                      const selected = pickWeek[entry.id];
+                      const wk = selected !== undefined && !lockedEntryWeeks.has(selected) ? selected : fallback;
                       const openGames = allGames.filter(g => g.week === wk && !isGameLocked(g));
                       const pickThisWeek = entryPicks.find(p => p.week === wk);
                       const clashFor = team =>
@@ -668,10 +685,10 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                               off the screen before anyone had picked anything.
                               A strip keeps the row one line deep however far
                               ahead the schedule runs. */}
-                          {weeksOpen.length > 1 && (
+                          {weeksOpenForEntry.length > 1 && (
                             <div style={{ marginBottom: 12 }}>
                               <Strip by={200} label="weeks">
-                                {weeksOpen.map(w => (
+                                {weeksOpenForEntry.map(w => (
                                   <button
                                     key={w}
                                     onClick={() => setPickWeek(prev => ({ ...prev, [entry.id]: w }))}
