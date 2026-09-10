@@ -628,19 +628,28 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
                   {status === 'eliminated' ? (
                     <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                      Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
-                      {' '}
-                      {eligible ? (
-                        <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <RotateCcw size={12} /> Buy back in
-                        </button>
-                      ) : buybacksAllowed ? (
-                        currentWeek > buybackDeadlineWeek
-                          ? `Buyback window closed after Week ${buybackDeadlineWeek}.`
-                          : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
-                      ) : (
-                        'Buybacks are not enabled for this league.'
-                      )}
+                      <div>
+                        Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
+                        {' '}
+                        {eligible ? (
+                          <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <RotateCcw size={12} /> Buy back in
+                          </button>
+                        ) : buybacksAllowed ? (
+                          currentWeek > buybackDeadlineWeek
+                            ? `Buyback window closed after Week ${buybackDeadlineWeek}.`
+                            : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
+                        ) : (
+                          'Buybacks are not enabled for this league.'
+                        )}
+                      </div>
+                      {/* A missed week has no pick to show — nothing lost the
+                          game, nothing was filed at all. Every other reason has
+                          the actual losing (or tying) pick on record. */}
+                      {reason !== 'missed' && (() => {
+                        const losingPick = entryPicks.find(p => p.week === outWeek);
+                        return losingPick ? <div style={{ marginTop: 10 }}><PickResultCard pick={losingPick} /></div> : null;
+                      })()}
                     </div>
                   ) : (
                     (() => {
