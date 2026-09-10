@@ -181,6 +181,53 @@ function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
   );
 }
 
+/**
+ * What a locked pick's week collapses to: the one game that decided it,
+ * not a picker for games that were never this entry's to choose from again.
+ * `now()` for the game not yet final reads as "kicked off, waiting on the
+ * whistle" rather than a result, since pickOutcome itself is null until then.
+ */
+function PickResultCard({ pick }) {
+  const g = pick.games;
+  const outcome = pickOutcome(pick);
+  const isOut = outcome === 'loss' || outcome === 'tie';
+  const resultLabel = outcome === 'win' ? 'Won' : outcome === 'tie' ? 'Tied' : outcome === 'loss' ? 'Lost' : null;
+  const resultColor = outcome === 'win' ? 'var(--success)' : isOut ? 'var(--danger)' : 'var(--ink-soft)';
+
+  const team = (abbr, name, score) => (
+    <div style={{ textAlign: 'center', flex: 1 }}>
+      <div style={{
+        fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 16,
+        color: abbr === pick.team_abbr ? 'var(--ink)' : 'var(--ink-soft)',
+      }}>
+        {abbr}
+      </div>
+      <div style={{ fontSize: 10, color: 'var(--ink-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name}</div>
+      {score !== null && <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 20, marginTop: 4 }}>{score}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ padding: 14, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)', maxWidth: 260 }}>
+      <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 10 }}>
+        <Clock size={11} /> {formatGameTime(g.game_time)}
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        {team(g.away_team_abbr, g.away_team, g.away_score)}
+        <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>
+        {team(g.home_team_abbr, g.home_team, g.home_score)}
+      </div>
+      <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span className="label-muted">Your pick</span>
+        <strong style={{ fontFamily: 'Barlow Condensed', fontSize: 15 }}>{pick.team_abbr}</strong>
+        {resultLabel
+          ? <span style={{ fontSize: 12, fontWeight: 700, color: resultColor }}>{resultLabel}</span>
+          : <span className="badge badge-red" style={{ fontSize: 10 }}><Lock size={9} style={{ marginRight: 4 }} />Locked</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries, maxCapacity }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
@@ -581,31 +628,49 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
                   {status === 'eliminated' ? (
                     <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                      Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
-                      {' '}
-                      {eligible ? (
-                        <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                          <RotateCcw size={12} /> Buy back in
-                        </button>
-                      ) : buybacksAllowed ? (
-                        currentWeek > buybackDeadlineWeek
-                          ? `Buyback window closed after Week ${buybackDeadlineWeek}.`
-                          : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
-                      ) : (
-                        'Buybacks are not enabled for this league.'
-                      )}
+                      <div>
+                        Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
+                        {' '}
+                        {eligible ? (
+                          <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <RotateCcw size={12} /> Buy back in
+                          </button>
+                        ) : buybacksAllowed ? (
+                          currentWeek > buybackDeadlineWeek
+                            ? `Buyback window closed after Week ${buybackDeadlineWeek}.`
+                            : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
+                        ) : (
+                          'Buybacks are not enabled for this league.'
+                        )}
+                      </div>
+                      {/* A missed week has no pick to show — nothing lost the
+                          game, nothing was filed at all. Every other reason has
+                          the actual losing (or tying) pick on record. */}
+                      {reason !== 'missed' && (() => {
+                        const losingPick = entryPicks.find(p => p.week === outWeek);
+                        return losingPick ? <div style={{ marginTop: 10 }}><PickResultCard pick={losingPick} /></div> : null;
+                      })()}
                     </div>
                   ) : (
                     (() => {
-                      // Once this week's pick has locked the only weeks left are
-                      // ahead, so default there. Locking used to end the section
-                      // outright, which shut the door on filing ahead at exactly
-                      // the moment someone is most likely to want to.
+                      // Once this week's pick has locked the only weeks left to
+                      // actually decide are ahead, but "this week" stays the
+                      // tab and the default for as long as the week itself is
+                      // still going — weeksOpen only drops it once every game
+                      // in it has kicked off. Locking used to end the section
+                      // outright, which shut the door on filing ahead at
+                      // exactly the moment someone is most likely to want to.
                       const openAhead = weeksOpen.filter(w => w !== currentWeek);
                       const fallback = weeksOpen.includes(currentWeek) ? currentWeek : openAhead[0];
                       const wk = pickWeek[entry.id] ?? fallback;
                       const openGames = allGames.filter(g => g.week === wk && !isGameLocked(g));
                       const pickThisWeek = entryPicks.find(p => p.week === wk);
+                      // Locked for THIS week specifically: there is nothing
+                      // left to choose, so the picker gives way to a plain
+                      // result card for the one game that decided it, rather
+                      // than a list of other games this entry was never going
+                      // to pick from again.
+                      const wkLocked = pickThisWeek && isGameLocked(pickThisWeek.games);
                       const clashFor = team =>
                         teamConflict({ picks, entryId: entry.id, team, week: wk });
                       const choose = (game, team) => {
@@ -663,7 +728,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                             </div>
                           )}
 
-                          <div className="label-muted" style={{ marginBottom: 8 }}>Pick a team to win</div>
+                          <div className="label-muted" style={{ marginBottom: 8 }}>
+                            {wkLocked ? `Week ${wk} result` : 'Pick a team to win'}
+                          </div>
                           {/* Eighteen chips in a wrapped row pushed the games
                               off the screen before anyone had picked anything.
                               A strip keeps the row one line deep however far
@@ -693,52 +760,58 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                             </div>
                           )}
 
-                          {/* Sixteen games stacked was most of a phone screen
-                              of scrolling before you reached the standings.
-                              Four per column, columns scrolling sideways, keeps
-                              the whole week about one screen tall — the same
-                              trade the pick history table already makes. */}
-                          <Strip
-                            by={280}
-                            label="games"
-                            arrows="above"
-                            caption={`${openGames.length} game${openGames.length === 1 ? '' : 's'} — swipe for more`}
-                          >
-                            {chunk(openGames, GAMES_PER_COLUMN).map((column, ci) => (
-                              <div key={ci} style={{
-                                flexShrink: 0, scrollSnapAlign: 'start',
-                                width: 'min(300px, 78vw)',
-                                display: 'grid', gap: 10, alignContent: 'start',
-                              }}>
-                                {column.map(game => (
-                                  <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
-                                    <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
-                                      <Clock size={11} /> {formatGameTime(game.game_time)}
-                                    </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                      {[game.away_team_abbr, game.home_team_abbr].map((abbr, i) => (
-                                        <Fragment key={abbr}>
-                                          {i === 1 && <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>}
-                                          <TeamButton
-                                            abbr={abbr}
-                                            name={i === 0 ? game.away_team : game.home_team}
-                                            isUsed={clashFor(abbr)?.kind === 'spent'}
-                                            isSelected={pickThisWeek?.team_abbr === abbr}
-                                            disabled={clashFor(abbr)?.kind === 'spent' || submitting[entry.id]}
-                                            onClick={() => choose(game, abbr)}
-                                          />
-                                        </Fragment>
-                                      ))}
-                                    </div>
+                          {wkLocked ? (
+                            <PickResultCard pick={pickThisWeek} />
+                          ) : (
+                            <>
+                              {/* Sixteen games stacked was most of a phone screen
+                                  of scrolling before you reached the standings.
+                                  Four per column, columns scrolling sideways, keeps
+                                  the whole week about one screen tall — the same
+                                  trade the pick history table already makes. */}
+                              <Strip
+                                by={280}
+                                label="games"
+                                arrows="above"
+                                caption={`${openGames.length} game${openGames.length === 1 ? '' : 's'} — swipe for more`}
+                              >
+                                {chunk(openGames, GAMES_PER_COLUMN).map((column, ci) => (
+                                  <div key={ci} style={{
+                                    flexShrink: 0, scrollSnapAlign: 'start',
+                                    width: 'min(300px, 78vw)',
+                                    display: 'grid', gap: 10, alignContent: 'start',
+                                  }}>
+                                    {column.map(game => (
+                                      <div key={game.id} style={{ padding: 12, borderRadius: 'var(--radius-sm)', background: 'var(--surface-alt)', border: '1px solid var(--border)' }}>
+                                        <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 8 }}>
+                                          <Clock size={11} /> {formatGameTime(game.game_time)}
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                          {[game.away_team_abbr, game.home_team_abbr].map((abbr, i) => (
+                                            <Fragment key={abbr}>
+                                              {i === 1 && <span style={{ color: 'var(--ink-faint)', fontSize: 12, fontWeight: 600 }}>@</span>}
+                                              <TeamButton
+                                                abbr={abbr}
+                                                name={i === 0 ? game.away_team : game.home_team}
+                                                isUsed={clashFor(abbr)?.kind === 'spent'}
+                                                isSelected={pickThisWeek?.team_abbr === abbr}
+                                                disabled={clashFor(abbr)?.kind === 'spent' || submitting[entry.id]}
+                                                onClick={() => choose(game, abbr)}
+                                              />
+                                            </Fragment>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    ))}
                                   </div>
                                 ))}
-                              </div>
-                            ))}
-                          </Strip>
-                          {openGames.length === 0 && (
-                            <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
-                              Every game in week {wk} has started.
-                            </div>
+                              </Strip>
+                              {openGames.length === 0 && (
+                                <div style={{ fontSize: 13, color: 'var(--ink-soft)', fontStyle: 'italic' }}>
+                                  Every game in week {wk} has started.
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       );

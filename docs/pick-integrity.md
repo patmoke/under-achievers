@@ -79,6 +79,47 @@ today. It buys nothing — the team burns immediately, the pick stays editable
 until that game starts, and no advantage exists in committing early — so it is
 allowed rather than blocked.
 
+### The real write path is a function, not the table — and that's where the gap was
+
+The app writes survivor picks through `make_survivor_pick()`, a
+`SECURITY DEFINER` RPC, not a raw `upsert` against `survivor_picks`. That
+matters: a `SECURITY DEFINER` function runs as its owner and **bypasses RLS
+entirely** — the "unlocked and not kicked off" rule above only holds for a
+pick made through it because the function re-implements that check by hand.
+Nothing about RLS protects a path that goes around it.
+
+It re-implemented the check for the game being picked *into*, but never
+checked the entry's *existing* pick for that week — so a pick for a game that
+had already kicked off could be freely switched to a different, still-open
+game and team, with no error. This was real, not theoretical: on 2026-09-10,
+an entry's week-1 pick (SEA, in a game that had already finished — SEA won)
+was switched to TB @ CIN, a game more than ten hours from kicking off. SEA
+had actually won, so this specific instance didn't dodge an elimination, but
+it did something just as wrong: the team-burn check only looks at *other*
+weeks, so switching away also silently un-burned SEA for that entry, freeing
+it to be picked again later in the season — undermining "a team is used once"
+regardless of whether the original pick had won or lost.
+
+Fixed by checking the entry's current pick for `p_week` first, before
+touching anything: if one exists and its game is already locked or past
+kickoff, the whole call is refused, full stop, regardless of what's being
+swapped in. Verified by reproducing the exact exploit (same entry, same
+switch) against the live database and confirming it's now refused, then
+confirming a normal not-yet-locked swap still works.
+
+Found by searching `pick_audit` for every `survivor_picks` update where the
+*old* row's game had already kicked off by the time of the edit — the query
+worth keeping if this class of bug is ever suspected again:
+
+```sql
+select pa.*, g.game_time as old_game_kickoff
+from pick_audit pa
+join games g on g.id = (pa.old_value->>'game_id')
+where pa.source_table = 'survivor_picks'
+  and pa.action = 'update'
+  and pa.at >= g.game_time;
+```
+
 ## What is not enforced in the database
 
 **Elimination.** An eliminated entry can still write picks. They are inert:

@@ -139,6 +139,54 @@ Line's completion state can never leak into a different game mode's locking
 again. Both still flip true together at kickoff — they only diverge on the
 early side.
 
+### `weekly_locked` can go back to `false` — this function must never fight that
+
+Unlike `is_locked`, `weekly_locked` is *not* monotonic in practice, even
+though nothing here ever writes it false on purpose. A late-joining player
+can leave a week's pool short of "everyone's submitted" after it already
+locked — someone has to reopen the still-unplayed games in that week by hand
+so the new player isn't locked out for good, and the only way to do that is
+setting `weekly_locked` back to `false`.
+
+That means this function's own read of `weekly_locked` can go stale mid-run:
+read it, then a reopen (or the early-lock trigger) writes it, then this
+function's upsert lands using the value it read a moment earlier — silently
+reverting someone else's write. An earlier version computed
+`existing.weekly_locked || kickoffPassed` and wrote that back on every run,
+which is exactly this bug, and it happened: one Week 1 game briefly showed
+`weekly_locked: false` after a legitimate reopen elsewhere, purely from
+sync-games racing that write. Fixed by never asserting a value derived from a
+stale read — the key is included in the upsert payload, as `true`, only when
+`kickoffPassed` is itself true; otherwise it's omitted entirely and whatever
+the database currently holds is left alone. There is then nothing to race,
+because this function only ever contributes one specific fact (kickoff has
+passed) rather than a computed snapshot of the whole column.
+
+### A late joiner does not reopen a week on their own
+
+Joining a league is not a write to `predictions`, so nothing re-checks
+`weekly_all_submitted()` when someone joins — a week that locked before they
+arrived stays locked, and their very first pick attempt is rejected by RLS
+before it could ever trigger a fresh check. This is confirmed, not
+theoretical: it happened for real in week 1, 2026, to a player who joined a
+league a day after its other two members had already finished the week.
+
+The fix, run by hand against the live database:
+
+```sql
+update games
+set weekly_locked = false, updated_at = now()
+where week = <week> and season = <season>
+  and is_locked = false   -- never reopen a game that has actually kicked off
+  and weekly_locked = true;
+```
+
+This is safe to run any time a newly-added player reports being locked out of
+a week nobody had actually played yet — it only ever touches games still
+genuinely in the future, and `is_locked` (the kickoff backstop, checked here
+and enforced by RLS regardless) makes sure a game that has already started
+can never be reopened by it.
+
 ## Reading the outcome
 
 The sync returns `{ synced, linesWritten, linesFrozen, marketsWritten,
