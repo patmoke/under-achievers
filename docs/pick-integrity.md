@@ -40,6 +40,37 @@ locking Survivor out of games days before they'd actually kicked off. Split
 into its own column so Call the Line finishing early can never again reach
 into a different game mode's locking.
 
+### A third, personal lock — separate from both of the above
+
+Besides the per-game kickoff lock and the whole-pool early lock, a player's
+own predictions lock the moment *they specifically* have a pick on every game
+for the week — `user_week_complete(user_id, week, season)`, checked in both
+the INSERT and UPDATE policies alongside the existing `weekly_locked` /
+`now() < game_time` guards. This is what makes it safe to show a player the
+line as soon as they've submitted: since `games.actual_spread` has always
+been openly readable (the client just chooses when to display it — see
+below), a player who could still revise a submitted pick after seeing the
+line could simply copy it in. Locking their own predictions the instant
+they're complete closes that off, whether or not anyone else in the pool, or
+the pool as a whole, has finished.
+
+This only ever touches `predictions`. It does not write `games.is_locked`,
+`games.weekly_locked`, or anything in `survivor_picks` / `survivor_entries`,
+and nothing Survivor reads calls `user_week_complete()` — verified directly
+(a throwaway week: partial submission stays editable, completing it blocks a
+further edit; a real Survivor entry's pick still saves normally throughout),
+given this is exactly the shape of mistake `weekly_locked` above already
+had to be split out to fix once.
+
+**Reading `actual_spread` was never RLS-protected in the first place** —
+`games` and `predictions` both carry an unconditional "viewable by everyone"
+SELECT policy. Every reveal rule in this app (per-game lock, whole-pool lock,
+this personal lock) is therefore a *display* decision the client makes, not a
+database wall around the number itself. The database wall that actually
+matters is on the write side: once a pick could let someone act on a line
+they've seen, writing that pick has to be provably blocked, which is what all
+three locks above are for.
+
 ### What this closed
 
 The INSERT policy used to check only that you were writing as yourself. The

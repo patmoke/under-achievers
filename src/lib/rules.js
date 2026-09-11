@@ -23,14 +23,14 @@ export const MODES = [
     summary: [
       'Predict the spread for every game before the week locks.',
       'Closest prediction wins the game and scores a point — everyone else scores nothing on it.',
-      'The week locks, and the lines reveal, the moment everyone has submitted every pick — no need to wait for kickoff.',
+      'Submit every pick for the week and you can see the lines immediately — no need to wait on anyone else or on kickoff.',
     ],
     sections: [
       {
         heading: 'What you do',
         points: [
           'Each week, predict the closing point spread for every game on the slate. Spreads are written from the home team\'s side, so −3 means the home team is favoured by three.',
-          'You can change any prediction as often as you like until the week locks.',
+          'You can change any prediction as often as you like — right up until you\'ve submitted a pick on every game.',
         ],
       },
       {
@@ -44,7 +44,8 @@ export const MODES = [
       {
         heading: 'When it locks',
         points: [
-          'The whole week locks together, all at once, the moment every player has a pick on every game — there is no need to wait for kickoff. Lines reveal at the same moment.',
+          'The moment you submit a pick on every game, your own picks lock in and you can see the current line on each one — you don\'t wait on anyone else. That line can still move before the game itself locks, so it is shown as the current line, not the final one, until then.',
+          'The whole week also locks together for everyone at once, the moment every player has a pick on every game — no need to wait for kickoff even if you were the last one in.',
           'If someone never gets around to it, the week still has a backstop: each game locks at its own kickoff regardless, same as everywhere else in Under Achievers.',
         ],
       },
