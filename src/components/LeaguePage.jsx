@@ -678,19 +678,25 @@ export default function LeaguePage() {
               {Array.from({ length: 18 }, (_, i) => i + 1).map(w => <option key={w} value={w}>Wk {w}</option>)}
             </select>
           </div>
-          {games.length === 0 ? (
+          {(() => {
+            // Once you've personally picked every game this week, your own
+            // picks are locked in (the database enforces this on writes) and
+            // there's nothing left for seeing the line to spoil for you
+            // specifically — so it doesn't wait on weekly_locked (the whole
+            // pool) or on kickoff. Computed once per week, not per game.
+            const myWeekComplete = games.length > 0 && games.every(g => myWeekPicks.some(p => p.game_id === g.id));
+            return games.length === 0 ? (
             <div className="card" style={{ padding: 40, textAlign: 'center', color: 'var(--ink-soft)' }}>No games scheduled for Week {weeklyTab} yet.</div>
           ) : (
             games.map(game => {
               const myPick = myWeekPicks.find(p => p.game_id === game.id);
               const allPicksForGame = weekAllSubmitted ? weeklyPicks.filter(p => p.game_id === game.id) : [];
-              // The line is the answer to this game, so it can only appear once
-              // the game is actually locked for Call the Line — weekly_locked,
-              // a dedicated flag rather than is_locked, which Survivor's own
-              // picking window also depends on and which must only ever flip
-              // at kickoff. weekly_locked can flip earlier, the moment
-              // everyone in Call the Line has picked; is_locked never does.
-              const revealed = game.weekly_locked && game.actual_spread !== null;
+              // The line appears once the game is locked for Call the Line as
+              // a whole (weekly_locked — a dedicated flag, not is_locked,
+              // which Survivor's own picking window depends on and which
+              // must only ever flip at kickoff) OR once you've personally
+              // completed your own week, whichever comes first.
+              const revealed = (game.weekly_locked || myWeekComplete) && game.actual_spread !== null;
               const graded = revealed
                 ? allPicksForGame.map(p => ({ ...p, diff: Math.abs(Number(p.predicted_spread) - Number(game.actual_spread)) }))
                 : [];
@@ -782,7 +788,8 @@ export default function LeaguePage() {
                 </div>
               );
             })
-          )}
+            );
+          })()}
         </div>
       )}
 

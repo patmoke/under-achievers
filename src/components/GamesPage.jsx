@@ -102,6 +102,14 @@ export default function GamesPage() {
   const unpickedCount = unlocked.length - picksMade;
   const allPicked = unpickedCount === 0;
 
+  // Submitting a full week locks it in for you specifically, whether or not
+  // anyone else has finished or any game has kicked off — the database
+  // enforces this on writes; this just mirrors it so the UI never offers an
+  // edit RLS would reject. Read from savedPredictions (what actually landed)
+  // rather than the in-progress draft, so a half-typed edit can't flip this
+  // early.
+  const myWeekComplete = games.length > 0 && games.every(g => savedPredictions[g.id] !== undefined);
+
   // A week of spreads lives in component state until it's submitted, so a
   // service-worker reload here would throw it away. Declaring it lets the
   // update hold off until the week is in.
@@ -157,11 +165,12 @@ export default function GamesPage() {
             const userPick = predictions[game.id];
             const spreadReading = describeSpread(userPick, game.home_team_abbr, game.away_team_abbr);
 
+            const cardLocked = game.weekly_locked || myWeekComplete;
             return (
               <div key={game.id} className="card" style={{
                 padding: 22,
-                borderLeft: game.weekly_locked ? '3px solid var(--border-strong)' : saved ? '3px solid var(--success)' : '3px solid var(--accent)',
-                opacity: game.weekly_locked ? 0.9 : 1
+                borderLeft: cardLocked ? '3px solid var(--border-strong)' : saved ? '3px solid var(--success)' : '3px solid var(--accent)',
+                opacity: cardLocked ? 0.9 : 1
               }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12 }}>
                   {/* Teams */}
@@ -190,7 +199,7 @@ export default function GamesPage() {
 
                   {/* Prediction Area */}
                   <div style={{ minWidth: 200 }}>
-                    {game.weekly_locked ? (
+                    {cardLocked ? (
                       <LockedGame game={game} saved={saved} />
                     ) : (
                       <div>
@@ -247,7 +256,7 @@ export default function GamesPage() {
       )}
 
       {/* Submit Bar */}
-      {unlocked.length > 0 && (
+      {unlocked.length > 0 && !myWeekComplete && (
         <div style={{
           position: 'sticky', bottom: 0, marginTop: 24,
           background: 'var(--surface)', borderTop: '1px solid var(--border)', borderRadius: 'var(--radius)',
@@ -283,14 +292,21 @@ export default function GamesPage() {
   );
 }
 
+// Rendered once a game is weekly_locked (settled — frozen for everyone,
+// win/loss decided) OR the viewer has personally completed their week (their
+// own pick is locked, but the game itself and its line are still live). The
+// two read differently on purpose: a personal lock shows the CURRENT line,
+// clearly not final, since it can still move before the game itself locks.
 function LockedGame({ game, saved }) {
+  const settled = game.weekly_locked;
+
   if (!saved) {
     return (
       <div style={{ textAlign: 'center' }}>
         <div className="badge badge-red" style={{ marginBottom: 8 }}><Lock size={10} style={{ marginRight: 4 }} /> Locked</div>
         {game.actual_spread !== null && (
           <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-            Actual line: <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatSpread(game.actual_spread)}</span>
+            {settled ? 'Actual line' : 'Current line'}: <span style={{ color: 'var(--ink)', fontWeight: 600 }}>{formatSpread(game.actual_spread)}</span>
           </div>
         )}
         <div style={{ fontSize: 12, color: 'var(--ink-faint)', marginTop: 4 }}>No pick submitted</div>
@@ -302,7 +318,9 @@ function LockedGame({ game, saved }) {
 
   return (
     <div style={{ textAlign: 'right' }}>
-      <div className="badge badge-red" style={{ marginBottom: 10, marginLeft: 'auto' }}><Lock size={10} style={{ marginRight: 4 }} /> Final</div>
+      <div className="badge badge-red" style={{ marginBottom: 10, marginLeft: 'auto' }}>
+        <Lock size={10} style={{ marginRight: 4 }} /> {settled ? 'Final' : 'Locked in'}
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div>
           <div className="label-muted">Your pick</div>
@@ -310,7 +328,7 @@ function LockedGame({ game, saved }) {
         </div>
         {game.actual_spread !== null && (
           <div>
-            <div className="label-muted">Actual</div>
+            <div className="label-muted">{settled ? 'Actual' : 'Current line'}</div>
             <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 19 }}>{formatSpread(game.actual_spread)}</div>
             {diff !== null && (
               <div style={{ fontSize: 11, color: getAccuracyColor(diff) }}>Δ {diff.toFixed(1)}</div>
@@ -318,6 +336,11 @@ function LockedGame({ game, saved }) {
           </div>
         )}
       </div>
+      {!settled && game.actual_spread !== null && (
+        <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ink-faint)' }}>
+          Still tracking the market until this game locks — it can move before then.
+        </div>
+      )}
       {/* No points here: scoring is relative, so a pick is only worth
           something once it is compared against a field. The same pick can win
           one league and lose another, so points live in the standings. */}
