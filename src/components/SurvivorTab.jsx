@@ -157,6 +157,37 @@ function Section({ id, title, caption, action, defaultOpen = true, children }) {
   );
 }
 
+/** The team-usage grid itself, shared between the season and weekly panes. */
+function TeamBoard({ usage, max }) {
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: 'grid', gap: 6,
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
+        {usage.map(({ team, count }) => (
+          <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
+               style={{
+                 padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                 background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
+                 border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
+                 opacity: count === 0 ? 0.55 : 1,
+               }}>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+                          color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
+              {team}
+            </div>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: count === 0 ? 'var(--ink-faint)'
+                                 : count === max ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
+              {count}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
   return (
     <button
@@ -350,10 +381,21 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function buyBackIn(entry) {
+  async function buyBackIn(entry, outWeek) {
     if (!canBuyBack()) return;
-    if (!confirm(`Buy back in? Entry #${entry.entry_number} will resume from Week ${currentWeek}.`)) return;
-    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: currentWeek });
+    // currentWeek is the app's estimate of the current NFL week, which reads
+    // as unchanged for as long as that week's last game hasn't kicked off —
+    // including the elimination game itself. A resume week of currentWeek
+    // therefore does not always mean "the week after the loss": if you were
+    // eliminated in what is still, app-wide, "this week" (its last game just
+    // hasn't happened yet), resuming there resumes into the very week that
+    // just eliminated you, which forgives nothing — computeEntryStatus scans
+    // from start_week onward, so the loss it was supposed to erase is still
+    // right there. The resume week has to be strictly after the elimination,
+    // and never earlier than the current week either.
+    const resumeWeek = Math.max(currentWeek, (outWeek ?? currentWeek) + 1);
+    if (!confirm(`Buy back in? Entry #${entry.entry_number} will resume from Week ${resumeWeek}.`)) return;
+    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: resumeWeek });
     if (error) { toast.error(error.message); return; }
     toast.success(`Bought back in! Entry #${entry.entry_number} is live again.`);
     fetchAll();
@@ -445,8 +487,10 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const allTeams = [...new Set(allGames.flatMap(g => [g.home_team_abbr, g.away_team_abbr]))]
     .filter(Boolean).sort();
   const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
+  const weeklyUsage = teamUsage({ entries: withStatus, picks, teams: allTeams, week: currentWeek });
   const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
   const usageMax = Math.max(1, ...usage.map(u => u.count));
+  const weeklyUsageMax = Math.max(1, ...weeklyUsage.map(u => u.count));
 
   const people = groupByPerson(withStatus, currentUserId);
   const livePeople = people.filter(p => p.alive > 0);
@@ -632,7 +676,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
                         {' '}
                         {eligible ? (
-                          <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <button onClick={() => buyBackIn(entry, outWeek)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <RotateCcw size={12} /> Buy back in
                           </button>
                         ) : buybacksAllowed ? (
@@ -871,33 +915,18 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         <Section
           id="burned"
           title="Teams burned"
-          caption="How many live entries have already used each team. Counts a pick only once its game has kicked off, so this never gives away what is still to come."
+          caption="How many live entries have used each team. Counts a pick only once its game has kicked off, so this never gives away what is still to come. Swipe for this week's board."
         >
-          <div className="card" style={{ padding: 14 }}>
-            <div style={{ display: 'grid', gap: 6,
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
-              {usage.map(({ team, count }) => (
-                <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
-                     style={{
-                       padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
-                       background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
-                       border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
-                       opacity: count === 0 ? 0.55 : 1,
-                     }}>
-                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-                                color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
-                    {team}
-                  </div>
-                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
-                                fontVariantNumeric: 'tabular-nums',
-                                color: count === 0 ? 'var(--ink-faint)'
-                                       : count === usageMax ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
-                    {count}
-                  </div>
-                </div>
-              ))}
+          <Strip by={320} label="team board" arrows="above" caption="Swipe: season · this week">
+            <div style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start' }}>
+              <div className="label-muted" style={{ marginBottom: 6 }}>Season</div>
+              <TeamBoard usage={usage} max={usageMax} />
             </div>
-          </div>
+            <div style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start' }}>
+              <div className="label-muted" style={{ marginBottom: 6 }}>Week {currentWeek}</div>
+              <TeamBoard usage={weeklyUsage} max={weeklyUsageMax} />
+            </div>
+          </Strip>
         </Section>
       )}
 

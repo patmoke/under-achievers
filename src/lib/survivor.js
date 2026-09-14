@@ -152,11 +152,16 @@ const aliveIds = (entries, statusOf) =>
  *
  * Teams nobody has used are included with a count of zero, because the useful
  * question is usually "who is left" rather than "who is gone".
+ *
+ * `week`, when given, restricts this to one week's picks instead of the whole
+ * season — same locked-only rule, just narrowed. Omit it for the season-long
+ * board.
  */
-export function teamUsage({ entries, picks, teams, statusOf, now = new Date() }) {
+export function teamUsage({ entries, picks, teams, statusOf, week, now = new Date() }) {
   const alive = aliveIds(entries, statusOf);
   const counts = new Map((teams || []).map(t => [t, 0]));
   for (const pick of picks) {
+    if (week !== undefined && pick.week !== week) continue;
     if (!alive.has(pick.entry_id)) continue;
     if (!isGameLocked(pick.games, now)) continue;
     counts.set(pick.team_abbr, (counts.get(pick.team_abbr) || 0) + 1);
