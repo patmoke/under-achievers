@@ -112,7 +112,7 @@ export const MODES = [
         heading: 'What everyone else can see',
         points: [
           'Your pick stays hidden from the rest of the pool until its game kicks off. After that it is public, in the standings and in the pick history.',
-          'Once every live entry\'s pick for a week has kicked off, the pool shows that week\'s most-backed team and its longest shot by the betting odds, plus how many went out and how many bought back in. Nobody can act on any of it by then.',
+          'Once every live entry\'s pick for a week has kicked off, the pool shows that week\'s most-backed team and its longest shot by the betting odds, how many went out that week, and how many buybacks the pool has used all season. Nobody can act on any of it by then.',
           'The team board shows how many entries have used each team, and it counts a pick only once that game has started, so it never gives away what is still to come. The season view is live entries only; the current week\'s view also shows a team that just lost, marked as such, since that is exactly the pick that took those entries out.',
         ],
       },

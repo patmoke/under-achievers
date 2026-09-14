@@ -522,7 +522,15 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     .filter(([, outcome]) => outcome === 'loss' || outcome === 'tie')
     .map(([team]) => team)
     .sort();
-  const rebuysThisWeek = buybacks.filter(b => b.week === currentWeek).length;
+  // Season total, not scoped to currentWeek: a buyback's resume week is
+  // always max(currentWeek, eliminationWeek + 1), which is next week's
+  // number by the time anyone can actually act on it — a loss only becomes
+  // visible once this week is mostly done, and currentWeek itself does not
+  // advance until this week's last game kicks off. So "resume week equals
+  // currentWeek" would sit at zero through the entire window when a buyback
+  // is actually happening, and only catch up a week later. A running total
+  // has no such lag.
+  const totalRebuys = buybacks.length;
   // "Before" is anyone not yet eliminated as of this week — alive now, or
   // eliminated but not until this week — the same this-week test used above
   // and in teamUsage's weekly mode. "After" is just today's alive count.
@@ -976,12 +984,12 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                   <RotateCcw size={12} style={{ color: 'var(--gold)' }} /> Rebuys
                 </div>
                 <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
-                  {rebuysThisWeek}
+                  {totalRebuys}
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
-                  {rebuysThisWeek === 0
-                    ? 'Nobody bought back in this week'
-                    : `Back in it, resuming this week`}
+                  {totalRebuys === 0
+                    ? 'Nobody has bought back in'
+                    : `Used across the pool this season`}
                 </div>
               </div>
             )}
