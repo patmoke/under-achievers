@@ -245,7 +245,7 @@ export default function LeaguesPage() {
                     <input type="number" min={1} max={18} value={form.buyback_deadline_week} onChange={e => setForm(f => ({ ...f, buyback_deadline_week: parseInt(e.target.value) }))} />
                   </div>
                   <div>
-                    <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per person</label>
+                    <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per entry</label>
                     <input type="number" min={1} max={10} value={form.max_buybacks} onChange={e => setForm(f => ({ ...f, max_buybacks: parseInt(e.target.value) }))} />
                   </div>
                 </div>

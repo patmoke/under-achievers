@@ -218,3 +218,27 @@ right away. The fix is client-side only; `buy_back_entry` takes whatever week
 it's given and has no independent way to check it against the entry's actual
 elimination without re-deriving `computeEntryStatus` in SQL, so a wrong week
 sent from anywhere else would not be caught here either.
+
+## The buyback cap was per person, not per entry
+
+`canBuyBack()` used to sum buybacks across *every* entry a person owns in the
+league and compare that against `maxBuybacks` — a shared pool, not a per-entry
+allowance. The settings label was the only place that actually said so ("Max
+buybacks per person"); nothing else about a multi-entry league pools across a
+person's entries. Each one is otherwise fully independent — its own picks, its
+own life, and per the rules page, its own separate buy-in payment.
+
+Real incident: a player with two entries bought back the first, and the
+second's buyback button disappeared — correct by the rule as written, but it
+read as broken, because the entry showing "you've used all 1 buyback" had
+never itself used one. Confirmed live before changing anything: found the
+exact match (two entries, one buyback, league cap of 1) rather than guessing
+at the cause.
+
+Changed to per entry: `canBuyBack(entryId)` now checks `entryBuybacks(entryId)`
+against `maxBuybacks`, so each entry gets its own allowance regardless of how
+many others the same person is running. `buy_back_entry` itself was never the
+enforcement point either way — same as the resume-week bug above, this was
+entirely a client-side gate, so the fix needed no migration and no data
+correction; existing `survivor_entry_buybacks` rows already key by
+`entry_id`, which is all the new check needed.
