@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, Skull, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   isGameLocked, computeEntryStatus, pickOutcome,
@@ -511,6 +511,19 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const usageMax = Math.max(1, ...usage.map(u => u.count));
   const weeklyUsageMax = Math.max(1, ...weeklyUsage.map(u => u.count));
 
+  // Two more week-in-review numbers for the nutshell, alongside hot/risky.
+  // Neither needs the no-edge gate those two are built around — a headcount
+  // of who's gone and who bought back doesn't hand anyone an edge on a pick
+  // still being decided — but they read as one week-in-review, so they wait
+  // on the same reveal as the rest of the section rather than jumping the
+  // gun on it.
+  const eliminatedThisWeek = withStatus.filter(e => e.status === 'eliminated' && e.week === currentWeek).length;
+  const eliminatingTeams = Object.entries(weeklyOutcomes)
+    .filter(([, outcome]) => outcome === 'loss' || outcome === 'tie')
+    .map(([team]) => team)
+    .sort();
+  const rebuysThisWeek = buybacks.filter(b => b.week === currentWeek).length;
+
   const people = groupByPerson(withStatus, currentUserId);
   const livePeople = people.filter(p => p.alive > 0);
   const outPeople = people.filter(p => p.alive === 0);
@@ -922,6 +935,36 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                 <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
                   Longest shot backed — the market gave them {Math.round(highlights.risky.chance * 100)}%
                   {highlights.risky.count > 1 && `, and ${highlights.risky.count} entries took it`}
+                </div>
+              </div>
+            )}
+
+            <div className="card" style={{ padding: 18 }}>
+              <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Skull size={12} style={{ color: 'var(--danger)' }} /> Eliminated
+              </div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                {eliminatedThisWeek}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                {eliminatedThisWeek === 0
+                  ? 'Nobody — clean week'
+                  : `Lost to ${eliminatingTeams.join(', ')}`}
+              </div>
+            </div>
+
+            {buybacksAllowed && (
+              <div className="card" style={{ padding: 18 }}>
+                <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                  <RotateCcw size={12} style={{ color: 'var(--gold)' }} /> Rebuys
+                </div>
+                <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                  {rebuysThisWeek}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                  {rebuysThisWeek === 0
+                    ? 'Nobody bought back in this week'
+                    : `Back in it, resuming this week`}
                 </div>
               </div>
             )}
