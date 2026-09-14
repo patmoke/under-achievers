@@ -144,7 +144,7 @@ const aliveIds = (entries, statusOf) =>
   new Set(entries.filter(e => (statusOf ? statusOf(e) : e.status) === 'alive').map(e => e.id));
 
 /**
- * How many still-alive entries have burned each team.
+ * How many entries have burned each team.
  *
  * Counts locked picks only. An unlocked pick is nobody else's business yet, and
  * counting it here would leak through the back door what the pick history is
@@ -153,22 +153,54 @@ const aliveIds = (entries, statusOf) =>
  * Teams nobody has used are included with a count of zero, because the useful
  * question is usually "who is left" rather than "who is gone".
  *
- * `week`, when given, restricts this to one week's picks instead of the whole
- * season — same locked-only rule, just narrowed. Omit it for the season-long
- * board.
+ * On the season-long board (`week` omitted) this is still-alive entries only —
+ * an entry eliminated weeks ago no longer has a life on the line, so its old
+ * picks drop off the count as soon as it goes out. On a single week's board
+ * (`week` given), an entry eliminated *by that week's own pick* still counts:
+ * that pick is exactly what burned the team, and hiding it the moment it loses
+ * would make the weekly board silently shrink as the week's results come in,
+ * which defeats the point of a same-week tally. An entry eliminated in an
+ * earlier week is excluded either way — a stale filed-ahead pick from someone
+ * already out was never really "in" the week it names.
  */
 export function teamUsage({ entries, picks, teams, statusOf, week, now = new Date() }) {
-  const alive = aliveIds(entries, statusOf);
+  const counted = new Set(
+    (entries || [])
+      .filter(e => {
+        const status = statusOf ? statusOf(e) : e.status;
+        if (status === 'alive') return true;
+        return week !== undefined && e.week === week;
+      })
+      .map(e => e.id)
+  );
   const counts = new Map((teams || []).map(t => [t, 0]));
   for (const pick of picks) {
     if (week !== undefined && pick.week !== week) continue;
-    if (!alive.has(pick.entry_id)) continue;
+    if (!counted.has(pick.entry_id)) continue;
     if (!isGameLocked(pick.games, now)) continue;
     counts.set(pick.team_abbr, (counts.get(pick.team_abbr) || 0) + 1);
   }
   return [...counts.entries()]
     .map(([team, count]) => ({ team, count }))
     .sort((a, b) => b.count - a.count || a.team.localeCompare(b.team));
+}
+
+/**
+ * The result of each team's game in a given week, keyed by team abbreviation.
+ * Every pick on the same team in the same week shares one game, so they always
+ * agree — this just reads `pickOutcome` off whichever pick gets there first.
+ *
+ * Used to mark a team on the weekly board as having lost, not merely having
+ * been picked — the weekly board (unlike the season one) keeps a team's losing
+ * picks visible, so it needs a way to say which ones lost.
+ */
+export function weekTeamOutcomes(picks, week) {
+  const outcomes = {};
+  for (const pick of picks) {
+    if (pick.week !== week || pick.team_abbr in outcomes) continue;
+    outcomes[pick.team_abbr] = pickOutcome(pick);
+  }
+  return outcomes;
 }
 
 /**

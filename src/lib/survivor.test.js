@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
-  pickableWeeks, teamConflict, teamUsage, weekLockedIn, weekHighlights, groupByPerson,
+  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, groupByPerson,
 } from './survivor';
 import {
   deriveCurrentWeek, describeSpread, buildStandings,
@@ -537,6 +537,57 @@ describe('teamUsage', () => {
 
   it('lists unused teams at zero, since "who is left" is the real question', () => {
     expect(teamUsage({ entries, picks: [], teams, now })).toHaveLength(3);
+  });
+
+  describe('scoped to one week', () => {
+    // 'b' went out this week — on the pick being counted. 'c' went out last
+    // week, on a pick that is not this week's business.
+    const weekEntries = [
+      { id: 'a', status: 'alive', week: null },
+      { id: 'b', status: 'eliminated', week: 2 },
+      { id: 'c', status: 'eliminated', week: 1 },
+    ];
+
+    it('still counts a pick that lost its entry the game, this week', () => {
+      const picks = [
+        { entry_id: 'a', week: 2, team_abbr: 'KC', games: { game_time: past } },
+        { entry_id: 'b', week: 2, team_abbr: 'BUF', games: { game_time: past } },
+      ];
+      expect(teamUsage({ entries: weekEntries, picks, teams, week: 2, now })).toEqual([
+        { team: 'BUF', count: 1 }, { team: 'KC', count: 1 }, { team: 'PHI', count: 0 },
+      ]);
+    });
+
+    it('excludes a pick from an entry that had already gone out in an earlier week', () => {
+      const picks = [{ entry_id: 'c', week: 2, team_abbr: 'PHI', games: { game_time: past } }];
+      expect(teamUsage({ entries: weekEntries, picks, teams, week: 2, now }).every(t => t.count === 0)).toBe(true);
+    });
+  });
+});
+
+describe('weekTeamOutcomes', () => {
+  const finalGame = (homeScore, awayScore) => ({
+    status: 'final', home_score: homeScore, away_score: awayScore,
+    home_team_abbr: 'KC', away_team_abbr: 'BUF',
+  });
+
+  it('reads a win or a loss off whichever pick on that team gets there first', () => {
+    const picks = [
+      { week: 2, team_abbr: 'KC', games: finalGame(24, 17) },   // KC won
+      { week: 2, team_abbr: 'KC', games: finalGame(24, 17) },   // same game, second entry
+      { week: 2, team_abbr: 'BUF', games: finalGame(24, 17) },  // BUF lost
+    ];
+    expect(weekTeamOutcomes(picks, 2)).toEqual({ KC: 'win', BUF: 'loss' });
+  });
+
+  it('is null for a team whose game is not final yet', () => {
+    const picks = [{ week: 2, team_abbr: 'KC', games: { status: 'scheduled' } }];
+    expect(weekTeamOutcomes(picks, 2)).toEqual({ KC: null });
+  });
+
+  it('ignores picks from other weeks', () => {
+    const picks = [{ week: 1, team_abbr: 'KC', games: finalGame(24, 17) }];
+    expect(weekTeamOutcomes(picks, 2)).toEqual({});
   });
 });
 
