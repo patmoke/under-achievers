@@ -137,3 +137,29 @@ A vertical scroll box inside a vertically scrolling page fights itself — trapp
 scroll on touch, the outer page jumping at the boundary, and no indication of how
 much is hidden. The picker strips scroll *laterally*, a different axis from the
 page, which is why that works and this would not.
+
+## A buyback that resumed into its own loss
+
+`computeEntryStatus` forgives everything before `start_week` (see the comment
+on the function itself) — a buyback works by advancing that column past the
+loss it is meant to undo. Nothing enforces that it actually lands *after* the
+loss, though; `buyBackIn` used to send `currentWeek` verbatim as the resume
+week, and `currentWeek` is the app's estimate of the current NFL week, which
+reads as unchanged for as long as that week's *last* game hasn't kicked off —
+including the very game that eliminated you.
+
+Real incident: an entry lost with a Sunday-afternoon pick, Monday night's game
+for that same week was still to come, and the player bought back in before it
+kicked off. `currentWeek` was still reporting that same week, so `start_week`
+got set right back to it. The buyback forgave nothing — `computeEntryStatus`
+scans from `start_week` onward, found the same loss still sitting inside that
+range, and re-eliminated the entry immediately. From the player's side: click
+"Buy back in", entry still reads eliminated, no picker, nothing to show for it.
+
+Fixed by resuming at `max(currentWeek, eliminationWeek + 1)` instead of
+`currentWeek` alone — strictly after the week that ended the entry, and never
+earlier than the current week either, in case the buyback happens later than
+right away. The fix is client-side only; `buy_back_entry` takes whatever week
+it's given and has no independent way to check it against the entry's actual
+elimination without re-deriving `computeEntryStatus` in SQL, so a wrong week
+sent from anywhere else would not be caught here either.

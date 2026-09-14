@@ -350,10 +350,21 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function buyBackIn(entry) {
+  async function buyBackIn(entry, outWeek) {
     if (!canBuyBack()) return;
-    if (!confirm(`Buy back in? Entry #${entry.entry_number} will resume from Week ${currentWeek}.`)) return;
-    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: currentWeek });
+    // currentWeek is the app's estimate of the current NFL week, which reads
+    // as unchanged for as long as that week's last game hasn't kicked off —
+    // including the elimination game itself. A resume week of currentWeek
+    // therefore does not always mean "the week after the loss": if you were
+    // eliminated in what is still, app-wide, "this week" (its last game just
+    // hasn't happened yet), resuming there resumes into the very week that
+    // just eliminated you, which forgives nothing — computeEntryStatus scans
+    // from start_week onward, so the loss it was supposed to erase is still
+    // right there. The resume week has to be strictly after the elimination,
+    // and never earlier than the current week either.
+    const resumeWeek = Math.max(currentWeek, (outWeek ?? currentWeek) + 1);
+    if (!confirm(`Buy back in? Entry #${entry.entry_number} will resume from Week ${resumeWeek}.`)) return;
+    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: resumeWeek });
     if (error) { toast.error(error.message); return; }
     toast.success(`Bought back in! Entry #${entry.entry_number} is live again.`);
     fetchAll();
@@ -632,7 +643,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
                         {' '}
                         {eligible ? (
-                          <button onClick={() => buyBackIn(entry)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <button onClick={() => buyBackIn(entry, outWeek)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                             <RotateCcw size={12} /> Buy back in
                           </button>
                         ) : buybacksAllowed ? (
