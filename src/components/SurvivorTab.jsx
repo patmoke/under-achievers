@@ -157,6 +157,37 @@ function Section({ id, title, caption, action, defaultOpen = true, children }) {
   );
 }
 
+/** The team-usage grid itself, shared between the season and weekly panes. */
+function TeamBoard({ usage, max }) {
+  return (
+    <div className="card" style={{ padding: 14 }}>
+      <div style={{ display: 'grid', gap: 6,
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
+        {usage.map(({ team, count }) => (
+          <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
+               style={{
+                 padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                 background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
+                 border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
+                 opacity: count === 0 ? 0.55 : 1,
+               }}>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+                          color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
+              {team}
+            </div>
+            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
+                          fontVariantNumeric: 'tabular-nums',
+                          color: count === 0 ? 'var(--ink-faint)'
+                                 : count === max ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
+              {count}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
   return (
     <button
@@ -456,8 +487,10 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const allTeams = [...new Set(allGames.flatMap(g => [g.home_team_abbr, g.away_team_abbr]))]
     .filter(Boolean).sort();
   const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
+  const weeklyUsage = teamUsage({ entries: withStatus, picks, teams: allTeams, week: currentWeek });
   const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
   const usageMax = Math.max(1, ...usage.map(u => u.count));
+  const weeklyUsageMax = Math.max(1, ...weeklyUsage.map(u => u.count));
 
   const people = groupByPerson(withStatus, currentUserId);
   const livePeople = people.filter(p => p.alive > 0);
@@ -882,33 +915,18 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         <Section
           id="burned"
           title="Teams burned"
-          caption="How many live entries have already used each team. Counts a pick only once its game has kicked off, so this never gives away what is still to come."
+          caption="How many live entries have used each team. Counts a pick only once its game has kicked off, so this never gives away what is still to come. Swipe for this week's board."
         >
-          <div className="card" style={{ padding: 14 }}>
-            <div style={{ display: 'grid', gap: 6,
-                          gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
-              {usage.map(({ team, count }) => (
-                <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
-                     style={{
-                       padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
-                       background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
-                       border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
-                       opacity: count === 0 ? 0.55 : 1,
-                     }}>
-                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-                                color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
-                    {team}
-                  </div>
-                  <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
-                                fontVariantNumeric: 'tabular-nums',
-                                color: count === 0 ? 'var(--ink-faint)'
-                                       : count === usageMax ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
-                    {count}
-                  </div>
-                </div>
-              ))}
+          <Strip by={320} label="team board" arrows="above" caption="Swipe: season · this week">
+            <div style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start' }}>
+              <div className="label-muted" style={{ marginBottom: 6 }}>Season</div>
+              <TeamBoard usage={usage} max={usageMax} />
             </div>
-          </div>
+            <div style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start' }}>
+              <div className="label-muted" style={{ marginBottom: 6 }}>Week {currentWeek}</div>
+              <TeamBoard usage={weeklyUsage} max={weeklyUsageMax} />
+            </div>
+          </Strip>
         </Section>
       )}
 

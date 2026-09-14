@@ -77,6 +77,13 @@ through the back door exactly what the pick history is careful to hide — thirt
 entries on one team is not a hard sum. Teams nobody has used are listed at zero,
 because the useful question is usually "who is left" rather than "who is gone".
 
+It swipes between two boards, same locked-only rule on both: **Season** (the
+count above, running total since week 1) and **Week N** (that week's count
+only, via the same `teamUsage` narrowed with a `week` filter). The weekly view
+answers a different question than the season one — not "who's out of teams by
+now" but "who moved on whom this week" — without adding a second reveal rule
+to reason about.
+
 **Hot pick and risky pick** appear only once *every live entry's pick for the
 week has kicked off*, so neither can hand a live edge to anyone still deciding.
 
