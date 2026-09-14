@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '../lib/supabase';
-import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, Skull, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, Skull, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   isGameLocked, computeEntryStatus, pickOutcome,
@@ -523,6 +523,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     .map(([team]) => team)
     .sort();
   const rebuysThisWeek = buybacks.filter(b => b.week === currentWeek).length;
+  // "Before" is anyone not yet eliminated as of this week — alive now, or
+  // eliminated but not until this week — the same this-week test used above
+  // and in teamUsage's weekly mode. "After" is just today's alive count.
+  const fieldBefore = withStatus.filter(e => e.status === 'alive' || e.week === currentWeek).length;
+  const fieldAfter = aliveCount;
 
   const people = groupByPerson(withStatus, currentUserId);
   const livePeople = people.filter(p => p.alive > 0);
@@ -938,6 +943,18 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                 </div>
               </div>
             )}
+
+            <div className="card" style={{ padding: 18 }}>
+              <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                <Users size={12} style={{ color: 'var(--ink-soft)' }} /> Field remaining
+              </div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 30, lineHeight: 1 }}>
+                {fieldBefore} <span style={{ color: 'var(--ink-faint)', fontSize: 20 }}>→</span> {fieldAfter}
+              </div>
+              <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
+                {fieldAfter} of {entries.length} entries still alive
+              </div>
+            </div>
 
             <div className="card" style={{ padding: 18 }}>
               <div className="label-muted" style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 8 }}>

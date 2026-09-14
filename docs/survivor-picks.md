@@ -113,16 +113,25 @@ week has kicked off*, so neither can hand a live edge to anyone still deciding.
 An entry with no pick does not hold the reveal open. They are about to be
 eliminated for missing the week, and waiting on them would mean waiting forever.
 
-**Eliminated and Rebuys** sit next to them in the same nutshell, on the same
-reveal. Neither actually needs the no-edge gate — a headcount of who's gone
-or who bought back doesn't tip anyone off on a pick still being decided — but
-they read as one week-in-review, so they wait on the same reveal rather than
-showing up ahead of the rest of it. **Eliminated** counts entries knocked out
-*this* week specifically (`entry.status === 'eliminated' && entry.week ===
-currentWeek` — the same this-week test the weekly team board uses, see
-above) and names the team(s) responsible. **Rebuys** counts buybacks whose
-resume week is this week; it's hidden entirely in a league with buybacks
-turned off, rather than sitting there reading zero forever.
+**Field remaining, Eliminated and Rebuys** sit next to them in the same
+nutshell, on the same reveal. None of the three actually needs the no-edge
+gate — a headcount of who's gone, who bought back, or how big the pool still
+is doesn't tip anyone off on a pick still being decided — but they read as
+one week-in-review, so they wait on the same reveal rather than showing up
+ahead of the rest of it.
+
+- **Field remaining** is the stark cut line: how many entries were still in
+  range entering the week versus how many are alive now (`fieldBefore` uses
+  the same this-week test as the other two — alive now, or eliminated but
+  not until this week), plus that count against every entry the league has
+  ever had.
+- **Eliminated** counts entries knocked out *this* week specifically
+  (`entry.status === 'eliminated' && entry.week === currentWeek` — the same
+  this-week test the weekly team board uses, see above) and names the
+  team(s) responsible.
+- **Rebuys** counts buybacks whose resume week is this week; it's hidden
+  entirely in a league with buybacks turned off, rather than sitting there
+  reading zero forever.
 
 ### Timing worth knowing
 
