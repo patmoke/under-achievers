@@ -22,6 +22,11 @@ const IGNORED = [
   /NetworkError when attempting to fetch/i,
   /^Load failed$/i,
   /Failed to fetch$/i,
+  // A browser extension's own message-passing failure (Safari extensions
+  // like 1Password use this API too), thrown inside our page. It has no
+  // stack — the extension-URL check below can't catch it — so it needs its
+  // own line.
+  /Invalid call to runtime\.sendMessage/i,
 ];
 
 function isIgnorable(message, stack) {
