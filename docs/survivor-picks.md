@@ -129,9 +129,19 @@ ahead of the rest of it.
   (`entry.status === 'eliminated' && entry.week === currentWeek` — the same
   this-week test the weekly team board uses, see above) and names the
   team(s) responsible.
-- **Rebuys** counts buybacks whose resume week is this week; it's hidden
+- **Rebuys** is a season running total, not scoped to the current week. It
+  started out matching a buyback's resume week against `currentWeek`, and
+  that was wrong: a buyback's resume week is always `max(currentWeek,
+  eliminationWeek + 1)`, which computes to *next* week's number right up
+  until `currentWeek` itself advances — and a loss only becomes visible, and
+  a buyback only becomes possible, once the current week is mostly played
+  out. So the moment a buyback happens, the week-scoped count could never
+  show it; it would sit at zero and only catch up a week later, once the
+  number it was compared against had moved to match. Caught live: three
+  buybacks landed within hours of each other, all correctly recorded, and
+  the tile still read zero. A running total has no such lag — it's hidden
   entirely in a league with buybacks turned off, rather than sitting there
-  reading zero forever.
+  reading zero forever, but whenever it's shown it's simply correct.
 
 ### Timing worth knowing
 
