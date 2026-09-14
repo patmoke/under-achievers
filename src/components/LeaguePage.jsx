@@ -425,7 +425,7 @@ export default function LeaguePage() {
               {isSurvivor && (
                 <span>
                   {league.survivor_buyback_deadline_week != null
-                    ? `Buybacks: up to ${league.survivor_max_buybacks} through Week ${league.survivor_buyback_deadline_week}`
+                    ? `Buybacks: up to ${league.survivor_max_buybacks} per entry, through Week ${league.survivor_buyback_deadline_week}`
                     : 'Buybacks: not allowed'}
                 </span>
               )}
@@ -519,7 +519,7 @@ export default function LeaguePage() {
                   <input type="number" min={1} max={18} value={settingsForm.survivor_buyback_deadline_week ?? ''} placeholder="Off" onChange={e => setSettingsForm(f => ({ ...f, survivor_buyback_deadline_week: e.target.value ? parseInt(e.target.value) : null }))} />
                 </div>
                 <div>
-                  <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per person</label>
+                  <label className="label-muted" style={{ display: 'block', marginBottom: 6 }}>Max buybacks per entry</label>
                   <input type="number" min={1} max={10} value={settingsForm.survivor_max_buybacks ?? ''} placeholder="Off" onChange={e => setSettingsForm(f => ({ ...f, survivor_max_buybacks: e.target.value ? parseInt(e.target.value) : null }))} />
                 </div>
               </div>

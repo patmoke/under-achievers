@@ -362,11 +362,6 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return computeEntryStatus({ entry, picks, games: allGames, currentWeek });
   }
 
-  function myBuybackCount(userId) {
-    const myEntryIds = new Set(entries.filter(e => e.user_id === userId).map(e => e.id));
-    return buybacks.filter(b => myEntryIds.has(b.entry_id)).length;
-  }
-
   function myEntryCount(userId) {
     return entries.filter(e => e.user_id === userId).length;
   }
@@ -381,11 +376,19 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     return myEntryCount(currentUserId) < entryCap;
   }
 
-  function canBuyBack() {
+  // Per entry, not per person. Each entry is otherwise fully independent —
+  // its own picks, its own life, its own separate buy-in — so someone
+  // running several gets a buyback allowance on each rather than one pool
+  // shared across all of them. It used to be per-person: a real user with
+  // two entries bought back the first, and the second's buyback button
+  // vanished — correct by the then-current rule, but a rule the settings
+  // label ("Max buybacks per person") was the only place that said so, and
+  // it read as a bug because nothing else about entries pools across them.
+  function canBuyBack(entryId) {
     if (!buybacksAllowed) return false;
     if (currentWeek > buybackDeadlineWeek) return false;
     if (leagueFull()) return false;
-    return myBuybackCount(currentUserId) < maxBuybacks;
+    return entryBuybacks(entryId).length < maxBuybacks;
   }
 
   async function addEntry() {
@@ -400,7 +403,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   }
 
   async function buyBackIn(entry, outWeek) {
-    if (!canBuyBack()) return;
+    if (!canBuyBack(entry.id)) return;
     // currentWeek is the app's estimate of the current NFL week, which reads
     // as unchanged for as long as that week's last game hasn't kicked off —
     // including the elimination game itself. A resume week of currentWeek
@@ -675,7 +678,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               // Team availability is decided per pick-week now, by teamConflict
               // below — a team held by an unlocked pick is offered with a
               // warning rather than simply greyed out.
-              const eligible = canBuyBack();
+              const eligible = canBuyBack(entry.id);
 
               return (
                 // minWidth: 0 is load-bearing. This card is a grid item, and a
