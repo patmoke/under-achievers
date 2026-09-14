@@ -4,7 +4,7 @@ import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, 
 import toast from 'react-hot-toast';
 import {
   isGameLocked, computeEntryStatus, pickOutcome,
-  pickableWeeks, teamConflict, teamUsage, weekHighlights, groupByPerson,
+  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekHighlights, groupByPerson,
 } from '../lib/survivor';
 
 // One scale for both tables. A username was 15px in the standings and 13px in
@@ -157,32 +157,50 @@ function Section({ id, title, caption, action, defaultOpen = true, children }) {
   );
 }
 
-/** The team-usage grid itself, shared between the season and weekly panes. */
-function TeamBoard({ usage, max }) {
+/**
+ * The team-usage grid itself, shared between the season and weekly panes.
+ *
+ * `outcomes`, when given (the weekly pane only), marks a team red with a
+ * struck-through abbreviation once its game is final and it lost — the same
+ * treatment a losing pick gets everywhere else in this tab (see the pick
+ * history and PickResultCard). The season pane never passes this: a team's
+ * season-long count can span both a win and a later loss, so no single
+ * result applies to it.
+ */
+function TeamBoard({ usage, max, outcomes }) {
   return (
     <div className="card" style={{ padding: 14 }}>
       <div style={{ display: 'grid', gap: 6,
                     gridTemplateColumns: 'repeat(auto-fill, minmax(78px, 1fr))' }}>
-        {usage.map(({ team, count }) => (
-          <div key={team} title={count === 0 ? `${team} — nobody has used them` : `${team} — used by ${count}`}
-               style={{
-                 padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
-                 background: count === 0 ? 'var(--surface)' : 'var(--accent-soft)',
-                 border: `1px solid ${count === 0 ? 'var(--border)' : 'var(--accent)'}`,
-                 opacity: count === 0 ? 0.55 : 1,
-               }}>
-            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
-                          color: count === 0 ? 'var(--ink-soft)' : 'var(--ink)' }}>
-              {team}
+        {usage.map(({ team, count }) => {
+          const outcome = count > 0 ? outcomes?.[team] : undefined;
+          const lost = outcome === 'loss' || outcome === 'tie';
+          return (
+            <div key={team}
+                 title={count === 0 ? `${team} — nobody has used them`
+                        : lost ? `${team} — used by ${count}, lost`
+                        : `${team} — used by ${count}`}
+                 style={{
+                   padding: '7px 8px', borderRadius: 'var(--radius-sm)', textAlign: 'center',
+                   background: count === 0 ? 'var(--surface)' : lost ? 'var(--danger-soft)' : 'var(--accent-soft)',
+                   border: `1px solid ${count === 0 ? 'var(--border)' : lost ? 'var(--danger)' : 'var(--accent)'}`,
+                   opacity: count === 0 ? 0.55 : 1,
+                 }}>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 700, fontSize: 14,
+                            color: count === 0 ? 'var(--ink-soft)' : lost ? 'var(--danger)' : 'var(--ink)',
+                            textDecoration: lost ? 'line-through' : 'none' }}>
+                {team}
+              </div>
+              <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
+                            fontVariantNumeric: 'tabular-nums',
+                            color: count === 0 ? 'var(--ink-faint)'
+                                   : lost ? 'var(--danger)'
+                                   : count === max ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
+                {count}
+              </div>
             </div>
-            <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 16, lineHeight: 1.1,
-                          fontVariantNumeric: 'tabular-nums',
-                          color: count === 0 ? 'var(--ink-faint)'
-                                 : count === max ? 'var(--accent-dark)' : 'var(--ink-soft)' }}>
-              {count}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -488,6 +506,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     .filter(Boolean).sort();
   const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
   const weeklyUsage = teamUsage({ entries: withStatus, picks, teams: allTeams, week: currentWeek });
+  const weeklyOutcomes = weekTeamOutcomes(picks, currentWeek);
   const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
   const usageMax = Math.max(1, ...usage.map(u => u.count));
   const weeklyUsageMax = Math.max(1, ...weeklyUsage.map(u => u.count));
@@ -915,7 +934,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         <Section
           id="burned"
           title="Teams burned"
-          caption="How many live entries have used each team. Counts a pick only once its game has kicked off, so this never gives away what is still to come. Swipe for this week's board."
+          caption="Season: how many live entries have used each team. This week: everyone who used it, wins and losses both. Either way, a pick only counts once its game has kicked off — never what's still to come."
         >
           <Strip by={320} label="team board" arrows="above" caption="Swipe: season · this week">
             <div style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start' }}>
@@ -924,7 +943,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
             </div>
             <div style={{ flexShrink: 0, width: '100%', scrollSnapAlign: 'start' }}>
               <div className="label-muted" style={{ marginBottom: 6 }}>Week {currentWeek}</div>
-              <TeamBoard usage={weeklyUsage} max={weeklyUsageMax} />
+              <TeamBoard usage={weeklyUsage} max={weeklyUsageMax} outcomes={weeklyOutcomes} />
             </div>
           </Strip>
         </Section>

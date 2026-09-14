@@ -84,6 +84,24 @@ answers a different question than the season one — not "who's out of teams by
 now" but "who moved on whom this week" — without adding a second reveal rule
 to reason about.
 
+### The weekly board counts losers too, on purpose
+
+The season board is alive-entries-only: the moment an entry goes out, its
+picks stop counting, because the question it answers is "who is still in
+range of this team". Applying that same filter to the weekly board would
+make it lie by omission — a team that lost this week eliminates every entry
+that picked it, so an alive-only weekly count would empty out exactly the
+teams that just decided something, right as the results come in.
+
+So the weekly board's alive set is wider: an entry counts if it is still
+alive, *or* if `computeEntryStatus` says it went out **in this same week**.
+An entry eliminated in an earlier week stays excluded either way — a
+filed-ahead pick from someone already gone was never really "in" the week it
+names. A losing team is marked the same way a losing pick reads everywhere
+else in this tab: red, struck through, via `weekTeamOutcomes(picks, week)`,
+which reads `pickOutcome` off whichever pick for that team got there first —
+every pick on one team in one week shares a game, so they can't disagree.
+
 **Hot pick and risky pick** appear only once *every live entry's pick for the
 week has kicked off*, so neither can hand a live edge to anyone still deciding.
 

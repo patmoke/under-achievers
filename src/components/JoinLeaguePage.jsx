@@ -23,13 +23,18 @@ export default function JoinLeaguePage() {
     const normalized = code.trim().toUpperCase();
     const { data, error } = await supabase.rpc('join_league_by_code', { p_code: normalized });
 
-    if (!error) {
+    if (!error && data) {
       toast.success(`Joined "${data.name}"!`);
       navigate(`/leagues/${data.id}`, { replace: true });
       return;
     }
 
-    if (error.message.includes('already in this league')) {
+    // Two cases land here: a refusal because the membership already exists,
+    // or — seen once in the wild, cause unconfirmed — a response with no
+    // error but no body either. Both are handled the same way: the
+    // membership exists by now either way, so look the league up by its own
+    // code rather than trust what the RPC call happened to hand back.
+    if (!error || error.message.includes('already in this league')) {
       const { data: existing } = await supabase.from('leagues').select('id, name').eq('join_code', normalized).single();
       if (existing) {
         navigate(`/leagues/${existing.id}`, { replace: true });
@@ -37,7 +42,7 @@ export default function JoinLeaguePage() {
       }
     }
 
-    toast.error(error.message);
+    toast.error(error?.message || 'Could not join — try again');
     navigate('/leagues', { replace: true });
   }, [code, navigate]);
 
