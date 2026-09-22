@@ -510,22 +510,38 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const usage = teamUsage({ entries: withStatus, picks, teams: allTeams });
   const weeklyUsage = teamUsage({ entries: withStatus, picks, teams: allTeams, week: currentWeek });
   const weeklyOutcomes = weekTeamOutcomes(picks, currentWeek);
-  const highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: currentWeek });
   const usageMax = Math.max(1, ...usage.map(u => u.count));
   const weeklyUsageMax = Math.max(1, ...weeklyUsage.map(u => u.count));
 
-  // Two more week-in-review numbers for the nutshell, alongside hot/risky.
-  // Neither needs the no-edge gate those two are built around — a headcount
-  // of who's gone and who bought back doesn't hand anyone an edge on a pick
-  // still being decided — but they read as one week-in-review, so they wait
-  // on the same reveal as the rest of the section rather than jumping the
-  // gun on it.
-  const eliminatedThisWeek = withStatus.filter(e => e.status === 'eliminated' && e.week === currentWeek).length;
-  const eliminatingTeams = Object.entries(weeklyOutcomes)
+  // The nutshell recaps a week once every alive entry's pick for it has
+  // locked — but currentWeek itself is very often not there yet: it only
+  // advances once the PREVIOUS week's last game kicks off, and this week's
+  // own picks won't all lock until this week's games do, which can be days
+  // later. Walking straight off currentWeek made the whole section go blank
+  // for that whole gap, right after it had just shown last week's recap.
+  // Walk backward to the most recent week that IS fully locked instead, so
+  // the section holds onto the last finished week until the new one is
+  // ready to replace it.
+  let recapWeek = currentWeek;
+  let highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: recapWeek });
+  while (highlights === null && recapWeek > 1) {
+    recapWeek -= 1;
+    highlights = weekHighlights({ entries: withStatus, picks, gamesById, week: recapWeek });
+  }
+  const recapOutcomes = recapWeek === currentWeek ? weeklyOutcomes : weekTeamOutcomes(picks, recapWeek);
+
+  // Two more numbers for the nutshell, alongside hot/risky — scoped to
+  // recapWeek for the same reason those two are. Neither needs the no-edge
+  // gate hot/risky are built around — a headcount of who's gone or how big
+  // the pool still is doesn't hand anyone an edge on a pick still being
+  // decided — but they read as one week-in-review, so they follow the same
+  // recap week rather than jumping ahead of the rest of the section.
+  const eliminatedThisWeek = withStatus.filter(e => e.status === 'eliminated' && e.week === recapWeek).length;
+  const eliminatingTeams = Object.entries(recapOutcomes)
     .filter(([, outcome]) => outcome === 'loss' || outcome === 'tie')
     .map(([team]) => team)
     .sort();
-  // Season total, not scoped to currentWeek: a buyback's resume week is
+  // Season total, not scoped to any one week: a buyback's resume week is
   // always max(currentWeek, eliminationWeek + 1), which is next week's
   // number by the time anyone can actually act on it — a loss only becomes
   // visible once this week is mostly done, and currentWeek itself does not
@@ -534,10 +550,14 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // is actually happening, and only catch up a week later. A running total
   // has no such lag.
   const totalRebuys = buybacks.length;
-  // "Before" is anyone not yet eliminated as of this week — alive now, or
-  // eliminated but not until this week — the same this-week test used above
-  // and in teamUsage's weekly mode. "After" is just today's alive count.
-  const fieldBefore = withStatus.filter(e => e.status === 'alive' || e.week === currentWeek).length;
+  // "Before" is anyone not yet eliminated as of recapWeek — alive now, or
+  // eliminated but not until recapWeek — the same this-week test used above
+  // and in teamUsage's weekly mode. "After" is just today's alive count,
+  // which still correctly describes the end of recapWeek even when it's
+  // behind currentWeek: nothing can have changed in the gap, since no games
+  // played in any week after recapWeek is what put it behind in the first
+  // place.
+  const fieldBefore = withStatus.filter(e => e.status === 'alive' || e.week === recapWeek).length;
   const fieldAfter = aliveCount;
 
   const people = groupByPerson(withStatus, currentUserId);
@@ -920,8 +940,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
       {highlights && (
         <Section
           id="nutshell"
-          title={`Week ${currentWeek} in a nutshell`}
-          caption={`Shown now that every pick this week has kicked off. Across ${highlights.total} live ${highlights.total === 1 ? 'entry' : 'entries'}.`}
+          title={`Week ${recapWeek} in a nutshell`}
+          caption={`Shown once every pick for the week has kicked off — holds here until Week ${recapWeek + 1} is ready to take its place. Across ${highlights.total} live ${highlights.total === 1 ? 'entry' : 'entries'}.`}
         >
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
             <div className="card" style={{ padding: 18 }}>
