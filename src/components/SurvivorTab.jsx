@@ -1254,8 +1254,12 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
       {/* minWidth: 0 on both the row item and the name is what lets the name
           shrink. Without it a long username refuses to give ground, shoves the
           chips onto their own line and left-aligns them there — one ragged row
-          in a list where every other one is a tidy pair. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 auto' }}>
+          in a list where every other one is a tidy pair.
+          minWidth: 60 (not 0) on this outer wrapper is the floor on that
+          shrink: enough for a few characters and an ellipsis, so a person with
+          many entries — whose chips wrap to two lines and claim more width —
+          still reads as *someone*, not a blank space next to their own chips. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 60, flex: '1 1 auto' }}>
         {champion && <Trophy size={18} style={{ color: 'var(--gold)', flexShrink: 0 }} aria-label="Champion" />}
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
@@ -1274,7 +1278,14 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
             {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', flexShrink: 0 }}>(you)</span>}
           </div>
           {person.total > 1 && (
-            <div style={{ fontSize: SUB_SIZE, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+            // overflow: hidden is load-bearing, not decorative. Unlike the
+            // username span above, this had no clipping of its own — so when
+            // many entries (chips wrap to two lines) squeezed this column
+            // down, the text didn't truncate, it overflowed its shrunk box
+            // and rendered straight through the chips sitting to its right.
+            // Caught live: a 6-entry row with "6 of 6 alive" bleeding into
+            // the chip row above it.
+            <div style={{ fontSize: SUB_SIZE, color: 'var(--ink-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {allOut ? `All ${person.total} out` : `${person.alive} of ${person.total} alive`}
             </div>
           )}

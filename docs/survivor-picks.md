@@ -218,6 +218,37 @@ scroll on touch, the outer page jumping at the boundary, and no indication of ho
 much is hidden. The picker strips scroll *laterally*, a different axis from the
 page, which is why that works and this would not.
 
+### A many-entry row that ate its own username
+
+Each row is one flex line: a name column that's allowed to shrink
+(`minWidth: 0`, deliberately — see the comment on it) sitting next to a chip
+column that refuses to (`flexShrink: 0`, so the chips stay a tidy set rather
+than losing a member to the next line). For one or two entries that's a
+non-issue; the chips are narrow and the name has room to spare.
+
+It breaks down at enough entries that the chips wrap to two lines. The chip
+column's width is now set by its widest wrapped line, which for five or six
+entries is still wide — wide enough that satisfying `flexShrink: 0` on it and
+`flex: 1 1 auto` on the name forces the name column down near zero width.
+The username itself handles that fine, since it already truncates with its
+own `overflow: hidden`. The subtitle underneath it — `"6 of 6 alive"` — did
+not have that. Squeezed into a near-zero box with nothing to clip it, the
+text didn't truncate; it overflowed sideways, out of its own column and
+straight through the chips sitting to its right. From the screenshot that
+reported it: the username gone entirely, `"6 of 6 alive"` rendered on top of
+the `#1`–`#5` chips as if typed over them.
+
+Fixed with two changes, each closing a different half of the gap:
+`overflow: hidden` (plus `textOverflow: ellipsis`, matching the username) on
+the subtitle, so it clips instead of spilling into a neighboring column no
+matter how far it gets squeezed — and a `minWidth: 60` floor on the name
+column, so a many-entry row never gets squeezed that far in the first place;
+it stops at a few characters and an ellipsis instead of disappearing.
+Reproduced first in isolation (a standalone two-row mockup, one with the old
+styles and one with the fix, both at a chip-wrapping width) to confirm the
+exact failure before touching the real component, then applied to
+`PersonRow`.
+
 ## A buyback that resumed into its own loss
 
 `computeEntryStatus` forgives everything before `start_week` (see the comment
