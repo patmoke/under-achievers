@@ -151,6 +151,31 @@ week's hot and risky picks do not appear until Monday evening. That is the
 honest consequence of the no-edge rule; loosening it means publishing while
 someone can still act on it.
 
+### The section used to go blank between weeks
+
+All four tiles were computed straight off `currentWeek`. That's the wrong
+week to ask for most of the time a fresh week is open: `currentWeek` advances
+the moment the *previous* week's last game kicks off, but this week's own
+picks don't all lock until this week's games do — days later, typically not
+until Sunday. In that gap `weekHighlights` for `currentWeek` is correctly
+null (nothing to reveal yet), and the whole nutshell disappeared — right
+after it had just been showing last week's recap.
+
+Reported live: a user asked where the nutshell had gone on the Monday after
+week 2 wrapped. Confirmed against the database before writing any code — week
+2 fully locked (143 picks, all kicked off), week 3 just opened (17 filed, 0
+locked) — so this wasn't stale state, it was exactly the gap described above.
+
+Fixed with `recapWeek`: start at `currentWeek` and step backward one week at
+a time until `weekHighlights` returns non-null (or week 1 is reached). All
+four tiles, and the section's own title, now key off `recapWeek` instead of
+`currentWeek`, so the section holds the last finished week's recap until the
+new week has its own to replace it with — rather than a blank stretch in
+between. The **team board**'s weekly pane is deliberately left on
+`currentWeek` rather than `recapWeek` — it isn't gated by the reveal (it can
+never leak anything unlocked) and reading sparse or empty for a week that
+just opened is the honest state of that week, not a gap to paper over.
+
 
 ## The standings, grouped
 
