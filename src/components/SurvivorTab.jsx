@@ -288,6 +288,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   const [pickWeek, setPickWeek] = useState({});
   // A pending "this clears your week N pick" question, or null.
   const [release, setRelease] = useState(null);
+  // A pending "buy back this entry" question, or null. An in-app dialog
+  // rather than window.confirm() — see the comment on buyBackIn for why.
+  const [buybackConfirm, setBuybackConfirm] = useState(null);
   // null means "nobody has said", so the default below can depend on data
   // that has not loaded when this state is created.
   const [showOutChoice, setShowOutChoice] = useState(null);
@@ -402,7 +405,16 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     fetchAll();
   }
 
-  async function buyBackIn(entry, outWeek) {
+  // Opens the confirm dialog rather than acting immediately. Used to go
+  // through window.confirm() directly; switched to an in-app dialog because
+  // a native confirm() gives no feedback at all when a browser silently
+  // blocks it — Chrome does this on its own after a page has triggered
+  // several in quick succession ("prevent this page from creating additional
+  // dialogs"), and the result reads exactly like a dead button: no error, no
+  // effect, nothing to go on. Reported live as "the button isn't working, no
+  // error message" for an entry the app's own logic otherwise found fully
+  // eligible to buy back — see docs/survivor-picks.md.
+  function buyBackIn(entry, outWeek) {
     if (!canBuyBack(entry.id)) return;
     // currentWeek is the app's estimate of the current NFL week, which reads
     // as unchanged for as long as that week's last game hasn't kicked off —
@@ -415,7 +427,12 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
     // right there. The resume week has to be strictly after the elimination,
     // and never earlier than the current week either.
     const resumeWeek = Math.max(currentWeek, (outWeek ?? currentWeek) + 1);
-    if (!confirm(`Buy back in? Entry #${entry.entry_number} will resume from Week ${resumeWeek}.`)) return;
+    setBuybackConfirm({ entry, resumeWeek });
+  }
+
+  async function confirmBuyBack() {
+    const { entry, resumeWeek } = buybackConfirm;
+    setBuybackConfirm(null);
     const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: resumeWeek });
     if (error) { toast.error(error.message); return; }
     toast.success(`Bought back in! Entry #${entry.entry_number} is live again.`);
@@ -657,6 +674,29 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               >
                 Use {release.team} now
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {buybackConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setBuybackConfirm(null)}
+          style={{ position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)',
+                   display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}
+        >
+          <div className="card" onClick={e => e.stopPropagation()} style={{ padding: 22, maxWidth: 420 }}>
+            <h3 style={{ fontSize: 19, textTransform: 'none', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <RotateCcw size={17} style={{ color: 'var(--gold)' }} />
+              Buy back entry #{buybackConfirm.entry.entry_number}?
+            </h3>
+            <p style={{ fontSize: 14, color: 'var(--ink-soft)', lineHeight: 1.6, margin: '0 0 18px' }}>
+              It'll resume from <strong style={{ color: 'var(--ink)' }}>Week {buybackConfirm.resumeWeek}</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" onClick={() => setBuybackConfirm(null)}>Cancel</button>
+              <button className="btn btn-primary" onClick={confirmBuyBack}>Buy back in</button>
             </div>
           </div>
         </div>
@@ -1254,8 +1294,12 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
       {/* minWidth: 0 on both the row item and the name is what lets the name
           shrink. Without it a long username refuses to give ground, shoves the
           chips onto their own line and left-aligns them there — one ragged row
-          in a list where every other one is a tidy pair. */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0, flex: '1 1 auto' }}>
+          in a list where every other one is a tidy pair.
+          minWidth: 60 (not 0) on this outer wrapper is the floor on that
+          shrink: enough for a few characters and an ellipsis, so a person with
+          many entries — whose chips wrap to two lines and claim more width —
+          still reads as *someone*, not a blank space next to their own chips. */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 60, flex: '1 1 auto' }}>
         {champion && <Trophy size={18} style={{ color: 'var(--gold)', flexShrink: 0 }} aria-label="Champion" />}
         <div style={{ minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0 }}>
@@ -1274,7 +1318,14 @@ function PersonRow({ person, last, currentUserId, currentWeek, isOwner,
             {isMe && <span style={{ fontSize: 11, color: 'var(--accent)', flexShrink: 0 }}>(you)</span>}
           </div>
           {person.total > 1 && (
-            <div style={{ fontSize: SUB_SIZE, color: 'var(--ink-soft)', whiteSpace: 'nowrap' }}>
+            // overflow: hidden is load-bearing, not decorative. Unlike the
+            // username span above, this had no clipping of its own — so when
+            // many entries (chips wrap to two lines) squeezed this column
+            // down, the text didn't truncate, it overflowed its shrunk box
+            // and rendered straight through the chips sitting to its right.
+            // Caught live: a 6-entry row with "6 of 6 alive" bleeding into
+            // the chip row above it.
+            <div style={{ fontSize: SUB_SIZE, color: 'var(--ink-soft)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {allOut ? `All ${person.total} out` : `${person.alive} of ${person.total} alive`}
             </div>
           )}

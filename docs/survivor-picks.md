@@ -218,6 +218,37 @@ scroll on touch, the outer page jumping at the boundary, and no indication of ho
 much is hidden. The picker strips scroll *laterally*, a different axis from the
 page, which is why that works and this would not.
 
+### A many-entry row that ate its own username
+
+Each row is one flex line: a name column that's allowed to shrink
+(`minWidth: 0`, deliberately — see the comment on it) sitting next to a chip
+column that refuses to (`flexShrink: 0`, so the chips stay a tidy set rather
+than losing a member to the next line). For one or two entries that's a
+non-issue; the chips are narrow and the name has room to spare.
+
+It breaks down at enough entries that the chips wrap to two lines. The chip
+column's width is now set by its widest wrapped line, which for five or six
+entries is still wide — wide enough that satisfying `flexShrink: 0` on it and
+`flex: 1 1 auto` on the name forces the name column down near zero width.
+The username itself handles that fine, since it already truncates with its
+own `overflow: hidden`. The subtitle underneath it — `"6 of 6 alive"` — did
+not have that. Squeezed into a near-zero box with nothing to clip it, the
+text didn't truncate; it overflowed sideways, out of its own column and
+straight through the chips sitting to its right. From the screenshot that
+reported it: the username gone entirely, `"6 of 6 alive"` rendered on top of
+the `#1`–`#5` chips as if typed over them.
+
+Fixed with two changes, each closing a different half of the gap:
+`overflow: hidden` (plus `textOverflow: ellipsis`, matching the username) on
+the subtitle, so it clips instead of spilling into a neighboring column no
+matter how far it gets squeezed — and a `minWidth: 60` floor on the name
+column, so a many-entry row never gets squeezed that far in the first place;
+it stops at a few characters and an ellipsis instead of disappearing.
+Reproduced first in isolation (a standalone two-row mockup, one with the old
+styles and one with the fix, both at a chip-wrapping width) to confirm the
+exact failure before touching the real component, then applied to
+`PersonRow`.
+
 ## A buyback that resumed into its own loss
 
 `computeEntryStatus` forgives everything before `start_week` (see the comment
@@ -267,3 +298,28 @@ enforcement point either way — same as the resume-week bug above, this was
 entirely a client-side gate, so the fix needed no migration and no data
 correction; existing `survivor_entry_buybacks` rows already key by
 `entry_id`, which is all the new check needed.
+
+## The buyback button that silently did nothing
+
+A follow-up report on an entry the fix above had just made eligible: the
+button was there, correctly, but clicking it did nothing — no confirm dialog
+noticed, no toast, no error. Confirmed the entry really was eligible (zero
+buybacks on that specific entry, cap of one, league nowhere near capacity,
+current week still inside the buyback deadline) before looking anywhere else,
+since a button rendering as enabled for the wrong reason would look identical
+from the outside.
+
+The cause was `buyBackIn` asking `window.confirm()` before acting. A native
+`confirm()` gives no feedback at all when a browser silently refuses to show
+it — Chrome, after a page has triggered a few in quick succession, offers
+"prevent this page from creating additional dialogs," and checking it makes
+every later `confirm()` on that page resolve `false` immediately, no dialog,
+no error, nothing. `if (!confirm(...)) return;` then reads exactly like a
+dead button, because as far as the code can tell, the answer was just no.
+
+Replaced with the same in-app dialog pattern the advance-pick "this will
+clear week N" question already uses (`role="dialog"`, a `card`, an explicit
+Cancel) instead of the browser's own dialog — not a native API this app can
+be silently opted out of by the browser's own heuristics, and it actually
+names the resume week rather than leaving that entirely to a sentence the
+button had to compose for `confirm()`'s single string argument.
