@@ -298,3 +298,28 @@ enforcement point either way — same as the resume-week bug above, this was
 entirely a client-side gate, so the fix needed no migration and no data
 correction; existing `survivor_entry_buybacks` rows already key by
 `entry_id`, which is all the new check needed.
+
+## The buyback button that silently did nothing
+
+A follow-up report on an entry the fix above had just made eligible: the
+button was there, correctly, but clicking it did nothing — no confirm dialog
+noticed, no toast, no error. Confirmed the entry really was eligible (zero
+buybacks on that specific entry, cap of one, league nowhere near capacity,
+current week still inside the buyback deadline) before looking anywhere else,
+since a button rendering as enabled for the wrong reason would look identical
+from the outside.
+
+The cause was `buyBackIn` asking `window.confirm()` before acting. A native
+`confirm()` gives no feedback at all when a browser silently refuses to show
+it — Chrome, after a page has triggered a few in quick succession, offers
+"prevent this page from creating additional dialogs," and checking it makes
+every later `confirm()` on that page resolve `false` immediately, no dialog,
+no error, nothing. `if (!confirm(...)) return;` then reads exactly like a
+dead button, because as far as the code can tell, the answer was just no.
+
+Replaced with the same in-app dialog pattern the advance-pick "this will
+clear week N" question already uses (`role="dialog"`, a `card`, an explicit
+Cancel) instead of the browser's own dialog — not a native API this app can
+be silently opted out of by the browser's own heuristics, and it actually
+names the resume week rather than leaving that entirely to a sentence the
+button had to compose for `confirm()`'s single string argument.
