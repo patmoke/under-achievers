@@ -151,6 +151,57 @@ where pa.source_table = 'survivor_picks'
   and pa.at >= g.game_time;
 ```
 
+### Buybacks trusted the client for their own resume week
+
+`buy_back_entry(p_entry_id, p_week)` did nothing but check ownership and
+write whatever `p_week` it was handed — no check against the per-entry
+buyback cap, the league's buyback deadline, whether the entry was even
+eliminated, or whether the week made sense. Same shape of gap as the pick
+switch above: a `SECURITY DEFINER` function reachable directly through the
+REST API, enforcing none of the rules the client's own UI happened to apply
+around it.
+
+This one had a sharper edge than "get the wrong week": `computeEntryStatus`'s
+missed-week check only scans from an entry's `start_week` to the current
+week. Set `start_week` ahead of the current week — trivial, since the
+function trusted whatever it was given — and that scan range is empty for
+every week in between. No pick required, no loss possible, no risk, for
+however many weeks were skipped. In a pool whose only rule is one loss and
+you're out, that's a way to sit out risk entirely, not just a wrong number on
+a screen.
+
+It also wasn't hypothetical as a *wrong-number* bug even without any
+malice: a stale cached client sent an under-corrected week once for real
+(see `docs/survivor-picks.md`), resuming a real entry into the very week
+that had just eliminated it.
+
+Fixed by no longer accepting a week at all in the code path that matters.
+`buy_back_entry(p_entry_id)` now derives everything itself:
+
+- the league's cap and deadline, refusing if buybacks aren't on or the
+  deadline has passed
+- the entry's own buyback count against that cap
+- the entry's actual elimination week — `entry_elimination_week()`, a SQL
+  mirror of `computeEntryStatus`'s scan (first loss/tie, else first missed
+  week), refusing outright if the entry isn't actually eliminated
+- the resume week itself, as `greatest(current_week, elimination_week + 1)`,
+  using `current_nfl_week()` (a SQL mirror of `deriveCurrentWeek`) rather
+  than trusting a client's idea of "now"
+
+The old two-argument signature still exists as an overload that accepts and
+discards `p_week` — so a client that's behind (cached, or simply not
+redeployed yet) doesn't break, it just gets the same server-computed answer
+regardless of what it asked for. No client, however stale or however
+adversarial, can put a wrong resume week into the database again.
+
+Verified two ways before this shipped: `entry_elimination_week()` was run
+against every real entry in the live pool and diffed against an
+independently-written query using different SQL shape, with zero
+disagreements; the write path itself (cap, deadline, non-elimination,
+ownership, and the two-argument overload) was exercised end-to-end against
+throwaway data under a fake season number, entirely isolated from anything
+real, and cleaned up within the same transaction.
+
 ## What is not enforced in the database
 
 **Elimination.** An eliminated entry can still write picks. They are inert:

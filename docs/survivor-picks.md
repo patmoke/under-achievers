@@ -323,3 +323,14 @@ Cancel) instead of the browser's own dialog — not a native API this app can
 be silently opted out of by the browser's own heuristics, and it actually
 names the resume week rather than leaving that entirely to a sentence the
 button had to compose for `confirm()`'s single string argument.
+
+## The client's resume week was never actually enforced
+
+A follow-up on the stale-client incident above: fixing the client's own math
+doesn't stop a *different* stale (or adversarial) client from sending a wrong
+week, because `buy_back_entry` accepted whatever `p_week` it was given and
+wrote it, no questions asked. The client's `resumeWeek` is now a display
+estimate only, used for the confirm dialog's own wording — the RPC computes
+and enforces the real one itself, and ignores anything a caller sends.
+Recorded in full in `docs/pick-integrity.md`, alongside the rest of what
+this app does and doesn't trust the client for.
