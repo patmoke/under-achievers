@@ -202,6 +202,42 @@ ownership, and the two-argument overload) was exercised end-to-end against
 throwaway data under a fake season number, entirely isolated from anything
 real, and cleaned up within the same transaction.
 
+#### The count-then-insert itself raced
+
+Caught in review, not by testing: reading the buyback count, checking it
+against the cap, and inserting the new row were three separate steps with
+nothing serializing them. Two calls on the *same* entry landing close
+enough together could both read a count from before either had inserted —
+both see zero, both pass "0 < 1", both insert. For a cap of one, that's two
+buyback rows and two writes to `start_week`, and it doesn't require malice —
+a doubled network request or a retried call would do it. `entry_elimination_week()`
+is separately `stable` and idempotent, so re-running it read-only isn't
+itself a problem; the risk was purely in the gap between reading the count
+and committing the insert that changes it.
+
+A `UNIQUE(entry_id)` constraint on `survivor_entry_buybacks` would close this
+for a cap of exactly one, but `max_buybacks` is a per-league setting that can
+be higher, so a blanket constraint would wrongly forbid a second buyback in
+any league that allows one. Fixed instead with `select ... for update` on the
+entry row, acquired before the count is read. A second call on the same
+entry blocks on that lock until the first transaction commits or rolls back,
+then re-reads the count fresh — including whatever the first call just
+inserted. Calls on *different* entries never contend; they lock different
+rows.
+
+Verified that the lock doesn't break the ordinary single-caller path: a
+transaction that already holds the row's lock (simulated by taking it
+manually before calling the function, standing in for whichever of two
+concurrent callers would win the race) can still call `buy_back_entry` and
+have it proceed — Postgres row locks are re-entrant within the transaction
+that holds them, so the function's own `for update` doesn't deadlock against
+a lock its own caller already has. True cross-connection concurrency —
+two callers actually overlapping in time — isn't something this project's
+tooling can drive directly; the row lock is the standard, unconditionally
+correct Postgres mechanism for this exact class of check-then-act race
+regardless, so this is a case where the reasoning **is** the guarantee, not
+just supporting evidence for one.
+
 ## What is not enforced in the database
 
 **Elimination.** An eliminated entry can still write picks. They are inert:
