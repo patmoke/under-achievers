@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, Skull, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  isGameLocked, computeEntryStatus, pickOutcome,
+  isGameLocked, computeEntryStatus, pickOutcome, buybackDeadlinePassed,
   pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekHighlights, groupByPerson,
 } from '../lib/survivor';
 
@@ -389,7 +389,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // it read as a bug because nothing else about entries pools across them.
   function canBuyBack(entryId) {
     if (!buybacksAllowed) return false;
-    if (currentWeek > buybackDeadlineWeek) return false;
+    if (buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek })) return false;
     if (leagueFull()) return false;
     return entryBuybacks(entryId).length < maxBuybacks;
   }
@@ -786,8 +786,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                             <RotateCcw size={12} /> Buy back in
                           </button>
                         ) : buybacksAllowed ? (
-                          currentWeek > buybackDeadlineWeek
-                            ? `Buyback window closed after Week ${buybackDeadlineWeek}.`
+                          buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek })
+                            ? `Buyback window for Week ${buybackDeadlineWeek} has closed.`
                             : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
                         ) : (
                           'Buybacks are not enabled for this league.'

@@ -21,6 +21,47 @@ export function isGameLocked(game, now = new Date()) {
   return at >= new Date(game.game_time);
 }
 
+const isSundayET = gameTime =>
+  new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short' })
+    .format(new Date(gameTime)) === 'Sun';
+
+/**
+ * The instant a survivor buyback deadline actually closes.
+ *
+ * "Buybacks through Week N" used to mean "while the app's current week is
+ * still N" — which closes the moment week N's own last game kicks off,
+ * wherever that lands on the calendar (often a Monday night). For someone
+ * eliminated by an earlier week-N game that could leave as little as a day
+ * to act; for someone eliminated by week N's own last game, it closed the
+ * window at essentially the same moment they found out they were out.
+ *
+ * Redefined as 30 minutes before the earliest Sunday kickoff of week N+1: a
+ * real, predictable grace period after the deadline week has fully wrapped
+ * up, rather than a cutoff tied to whatever game happens to close week N.
+ * Mirrors `buyback_deadline_instant()` in the database, which is what
+ * actually enforces this — this copy is for the UI to show the same answer
+ * the server will give, not to enforce it itself.
+ *
+ * Returns null when there's no schedule data for week N+1 yet (or the
+ * deadline week is the last of the season) — callers should fall back to a
+ * plain week-number comparison in that case, same as the server does.
+ */
+export function buybackDeadlineInstant(games, deadlineWeek) {
+  const nextWeekGames = (games || []).filter(g => g.week === deadlineWeek + 1);
+  const sundayGames = nextWeekGames.filter(g => isSundayET(g.game_time));
+  const candidates = sundayGames.length > 0 ? sundayGames : nextWeekGames;
+  if (candidates.length === 0) return null;
+  const earliest = Math.min(...candidates.map(g => new Date(g.game_time).getTime()));
+  return new Date(earliest - 30 * 60 * 1000);
+}
+
+/** Whether a survivor buyback deadline has closed, given the current time. */
+export function buybackDeadlinePassed({ games, deadlineWeek, currentWeek, now = new Date() }) {
+  if (deadlineWeek == null) return false;
+  const instant = buybackDeadlineInstant(games, deadlineWeek);
+  return instant ? now >= instant : currentWeek > deadlineWeek;
+}
+
 /**
  * The teams an entry may no longer pick. A team is burned once the pick that
  * used it has locked; a pick for the current week that hasn't kicked off yet
