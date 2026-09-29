@@ -334,3 +334,32 @@ estimate only, used for the confirm dialog's own wording — the RPC computes
 and enforces the real one itself, and ignores anything a caller sends.
 Recorded in full in `docs/pick-integrity.md`, alongside the rest of what
 this app does and doesn't trust the client for.
+
+## The buyback deadline closed at an arbitrary moment
+
+"Buybacks through Week N" meant "while the app's `current_nfl_week()` is
+still N" — which flips to `N + 1` the instant week N's own *last* game kicks
+off, wherever that lands on the calendar. Usually a Monday night, sometimes
+earlier. That made the actual cutoff a function of the schedule, not of
+anything about when someone knew they were out: eliminated by an early
+week-N game, and the window might stay open for several more days; eliminated
+by week N's own last game, and it closed at essentially the same moment they
+found out.
+
+Real report: an entry lost on a week-3 Sunday-afternoon game, was still
+correctly eliminated, still had its one buyback available — and by the time
+the owner tried to grant it, week 3's Monday night game had already kicked
+off, `current_nfl_week()` had ticked over to 4, and the window was gone.
+About 25 hours between the loss and the cutoff, all told, which is not
+nothing, but it isn't a deadline anyone could actually plan around either —
+it depends entirely on which of week N's games happens to be scheduled last.
+
+Redefined as 30 minutes before the earliest Sunday kickoff of week `N + 1` —
+`buyback_deadline_instant()` in the database (mirrored client-side by
+`buybackDeadlineInstant()` in `survivor.js`, for the UI to show the same
+answer the server will give, not to enforce it). That's a real, predictable
+grace period after the deadline week has fully wrapped up: the same cutoff
+for everyone eliminated in week N, regardless of which game did it. Falls
+back to the old week-number comparison when there's no schedule data yet for
+week `N + 1` (or the deadline week is the season's last), so a gap in the
+synced schedule can't leave the deadline permanently open or silently error.

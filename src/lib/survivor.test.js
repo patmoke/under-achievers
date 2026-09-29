@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
   pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, groupByPerson,
+  buybackDeadlineInstant, buybackDeadlinePassed,
 } from './survivor';
 import {
   deriveCurrentWeek, describeSpread, buildStandings,
@@ -764,5 +765,65 @@ describe('groupByPerson', () => {
     ], null);
     expect(people[0].entries.map(e => e.status)).toEqual(['eliminated', 'alive']);
     expect(people[0].alive).toBe(1);
+  });
+});
+
+// 2020-01-01 was a Wednesday, so 2020-01-05 is a Sunday — used throughout as
+// a fixed, independently-checkable reference rather than anything tied to a
+// real NFL schedule.
+describe('buybackDeadlineInstant', () => {
+  // Kickoffs deliberately kept at a mid-afternoon UTC hour (13:00 ET in
+  // January), not a late-night one — a late-night UTC timestamp can land on
+  // the *previous* calendar day once converted to US Eastern time, which is
+  // exactly the kind of off-by-one this function has to get right, but it
+  // would make these fixtures' own intended weekday ambiguous too.
+  const games = [
+    { week: 3, game_time: '2019-12-25T18:00:00Z' },  // a week-3 game, irrelevant to a week-3 deadline
+    { week: 4, game_time: '2020-01-02T18:00:00Z' },  // Thursday, week 4 — not Sunday
+    { week: 4, game_time: '2020-01-05T18:00:00Z' },  // Sunday early slate, week 4 — the earliest Sunday kickoff
+    { week: 4, game_time: '2020-01-05T21:05:00Z' },  // Sunday late slate, week 4 — later than the early slate
+    { week: 4, game_time: '2020-01-06T18:00:00Z' },  // Monday, week 4 — not Sunday
+  ];
+
+  it('is 30 minutes before the earliest Sunday kickoff of the following week', () => {
+    expect(buybackDeadlineInstant(games, 3).toISOString()).toBe('2020-01-05T17:30:00.000Z');
+  });
+
+  it('falls back to the earliest game of the following week when none of them is a Sunday', () => {
+    const noSunday = games.filter(g => !(g.week === 4 && g.game_time.startsWith('2020-01-05')));
+    expect(buybackDeadlineInstant(noSunday, 3).toISOString()).toBe('2020-01-02T17:30:00.000Z');
+  });
+
+  it('is null when there is no schedule data for the following week at all', () => {
+    expect(buybackDeadlineInstant(games, 4)).toBeNull(); // no week-5 games
+  });
+});
+
+describe('buybackDeadlinePassed', () => {
+  const games = [{ week: 4, game_time: '2020-01-05T18:00:00Z' }]; // deadline week 3 -> instant 17:30 UTC
+
+  it('is false before the deadline instant', () => {
+    expect(buybackDeadlinePassed({
+      games, deadlineWeek: 3, currentWeek: 3, now: new Date('2020-01-05T17:00:00Z'),
+    })).toBe(false);
+  });
+
+  it('is true at or after the deadline instant', () => {
+    expect(buybackDeadlinePassed({
+      games, deadlineWeek: 3, currentWeek: 4, now: new Date('2020-01-05T17:30:00Z'),
+    })).toBe(true);
+  });
+
+  it('falls back to a week-number comparison when there is no schedule data for the following week', () => {
+    expect(buybackDeadlinePassed({
+      games: [], deadlineWeek: 3, currentWeek: 3, now: new Date('2020-06-01T00:00:00Z'),
+    })).toBe(false);
+    expect(buybackDeadlinePassed({
+      games: [], deadlineWeek: 3, currentWeek: 4, now: new Date('2020-06-01T00:00:00Z'),
+    })).toBe(true);
+  });
+
+  it('is false when no deadline week is configured', () => {
+    expect(buybackDeadlinePassed({ games, deadlineWeek: null, currentWeek: 10 })).toBe(false);
   });
 });
