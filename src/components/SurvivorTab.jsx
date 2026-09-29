@@ -414,26 +414,24 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // effect, nothing to go on. Reported live as "the button isn't working, no
   // error message" for an entry the app's own logic otherwise found fully
   // eligible to buy back — see docs/survivor-picks.md.
+  // resumeWeek here is a display estimate only, for the confirm dialog's own
+  // wording — buy_back_entry() computes the real one itself server-side now
+  // and ignores whatever week (if any) a caller sends, so this number being
+  // off by a week changes nothing about what actually gets written. See the
+  // comment on the RPC, and docs/survivor-picks.md, for why that moved: the
+  // client used to be trusted for this, and a stale build once got it wrong
+  // for real, resuming an entry into the very week that had just eliminated
+  // it.
   function buyBackIn(entry, outWeek) {
     if (!canBuyBack(entry.id)) return;
-    // currentWeek is the app's estimate of the current NFL week, which reads
-    // as unchanged for as long as that week's last game hasn't kicked off —
-    // including the elimination game itself. A resume week of currentWeek
-    // therefore does not always mean "the week after the loss": if you were
-    // eliminated in what is still, app-wide, "this week" (its last game just
-    // hasn't happened yet), resuming there resumes into the very week that
-    // just eliminated you, which forgives nothing — computeEntryStatus scans
-    // from start_week onward, so the loss it was supposed to erase is still
-    // right there. The resume week has to be strictly after the elimination,
-    // and never earlier than the current week either.
     const resumeWeek = Math.max(currentWeek, (outWeek ?? currentWeek) + 1);
     setBuybackConfirm({ entry, resumeWeek });
   }
 
   async function confirmBuyBack() {
-    const { entry, resumeWeek } = buybackConfirm;
+    const { entry } = buybackConfirm;
     setBuybackConfirm(null);
-    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id, p_week: resumeWeek });
+    const { error } = await supabase.rpc('buy_back_entry', { p_entry_id: entry.id });
     if (error) { toast.error(error.message); return; }
     toast.success(`Bought back in! Entry #${entry.entry_number} is live again.`);
     fetchAll();

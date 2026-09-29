@@ -151,6 +151,93 @@ where pa.source_table = 'survivor_picks'
   and pa.at >= g.game_time;
 ```
 
+### Buybacks trusted the client for their own resume week
+
+`buy_back_entry(p_entry_id, p_week)` did nothing but check ownership and
+write whatever `p_week` it was handed — no check against the per-entry
+buyback cap, the league's buyback deadline, whether the entry was even
+eliminated, or whether the week made sense. Same shape of gap as the pick
+switch above: a `SECURITY DEFINER` function reachable directly through the
+REST API, enforcing none of the rules the client's own UI happened to apply
+around it.
+
+This one had a sharper edge than "get the wrong week": `computeEntryStatus`'s
+missed-week check only scans from an entry's `start_week` to the current
+week. Set `start_week` ahead of the current week — trivial, since the
+function trusted whatever it was given — and that scan range is empty for
+every week in between. No pick required, no loss possible, no risk, for
+however many weeks were skipped. In a pool whose only rule is one loss and
+you're out, that's a way to sit out risk entirely, not just a wrong number on
+a screen.
+
+It also wasn't hypothetical as a *wrong-number* bug even without any
+malice: a stale cached client sent an under-corrected week once for real
+(see `docs/survivor-picks.md`), resuming a real entry into the very week
+that had just eliminated it.
+
+Fixed by no longer accepting a week at all in the code path that matters.
+`buy_back_entry(p_entry_id)` now derives everything itself:
+
+- the league's cap and deadline, refusing if buybacks aren't on or the
+  deadline has passed
+- the entry's own buyback count against that cap
+- the entry's actual elimination week — `entry_elimination_week()`, a SQL
+  mirror of `computeEntryStatus`'s scan (first loss/tie, else first missed
+  week), refusing outright if the entry isn't actually eliminated
+- the resume week itself, as `greatest(current_week, elimination_week + 1)`,
+  using `current_nfl_week()` (a SQL mirror of `deriveCurrentWeek`) rather
+  than trusting a client's idea of "now"
+
+The old two-argument signature still exists as an overload that accepts and
+discards `p_week` — so a client that's behind (cached, or simply not
+redeployed yet) doesn't break, it just gets the same server-computed answer
+regardless of what it asked for. No client, however stale or however
+adversarial, can put a wrong resume week into the database again.
+
+Verified two ways before this shipped: `entry_elimination_week()` was run
+against every real entry in the live pool and diffed against an
+independently-written query using different SQL shape, with zero
+disagreements; the write path itself (cap, deadline, non-elimination,
+ownership, and the two-argument overload) was exercised end-to-end against
+throwaway data under a fake season number, entirely isolated from anything
+real, and cleaned up within the same transaction.
+
+#### The count-then-insert itself raced
+
+Caught in review, not by testing: reading the buyback count, checking it
+against the cap, and inserting the new row were three separate steps with
+nothing serializing them. Two calls on the *same* entry landing close
+enough together could both read a count from before either had inserted —
+both see zero, both pass "0 < 1", both insert. For a cap of one, that's two
+buyback rows and two writes to `start_week`, and it doesn't require malice —
+a doubled network request or a retried call would do it. `entry_elimination_week()`
+is separately `stable` and idempotent, so re-running it read-only isn't
+itself a problem; the risk was purely in the gap between reading the count
+and committing the insert that changes it.
+
+A `UNIQUE(entry_id)` constraint on `survivor_entry_buybacks` would close this
+for a cap of exactly one, but `max_buybacks` is a per-league setting that can
+be higher, so a blanket constraint would wrongly forbid a second buyback in
+any league that allows one. Fixed instead with `select ... for update` on the
+entry row, acquired before the count is read. A second call on the same
+entry blocks on that lock until the first transaction commits or rolls back,
+then re-reads the count fresh — including whatever the first call just
+inserted. Calls on *different* entries never contend; they lock different
+rows.
+
+Verified that the lock doesn't break the ordinary single-caller path: a
+transaction that already holds the row's lock (simulated by taking it
+manually before calling the function, standing in for whichever of two
+concurrent callers would win the race) can still call `buy_back_entry` and
+have it proceed — Postgres row locks are re-entrant within the transaction
+that holds them, so the function's own `for update` doesn't deadlock against
+a lock its own caller already has. True cross-connection concurrency —
+two callers actually overlapping in time — isn't something this project's
+tooling can drive directly; the row lock is the standard, unconditionally
+correct Postgres mechanism for this exact class of check-then-act race
+regardless, so this is a case where the reasoning **is** the guarantee, not
+just supporting evidence for one.
+
 ## What is not enforced in the database
 
 **Elimination.** An eliminated entry can still write picks. They are inert:
