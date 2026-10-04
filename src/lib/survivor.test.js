@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
   pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, groupByPerson,
-  buybackDeadlineInstant, buybackDeadlinePassed,
+  buybackDeadlineInstant, buybackDeadlinePassed, buybackSkipsWeeks,
 } from './survivor';
 import {
   deriveCurrentWeek, describeSpread, buildStandings,
@@ -835,5 +835,21 @@ describe('buybackDeadlinePassed', () => {
 
   it('is false when no deadline week is configured', () => {
     expect(buybackDeadlinePassed({ games, deadlineWeek: null, currentWeek: 10 })).toBe(false);
+  });
+});
+
+describe('buybackSkipsWeeks', () => {
+  it('allows a buyback into the week right after the loss', () => {
+    expect(buybackSkipsWeeks(3, 3)).toBe(false); // still the week of the loss
+    expect(buybackSkipsWeeks(3, 4)).toBe(false); // the week after
+  });
+
+  it('refuses one that would sit out weeks first', () => {
+    expect(buybackSkipsWeeks(1, 4)).toBe(true); // out in week 1, back in week 4
+    expect(buybackSkipsWeeks(2, 4)).toBe(true);
+  });
+
+  it('is false for an entry that is not out', () => {
+    expect(buybackSkipsWeeks(null, 6)).toBe(false);
   });
 });

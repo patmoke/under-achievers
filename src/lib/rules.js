@@ -96,7 +96,7 @@ export const MODES = [
         heading: 'Buybacks',
         points: [
           'If the league owner turned buybacks on, an eliminated entry can pay back in. The owner sets the last week it applies to and how many times each entry may — running several entries gets you that allowance on each one, not one shared pool. The window actually stays open a bit past that week: until 30 minutes before that Sunday\'s games the week after, not just until the deadline week itself wraps up.',
-          'A buyback forgives the life you lost and restarts you from the week you bought back in. The teams you had already used stay used.',
+          'A buyback forgives the life you lost and puts you straight back in the following week. You cannot sit out weeks and buy back later — if you went out in week 2, the buyback is for week 3. The teams you had already used stay used.',
           'A buyback is a separate payment from your original entry, and it is tracked separately. Your entry reads as unpaid again until the rebuy is settled, even if you paid your buy-in months ago.',
           'If buybacks are off, one loss ends your season.',
         ],

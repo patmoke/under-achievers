@@ -56,6 +56,18 @@ export function buybackDeadlineInstant(games, deadlineWeek) {
 }
 
 /**
+ * Whether buying an entry back now would skip weeks.
+ *
+ * A buyback has to resume the week right after the loss. Mirrors the check in
+ * buy_back_entry(): the resume week is max(currentWeek, outWeek + 1), so a
+ * current week past outWeek + 1 means the entry sat out weeks every live entry
+ * had to survive.
+ */
+export function buybackSkipsWeeks(outWeek, currentWeek) {
+  return outWeek != null && currentWeek > outWeek + 1;
+}
+
+/**
  * Whether a survivor buyback deadline has closed, given the current time.
  *
  * `closesAt` is the league owner's explicit override, and wins over the
