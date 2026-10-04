@@ -277,7 +277,7 @@ function PickResultCard({ pick }) {
   );
 }
 
-export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, maxBuybacks, maxEntries, maxCapacity }) {
+export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, currentWeek, buybackDeadlineWeek, buybackClosesAt, maxBuybacks, maxEntries, maxCapacity }) {
   const [entries, setEntries] = useState([]);
   const [picks, setPicks] = useState([]);
   const [buybacks, setBuybacks] = useState([]);
@@ -389,7 +389,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // it read as a bug because nothing else about entries pools across them.
   function canBuyBack(entryId) {
     if (!buybacksAllowed) return false;
-    if (buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek })) return false;
+    if (buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek, closesAt: buybackClosesAt })) return false;
     if (leagueFull()) return false;
     return entryBuybacks(entryId).length < maxBuybacks;
   }
@@ -786,7 +786,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                             <RotateCcw size={12} /> Buy back in
                           </button>
                         ) : buybacksAllowed ? (
-                          buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek })
+                          buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek, closesAt: buybackClosesAt })
                             ? `Buyback window for Week ${buybackDeadlineWeek} has closed.`
                             : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
                         ) : (

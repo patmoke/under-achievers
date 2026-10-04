@@ -55,10 +55,16 @@ export function buybackDeadlineInstant(games, deadlineWeek) {
   return new Date(earliest - 30 * 60 * 1000);
 }
 
-/** Whether a survivor buyback deadline has closed, given the current time. */
-export function buybackDeadlinePassed({ games, deadlineWeek, currentWeek, now = new Date() }) {
+/**
+ * Whether a survivor buyback deadline has closed, given the current time.
+ *
+ * `closesAt` is the league owner's explicit override, and wins over the
+ * computed instant when set — same precedence as buy_back_entry() on the
+ * server.
+ */
+export function buybackDeadlinePassed({ games, deadlineWeek, currentWeek, closesAt = null, now = new Date() }) {
   if (deadlineWeek == null) return false;
-  const instant = buybackDeadlineInstant(games, deadlineWeek);
+  const instant = closesAt ? new Date(closesAt) : buybackDeadlineInstant(games, deadlineWeek);
   return instant ? now >= instant : currentWeek > deadlineWeek;
 }
 
