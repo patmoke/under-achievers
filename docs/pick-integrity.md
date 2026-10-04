@@ -151,6 +151,15 @@ where pa.source_table = 'survivor_picks'
   and pa.at >= g.game_time;
 ```
 
+Known, legitimate hits on that query (owner-approved corrections, not
+exploits):
+
+- **2026-10-04, mgomez78's BAL week-4 pick** moved from entry #3 to entry #2
+  after the 1pm kickoff. The player had bought back the wrong entry (one that
+  skipped weeks); the owner moved the buyback and its week-4 pick onto the
+  entry that should have held it. Done directly in SQL, so the audit row has
+  no actor.
+
 ### Buybacks trusted the client for their own resume week
 
 `buy_back_entry(p_entry_id, p_week)` did nothing but check ownership and
