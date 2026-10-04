@@ -363,3 +363,21 @@ for everyone eliminated in week N, regardless of which game did it. Falls
 back to the old week-number comparison when there's no schedule data yet for
 week `N + 1` (or the deadline week is the season's last), so a gap in the
 synced schedule can't leave the deadline permanently open or silently error.
+
+## A buyback can't skip weeks
+
+Nothing stopped an entry from going out in week 1, sitting out weeks 2 and 3,
+and buying back into week 4 — dodging two weeks of risk every live entry had
+to survive. Caught live on two entries. `buy_back_entry()` now refuses any
+buyback whose resume week would be past `elimination_week + 1` (the resume
+week is `max(current_week, elimination_week + 1)`, so anything later means
+weeks were skipped); `buybackSkipsWeeks()` in `survivor.js` mirrors it so the
+button agrees with the server.
+
+One affected entry had the wrong entry rebought — the player meant a different
+entry that went out in week 3. That was corrected by re-pointing the existing
+buyback row and its charge to the right entry with plain `UPDATE`s, then
+touching the charges (`set paid = paid`) so `sync_entry_paid` recomputed each
+entry's `paid` flag. Setting `survivor_entries.paid` directly would have been
+wrong: `propagate_entry_paid` copies that value onto every charge for the
+entry, which would have marked an already-paid buy-in as unpaid.

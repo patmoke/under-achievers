@@ -3,7 +3,7 @@ import { supabase } from '../lib/supabase';
 import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, Clock, Trash2, X, AlertTriangle, Flame, Skull, Users, ChevronLeft, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  isGameLocked, computeEntryStatus, pickOutcome, buybackDeadlinePassed,
+  isGameLocked, computeEntryStatus, pickOutcome, buybackDeadlinePassed, buybackSkipsWeeks,
   pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekHighlights, groupByPerson,
 } from '../lib/survivor';
 
@@ -387,8 +387,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // vanished — correct by the then-current rule, but a rule the settings
   // label ("Max buybacks per person") was the only place that said so, and
   // it read as a bug because nothing else about entries pools across them.
-  function canBuyBack(entryId) {
+  function canBuyBack(entryId, outWeek) {
     if (!buybacksAllowed) return false;
+    if (buybackSkipsWeeks(outWeek, currentWeek)) return false;
     if (buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek, closesAt: buybackClosesAt })) return false;
     if (leagueFull()) return false;
     return entryBuybacks(entryId).length < maxBuybacks;
@@ -423,7 +424,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // for real, resuming an entry into the very week that had just eliminated
   // it.
   function buyBackIn(entry, outWeek) {
-    if (!canBuyBack(entry.id)) return;
+    if (!canBuyBack(entry.id, outWeek)) return;
     const resumeWeek = Math.max(currentWeek, (outWeek ?? currentWeek) + 1);
     setBuybackConfirm({ entry, resumeWeek });
   }
@@ -736,7 +737,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
               // Team availability is decided per pick-week now, by teamConflict
               // below — a team held by an unlocked pick is offered with a
               // warning rather than simply greyed out.
-              const eligible = canBuyBack(entry.id);
+              const eligible = canBuyBack(entry.id, outWeek);
 
               return (
                 // minWidth: 0 is load-bearing. This card is a grid item, and a
@@ -788,6 +789,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                         ) : buybacksAllowed ? (
                           buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek, closesAt: buybackClosesAt })
                             ? `Buyback window for Week ${buybackDeadlineWeek} has closed.`
+                            : buybackSkipsWeeks(outWeek, currentWeek)
+                            ? `Buybacks have to be for the week right after the loss — this one was for Week ${outWeek + 1}.`
                             : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
                         ) : (
                           'Buybacks are not enabled for this league.'
