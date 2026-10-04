@@ -823,6 +823,16 @@ describe('buybackDeadlinePassed', () => {
     })).toBe(true);
   });
 
+  it('lets an owner override (closesAt) win over the computed instant, in both directions', () => {
+    const now = new Date('2020-01-05T18:00:00Z'); // after the computed 17:30 instant
+    expect(buybackDeadlinePassed({
+      games, deadlineWeek: 3, currentWeek: 4, now, closesAt: '2020-01-05T21:30:00Z',
+    })).toBe(false);
+    expect(buybackDeadlinePassed({
+      games, deadlineWeek: 3, currentWeek: 3, now: new Date('2020-01-05T12:00:00Z'), closesAt: '2020-01-05T11:00:00Z',
+    })).toBe(true);
+  });
+
   it('is false when no deadline week is configured', () => {
     expect(buybackDeadlinePassed({ games, deadlineWeek: null, currentWeek: 10 })).toBe(false);
   });

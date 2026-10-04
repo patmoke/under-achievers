@@ -584,6 +584,7 @@ export default function LeaguePage() {
           season={CURRENT_SEASON}
           currentWeek={effectiveWeek}
           buybackDeadlineWeek={league.survivor_buyback_deadline_week}
+          buybackClosesAt={league.survivor_buyback_closes_at}
           maxBuybacks={league.survivor_max_buybacks}
           maxEntries={league.survivor_max_entries}
           maxCapacity={league.max_capacity}
