@@ -236,6 +236,24 @@ function TeamButton({ abbr, name, isUsed, isSelected, disabled, onClick }) {
  * `now()` for the game not yet final reads as "kicked off, waiting on the
  * whistle" rather than a result, since pickOutcome itself is null until then.
  */
+/**
+ * One line saying how an entry went out, for the collapsed eliminated card.
+ * The full PickResultCard is the right shape for a live week's result, but
+ * repeated on every dead entry it made the list mostly scorelines nobody can
+ * act on.
+ */
+function outSummary(outWeek, reason, losingPick) {
+  const g = losingPick?.games;
+  if (reason === 'missed' || !g || g.home_score == null || g.away_score == null) {
+    return `Out in Week ${outWeek} — no pick made.`;
+  }
+  const home = losingPick.team_abbr === g.home_team_abbr;
+  const mine = home ? g.home_score : g.away_score;
+  const theirs = home ? g.away_score : g.home_score;
+  const opp = home ? g.away_team_abbr : g.home_team_abbr;
+  return `Out in Week ${outWeek} — ${losingPick.team_abbr} ${mine === theirs ? 'tied' : 'lost'} ${mine}–${theirs} vs ${opp}.`;
+}
+
 function PickResultCard({ pick }) {
   const g = pick.games;
   const outcome = pickOutcome(pick);
@@ -495,7 +513,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
 
   if (loading) return <div className="skeleton card" style={{ height: 200 }} />;
 
-  const myEntries = entries.filter(e => e.user_id === currentUserId);
+  // Live entries first: they're the ones with anything left to do.
+  const myEntries = entries
+    .filter(e => e.user_id === currentUserId)
+    .sort((a, b) => (computeStatus(a).status === 'alive' ? 0 : 1) - (computeStatus(b).status === 'alive' ? 0 : 1)
+      || a.entry_number - b.entry_number);
   const withStatus = entries.map(e => ({ ...e, ...computeStatus(e) }));
 
   // Payment tracker. Sorted by name then entry number so a person's entries
@@ -745,8 +767,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                 // below its content's intrinsic width. With a horizontal strip
                 // inside, that made the card 1268px wide on a 390px phone and
                 // scrolled the whole page sideways rather than the strip.
-                <div key={entry.id} className="card" style={{ padding: 20, minWidth: 0, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
+                <div key={entry.id} className="card" style={{ padding: status === 'alive' ? 20 : '14px 20px', minWidth: 0, borderLeft: `3px solid ${status === 'alive' ? 'var(--accent)' : 'var(--danger)'}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: status === 'alive' ? 14 : 4, flexWrap: 'wrap', gap: 8 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <div style={{ fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: 17 }}>
                         {myEntries.length > 1 ? `Entry #${entry.entry_number}` : 'Your pick'}
@@ -778,31 +800,17 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                   </div>
 
                   {status === 'eliminated' ? (
-                    <div style={{ fontSize: 13, color: 'var(--ink-soft)' }}>
-                      <div>
-                        Out since Week {outWeek}{reason === 'missed' ? ' (missed pick)' : ''}.
-                        {' '}
-                        {eligible ? (
-                          <button onClick={() => buyBackIn(entry, outWeek)} className="btn btn-secondary" style={{ marginLeft: 8, padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <RotateCcw size={12} /> Buy back in
-                          </button>
-                        ) : buybacksAllowed ? (
-                          buybackDeadlinePassed({ games: allGames, deadlineWeek: buybackDeadlineWeek, currentWeek, closesAt: buybackClosesAt })
-                            ? `Buyback window for Week ${buybackDeadlineWeek} has closed.`
-                            : buybackSkipsWeeks(outWeek, currentWeek)
-                            ? `Buybacks have to be for the week right after the loss — this one was for Week ${outWeek + 1}.`
-                            : `You've used all ${maxBuybacks} buyback${maxBuybacks !== 1 ? 's' : ''}.`
-                        ) : (
-                          'Buybacks are not enabled for this league.'
-                        )}
-                      </div>
-                      {/* A missed week has no pick to show — nothing lost the
-                          game, nothing was filed at all. Every other reason has
-                          the actual losing (or tying) pick on record. */}
-                      {reason !== 'missed' && (() => {
-                        const losingPick = entryPicks.find(p => p.week === outWeek);
-                        return losingPick ? <div style={{ marginTop: 10 }}><PickResultCard pick={losingPick} /></div> : null;
-                      })()}
+                    // Collapsed on purpose: one line on how it went out, and the
+                    // buyback button only when a buyback is actually possible.
+                    // "Window closed" / "used all buybacks" lines were dropped —
+                    // on a dead entry they're true but nothing to act on.
+                    <div style={{ fontSize: 13, color: 'var(--ink-soft)', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <span>{outSummary(outWeek, reason, entryPicks.find(p => p.week === outWeek))}</span>
+                      {eligible && (
+                        <button onClick={() => buyBackIn(entry, outWeek)} className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: 12, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <RotateCcw size={12} /> Buy back in
+                        </button>
+                      )}
                     </div>
                   ) : (
                     (() => {
