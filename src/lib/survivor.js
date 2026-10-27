@@ -198,10 +198,6 @@ export function teamConflict({ picks, entryId, team, week, now = new Date() }) {
 
 // ─── What the field is doing ────────────────────────────────────────────────
 
-/** Alive entries only. Everything below is about who is still playing. */
-const aliveIds = (entries, statusOf) =>
-  new Set(entries.filter(e => (statusOf ? statusOf(e) : e.status) === 'alive').map(e => e.id));
-
 /**
  * How many entries have burned each team.
  *
@@ -263,7 +259,18 @@ export function weekTeamOutcomes(picks, week) {
 }
 
 /**
- * Whether every alive entry's pick for a week has kicked off.
+ * The entries that played a given week: alive now, or not out until that week
+ * or later. The recap holds a finished week on screen while the next one is
+ * being played, so "alive now" alone drops anyone that next week has already
+ * knocked out — along with every losing pick of the week being recapped. An
+ * entry out before the week is excluded, so a stale filed-ahead pick from it
+ * never counts.
+ */
+const inWeekIds = (entries, week, statusOf) =>
+  new Set(entries.filter(e => (statusOf ? statusOf(e) : e.status) === 'alive' || e.week >= week).map(e => e.id));
+
+/**
+ * Whether every pick for a week, by the entries that played it, has kicked off.
  *
  * The gate for showing the week's hot and risky picks. Until it is true,
  * publishing either one would hand a live edge to anyone still deciding.
@@ -273,8 +280,8 @@ export function weekTeamOutcomes(picks, week) {
  * forever.
  */
 export function weekLockedIn({ entries, picks, week, statusOf, now = new Date() }) {
-  const alive = aliveIds(entries, statusOf);
-  const forWeek = picks.filter(p => p.week === week && alive.has(p.entry_id));
+  const played = inWeekIds(entries, week, statusOf);
+  const forWeek = picks.filter(p => p.week === week && played.has(p.entry_id));
   if (forWeek.length === 0) return false;
   return forWeek.every(p => isGameLocked(p.games, now));
 }
@@ -290,16 +297,17 @@ function moneylineFor(pick, game) {
 /**
  * The week's most-backed team, and its longest shot.
  *
- * Returns null until every alive entry's pick has kicked off — see
- * weekLockedIn. Risk is measured by the market's own implied probability
+ * Counted across every entry that played the week, including the ones its
+ * picks knocked out — see inWeekIds. Returns null until all of those picks
+ * have kicked off — see weekLockedIn. Risk is measured by the market's own implied probability
  * rather than the raw American number, because +150 and −110 cannot be
  * compared as integers.
  */
 export function weekHighlights({ entries, picks, gamesById, week, statusOf, now = new Date() }) {
   if (!weekLockedIn({ entries, picks, week, statusOf, now })) return null;
 
-  const alive = aliveIds(entries, statusOf);
-  const forWeek = picks.filter(p => p.week === week && alive.has(p.entry_id));
+  const played = inWeekIds(entries, week, statusOf);
+  const forWeek = picks.filter(p => p.week === week && played.has(p.entry_id));
   if (forWeek.length === 0) return null;
 
   const counts = new Map();
@@ -346,9 +354,8 @@ export function weekField({ entries, buybacks = [], week, statusOf }) {
   const status = e => (statusOf ? statusOf(e) : e.status);
   const reboughtIds = new Set(buybacks.filter(b => b.week === week + 1).map(b => b.entry_id));
   const knockedOut = new Set(reboughtIds);
-  const enteredWeek = new Set(reboughtIds);
+  const enteredWeek = new Set([...reboughtIds, ...inWeekIds(entries, week, statusOf)]);
   for (const e of entries) {
-    if (status(e) === 'alive' || e.week >= week) enteredWeek.add(e.id);
     if (status(e) === 'eliminated' && e.week === week) knockedOut.add(e.id);
   }
   return {

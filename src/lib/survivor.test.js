@@ -667,6 +667,16 @@ describe('weekHighlights', () => {
     expect(h.risky.team).not.toBe('LV');
   });
 
+  it('still counts the picks that knocked entries out of the week', () => {
+    // Recapping week 1 after week 2's games: 'c' came through week 1 and lost
+    // in week 2. Its week 1 pick is part of week 1's story; counted only off
+    // who is alive today, it dropped out of the totals.
+    const later = entries.map(e => (e.id === 'c' ? { ...e, status: 'eliminated', week: 2 } : e));
+    const h = weekHighlights({ entries: later, picks, gamesById, week: 1, now });
+    expect(h.total).toBe(3);
+    expect(h.risky.team).toBe('NYJ');
+  });
+
   it('survives a game with no moneyline rather than crashing', () => {
     const unpriced = { g3: { home_team_abbr: 'DEN', away_team_abbr: 'SEA' } };
     const p = [{ entry_id: 'a', week: 1, team_abbr: 'DEN', game_id: 'g3', games: locked({}) }];

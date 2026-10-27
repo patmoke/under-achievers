@@ -990,7 +990,7 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
         <Section
           id="nutshell"
           title={`Week ${recapWeek} in a nutshell`}
-          caption={`Shown once every pick for the week has kicked off — holds here until Week ${recapWeek + 1} is ready to take its place. Across ${highlights.total} live ${highlights.total === 1 ? 'entry' : 'entries'}.`}
+          caption={`Shown once every pick for the week has kicked off — holds here until Week ${recapWeek + 1} is ready to take its place. Across the ${highlights.total} ${highlights.total === 1 ? 'entry' : 'entries'} that played it.`}
         >
           <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
             <div className="card" style={{ padding: 18 }}>
