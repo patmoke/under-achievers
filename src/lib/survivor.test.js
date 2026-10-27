@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
-  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, groupByPerson,
+  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, weekField, groupByPerson,
   buybackDeadlineInstant, buybackDeadlinePassed, buybackSkipsWeeks,
 } from './survivor';
 import {
@@ -667,12 +667,71 @@ describe('weekHighlights', () => {
     expect(h.risky.team).not.toBe('LV');
   });
 
+  it('still counts the picks that knocked entries out of the week', () => {
+    // Recapping week 1 after week 2's games: 'c' came through week 1 and lost
+    // in week 2. Its week 1 pick is part of week 1's story; counted only off
+    // who is alive today, it dropped out of the totals.
+    const later = entries.map(e => (e.id === 'c' ? { ...e, status: 'eliminated', week: 2 } : e));
+    const h = weekHighlights({ entries: later, picks, gamesById, week: 1, now });
+    expect(h.total).toBe(3);
+    expect(h.risky.team).toBe('NYJ');
+  });
+
   it('survives a game with no moneyline rather than crashing', () => {
     const unpriced = { g3: { home_team_abbr: 'DEN', away_team_abbr: 'SEA' } };
     const p = [{ entry_id: 'a', week: 1, team_abbr: 'DEN', game_id: 'g3', games: locked({}) }];
     const h = weekHighlights({ entries, picks: p, gamesById: unpriced, week: 1, now });
     expect(h.hot.team).toBe('DEN');
     expect(h.risky).toBeNull();
+  });
+});
+
+describe('weekField', () => {
+  // Week 7 in review. 'a' and 'b' came through it, 'c' lost in week 6, 'd'
+  // lost in week 7 and stayed out.
+  const entries = [
+    { id: 'a', status: 'alive', week: null },
+    { id: 'b', status: 'alive', week: null },
+    { id: 'c', status: 'eliminated', week: 6 },
+    { id: 'd', status: 'eliminated', week: 7 },
+  ];
+
+  it('counts who went in, who went out, and who came through', () => {
+    expect(weekField({ entries, week: 7 })).toEqual({ before: 3, eliminated: 1, after: 2, rebought: 0 });
+  });
+
+  it('does not take next week\'s losses off this week\'s field', () => {
+    // Recapping week 6 while week 7's Sunday games are already final: 'a' and
+    // 'b' came through week 6 and went out in week 7. They still count as
+    // week 6 survivors. Counted off today's alive count, they did not, and
+    // the week 6 recap showed the field week 7 had already cut to.
+    const later = entries.map(e => (e.id === 'a' || e.id === 'b' ? { ...e, status: 'eliminated', week: 7 } : e));
+    expect(weekField({ entries: later, week: 6 })).toEqual({ before: 4, eliminated: 1, after: 3, rebought: 0 });
+  });
+
+  it('still counts a loss its owner has already bought back', () => {
+    // 'e' lost in week 7 and bought back into week 8, so it reads alive with
+    // no elimination week. Counted off its status alone, the loss vanished
+    // and the field read the same on both sides of the week.
+    const withRebuy = [...entries, { id: 'e', status: 'alive', week: null }];
+    const buybacks = [{ entry_id: 'e', week: 8 }];
+    expect(weekField({ entries: withRebuy, buybacks, week: 7 }))
+      .toEqual({ before: 4, eliminated: 2, after: 2, rebought: 1 });
+  });
+
+  it('leaves an earlier week\'s buyback out of this week', () => {
+    // 'c' lost in week 6 and came back for week 7: in the field, not a casualty.
+    const rebought = entries.map(e => (e.id === 'c' ? { ...e, status: 'alive', week: null } : e));
+    const buybacks = [{ entry_id: 'c', week: 7 }];
+    expect(weekField({ entries: rebought, buybacks, week: 7 }))
+      .toEqual({ before: 4, eliminated: 1, after: 3, rebought: 0 });
+  });
+
+  it('counts a rebought entry once even if it has since gone out again', () => {
+    const outAgain = [...entries, { id: 'e', status: 'eliminated', week: 8 }];
+    const buybacks = [{ entry_id: 'e', week: 8 }];
+    expect(weekField({ entries: outAgain, buybacks, week: 7 }))
+      .toEqual({ before: 4, eliminated: 2, after: 2, rebought: 1 });
   });
 });
 
