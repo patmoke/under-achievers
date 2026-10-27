@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   computeEntryStatus, usedTeams, pickOutcome, isGameLocked,
-  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, groupByPerson,
+  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekLockedIn, weekHighlights, weekField, groupByPerson,
   buybackDeadlineInstant, buybackDeadlinePassed, buybackSkipsWeeks,
 } from './survivor';
 import {
@@ -673,6 +673,46 @@ describe('weekHighlights', () => {
     const h = weekHighlights({ entries, picks: p, gamesById: unpriced, week: 1, now });
     expect(h.hot.team).toBe('DEN');
     expect(h.risky).toBeNull();
+  });
+});
+
+describe('weekField', () => {
+  // Week 7 in review. 'a' and 'b' came through it, 'c' lost in week 6, 'd'
+  // lost in week 7 and stayed out.
+  const entries = [
+    { id: 'a', status: 'alive', week: null },
+    { id: 'b', status: 'alive', week: null },
+    { id: 'c', status: 'eliminated', week: 6 },
+    { id: 'd', status: 'eliminated', week: 7 },
+  ];
+
+  it('counts who went in, who went out, and who came through', () => {
+    expect(weekField({ entries, week: 7 })).toEqual({ before: 3, eliminated: 1, after: 2, rebought: 0 });
+  });
+
+  it('still counts a loss its owner has already bought back', () => {
+    // 'e' lost in week 7 and bought back into week 8, so it reads alive with
+    // no elimination week. Counted off its status alone, the loss vanished
+    // and the field read the same on both sides of the week.
+    const withRebuy = [...entries, { id: 'e', status: 'alive', week: null }];
+    const buybacks = [{ entry_id: 'e', week: 8 }];
+    expect(weekField({ entries: withRebuy, buybacks, week: 7 }))
+      .toEqual({ before: 4, eliminated: 2, after: 2, rebought: 1 });
+  });
+
+  it('leaves an earlier week\'s buyback out of this week', () => {
+    // 'c' lost in week 6 and came back for week 7: in the field, not a casualty.
+    const rebought = entries.map(e => (e.id === 'c' ? { ...e, status: 'alive', week: null } : e));
+    const buybacks = [{ entry_id: 'c', week: 7 }];
+    expect(weekField({ entries: rebought, buybacks, week: 7 }))
+      .toEqual({ before: 4, eliminated: 1, after: 3, rebought: 0 });
+  });
+
+  it('counts a rebought entry once even if it has since gone out again', () => {
+    const outAgain = [...entries, { id: 'e', status: 'eliminated', week: 8 }];
+    const buybacks = [{ entry_id: 'e', week: 8 }];
+    expect(weekField({ entries: outAgain, buybacks, week: 7 }))
+      .toEqual({ before: 4, eliminated: 2, after: 2, rebought: 1 });
   });
 });
 

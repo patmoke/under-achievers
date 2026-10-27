@@ -4,7 +4,7 @@ import { Trophy, Plus, EyeOff, Lock, RotateCcw, DollarSign, Check as CheckIcon, 
 import toast from 'react-hot-toast';
 import {
   isGameLocked, computeEntryStatus, pickOutcome, buybackDeadlinePassed, buybackSkipsWeeks,
-  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekHighlights, groupByPerson,
+  pickableWeeks, teamConflict, teamUsage, weekTeamOutcomes, weekHighlights, weekField, groupByPerson,
 } from '../lib/survivor';
 
 // One scale for both tables. A username was 15px in the standings and 13px in
@@ -574,7 +574,10 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // the pool still is doesn't hand anyone an edge on a pick still being
   // decided — but they read as one week-in-review, so they follow the same
   // recap week rather than jumping ahead of the rest of the section.
-  const eliminatedThisWeek = withStatus.filter(e => e.status === 'eliminated' && e.week === recapWeek).length;
+  // Counted by weekField so a loss stays counted once its owner buys back —
+  // see there.
+  const field = weekField({ entries: withStatus, buybacks, week: recapWeek });
+  const eliminatedThisWeek = field.eliminated;
   const eliminatingTeams = Object.entries(recapOutcomes)
     .filter(([, outcome]) => outcome === 'loss' || outcome === 'tie')
     .map(([team]) => team)
@@ -588,15 +591,11 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // is actually happening, and only catch up a week later. A running total
   // has no such lag.
   const totalRebuys = buybacks.length;
-  // "Before" is anyone not yet eliminated as of recapWeek — alive now, or
-  // eliminated but not until recapWeek — the same this-week test used above
-  // and in teamUsage's weekly mode. "After" is just today's alive count,
-  // which still correctly describes the end of recapWeek even when it's
-  // behind currentWeek: nothing can have changed in the gap, since no games
-  // played in any week after recapWeek is what put it behind in the first
-  // place.
-  const fieldBefore = withStatus.filter(e => e.status === 'alive' || e.week === recapWeek).length;
-  const fieldAfter = aliveCount;
+  // "Before" is anyone still in as recapWeek began; "after" is who came
+  // through it. Neither is today's alive count, which by now also holds the
+  // week's casualties who have bought back in for next week.
+  const fieldBefore = field.before;
+  const fieldAfter = field.after;
 
   const people = groupByPerson(withStatus, currentUserId);
   const livePeople = people.filter(p => p.alive > 0);
@@ -1032,7 +1031,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                 {fieldBefore} <span style={{ color: 'var(--ink-faint)', fontSize: 20 }}>→</span> {fieldAfter}
               </div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
-                {fieldAfter} of {entries.length} entries still alive
+                {aliveCount} of {entries.length} entries still alive
+                {field.rebought > 0 && `, ${field.rebought} of them bought back in`}
               </div>
             </div>
 

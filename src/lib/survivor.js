@@ -327,6 +327,39 @@ export function weekHighlights({ entries, picks, gamesById, week, statusOf, now 
 }
 
 /**
+ * The week-in-review headcount: how many entries went into a week, how many
+ * it knocked out, and how many came through it.
+ *
+ * A buyback hides the loss it undoes. It advances start_week, so the rebought
+ * entry reads as alive again and computeEntryStatus no longer reports the week
+ * it went out — which made the week's eliminations vanish from the count the
+ * moment their owners bought back. In a busy week the field read the same
+ * before and after, however many entries actually lost. So a buyback resuming
+ * at week + 1 is counted as an elimination in this week too: buy_back_entry
+ * always resumes the week right after the loss (it refuses one that would skip
+ * weeks), so that resume week identifies the loss exactly.
+ *
+ * `after` is the week's survivors, not today's alive count — the rebought come
+ * back next week, and are reported separately as `rebought`.
+ */
+export function weekField({ entries, buybacks = [], week, statusOf }) {
+  const status = e => (statusOf ? statusOf(e) : e.status);
+  const reboughtIds = new Set(buybacks.filter(b => b.week === week + 1).map(b => b.entry_id));
+  const knockedOut = new Set(reboughtIds);
+  const enteredWeek = new Set(reboughtIds);
+  for (const e of entries) {
+    if (status(e) === 'eliminated' && e.week === week) knockedOut.add(e.id);
+    if (status(e) === 'alive' || e.week === week) enteredWeek.add(e.id);
+  }
+  return {
+    before: enteredWeek.size,
+    eliminated: knockedOut.size,
+    after: enteredWeek.size - knockedOut.size,
+    rebought: reboughtIds.size,
+  };
+}
+
+/**
  * The standings, one row per person rather than one per entry.
  *
  * The entry stays the unit of competition — the prize is the last entry

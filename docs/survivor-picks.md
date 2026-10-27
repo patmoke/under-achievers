@@ -143,6 +143,22 @@ ahead of the rest of it.
   entirely in a league with buybacks turned off, rather than sitting there
   reading zero forever, but whenever it's shown it's simply correct.
 
+### A buyback used to erase the loss it undid
+
+Field remaining and Eliminated were counted off each entry's current status.
+A buyback advances `start_week`, so a rebought entry reads as alive with no
+elimination week — and its loss dropped out of both tiles the moment its
+owner bought back. Field remaining's "after" was today's alive count, which
+the rebought were back in. Caught live: one week's wrap read 12 remaining,
+the next still read 12 after several eliminations, because those entries had
+already bought back in.
+
+Both now come from `weekField`, which also counts a buyback resuming at
+`week + 1` as an elimination in `week` (a buyback always resumes the week
+right after its loss, so that identifies it exactly). "After" is the week's
+survivors; the caption under it still gives today's alive count and says how
+many of those bought back in.
+
 ### Timing worth knowing
 
 The reveal waits for the *last* live pick to kick off. In practice that is
