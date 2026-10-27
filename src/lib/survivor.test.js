@@ -690,6 +690,15 @@ describe('weekField', () => {
     expect(weekField({ entries, week: 7 })).toEqual({ before: 3, eliminated: 1, after: 2, rebought: 0 });
   });
 
+  it('does not take next week\'s losses off this week\'s field', () => {
+    // Recapping week 6 while week 7's Sunday games are already final: 'a' and
+    // 'b' came through week 6 and went out in week 7. They still count as
+    // week 6 survivors. Counted off today's alive count, they did not, and
+    // the week 6 recap showed the field week 7 had already cut to.
+    const later = entries.map(e => (e.id === 'a' || e.id === 'b' ? { ...e, status: 'eliminated', week: 7 } : e));
+    expect(weekField({ entries: later, week: 6 })).toEqual({ before: 4, eliminated: 1, after: 3, rebought: 0 });
+  });
+
   it('still counts a loss its owner has already bought back', () => {
     // 'e' lost in week 7 and bought back into week 8, so it reads alive with
     // no elimination week. Counted off its status alone, the loss vanished

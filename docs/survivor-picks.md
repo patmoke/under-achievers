@@ -143,21 +143,26 @@ ahead of the rest of it.
   entirely in a league with buybacks turned off, rather than sitting there
   reading zero forever, but whenever it's shown it's simply correct.
 
-### A buyback used to erase the loss it undid
+### Field remaining counted the next week's losses
 
-Field remaining and Eliminated were counted off each entry's current status.
-A buyback advances `start_week`, so a rebought entry reads as alive with no
-elimination week — and its loss dropped out of both tiles the moment its
-owner bought back. Field remaining's "after" was today's alive count, which
-the rebought were back in. Caught live: one week's wrap read 12 remaining,
-the next still read 12 after several eliminations, because those entries had
-already bought back in.
+Field remaining's "after" was today's alive count. That was assumed safe
+because the recap only trails `currentWeek` when nothing after it has been
+played — but the recap holds a finished week until every pick for the next
+week has kicked off, and the next week's early games are often final long
+before its last pick locks. Caught live in 2026: Week 6 took the main pool
+49 → 18, but from Week 7's Sunday 1pm results (6 more out) until the two
+Monday-night DAL picks kicked off, the Week 6 recap read 43 → 12. Week 7's
+recap then correctly read 18 → 12, so the pool saw "12 remaining" two weeks
+running despite six eliminations.
 
-Both now come from `weekField`, which also counts a buyback resuming at
-`week + 1` as an elimination in `week` (a buyback always resumes the week
-right after its loss, so that identifies it exactly). "After" is the week's
-survivors; the caption under it still gives today's alive count and says how
-many of those bought back in.
+A buyback had the same effect in the other direction: it advances
+`start_week`, so the rebought entry reads alive with no elimination week, and
+its loss dropped out of both Field remaining and Eliminated.
+
+Both now come from `weekField`, which counts as of the end of the recap week:
+an entry that went out in a later week came through this one, and a buyback
+resuming at `week + 1` is an elimination in `week` (a buyback always resumes
+the week right after its loss, so that identifies it exactly).
 
 ### Timing worth knowing
 

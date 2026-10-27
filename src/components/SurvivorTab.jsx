@@ -592,8 +592,9 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
   // has no such lag.
   const totalRebuys = buybacks.length;
   // "Before" is anyone still in as recapWeek began; "after" is who came
-  // through it. Neither is today's alive count, which by now also holds the
-  // week's casualties who have bought back in for next week.
+  // through it. Neither is today's alive count: the recap holds recapWeek
+  // until every pick for the next week has kicked off, and that week's early
+  // games are often final by then. See weekField.
   const fieldBefore = field.before;
   const fieldAfter = field.after;
 
@@ -1031,8 +1032,8 @@ export default function SurvivorTab({ leagueId, currentUserId, isOwner, season, 
                 {fieldBefore} <span style={{ color: 'var(--ink-faint)', fontSize: 20 }}>→</span> {fieldAfter}
               </div>
               <div style={{ fontSize: 13, color: 'var(--ink-soft)', marginTop: 6 }}>
-                {aliveCount} of {entries.length} entries still alive
-                {field.rebought > 0 && `, ${field.rebought} of them bought back in`}
+                {fieldAfter} of {entries.length} entries made it through Week {recapWeek}
+                {field.rebought > 0 && `, plus ${field.rebought} bought back in`}
               </div>
             </div>
 

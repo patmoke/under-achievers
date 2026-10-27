@@ -330,17 +330,17 @@ export function weekHighlights({ entries, picks, gamesById, week, statusOf, now 
  * The week-in-review headcount: how many entries went into a week, how many
  * it knocked out, and how many came through it.
  *
- * A buyback hides the loss it undoes. It advances start_week, so the rebought
- * entry reads as alive again and computeEntryStatus no longer reports the week
- * it went out — which made the week's eliminations vanish from the count the
- * moment their owners bought back. In a busy week the field read the same
- * before and after, however many entries actually lost. So a buyback resuming
- * at week + 1 is counted as an elimination in this week too: buy_back_entry
+ * Counted as of the end of that week, never off today's alive count. The recap
+ * holds a finished week on screen until every pick for the next one has kicked
+ * off, and by then the next week's early games are often already final — so
+ * today's alive count was quietly subtracting the next week's losses from this
+ * week's field. An entry that went out in a later week came through this one.
+ *
+ * A buyback hides the loss it undoes, too. It advances start_week, so the
+ * rebought entry reads as alive with no elimination week. A buyback resuming at
+ * week + 1 is therefore counted as an elimination in this week: buy_back_entry
  * always resumes the week right after the loss (it refuses one that would skip
  * weeks), so that resume week identifies the loss exactly.
- *
- * `after` is the week's survivors, not today's alive count — the rebought come
- * back next week, and are reported separately as `rebought`.
  */
 export function weekField({ entries, buybacks = [], week, statusOf }) {
   const status = e => (statusOf ? statusOf(e) : e.status);
@@ -348,8 +348,8 @@ export function weekField({ entries, buybacks = [], week, statusOf }) {
   const knockedOut = new Set(reboughtIds);
   const enteredWeek = new Set(reboughtIds);
   for (const e of entries) {
+    if (status(e) === 'alive' || e.week >= week) enteredWeek.add(e.id);
     if (status(e) === 'eliminated' && e.week === week) knockedOut.add(e.id);
-    if (status(e) === 'alive' || e.week === week) enteredWeek.add(e.id);
   }
   return {
     before: enteredWeek.size,
